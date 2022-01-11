@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use std::collections::BTreeSet;
 use thiserror::Error;
 
-use crate::{Ballot, Generation, Reconfig, SignedVote};
+use crate::Generation;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -16,22 +16,12 @@ pub enum Error {
         dest: PublicKeyShare,
         actor: PublicKeyShare,
     },
-    #[error(
-        "We can not accept any new join requests, network member size is at capacity: {members:?}"
-    )]
-    MembersAtCapacity { members: BTreeSet<u8> },
-    #[error(
-        "An existing member `{requester:?}` can not request to join again. (members: {members:?})"
-    )]
-    JoinRequestForExistingMember {
-        requester: u8,
-        members: BTreeSet<u8>,
-    },
-    #[error("You must be a member to request to leave ({requester:?} not in {members:?})")]
-    LeaveRequestForNonMember {
-        requester: u8,
-        members: BTreeSet<u8>,
-    },
+    #[error("We can not accept any new join requests, network member size is at capacity")]
+    MembersAtCapacity,
+    #[error("An existing member can not request to join again")]
+    JoinRequestForExistingMember,
+    #[error("You must be a member to request to leave")]
+    LeaveRequestForNonMember,
     #[error("A merged vote must be from the same generation as the child vote: {child_gen} != {merge_gen}")]
     MergedVotesMustBeFromSameGen {
         child_gen: Generation,
@@ -48,21 +38,16 @@ pub enum Error {
         public_key: PublicKeyShare,
         elders: BTreeSet<PublicKeyShare>,
     },
-    #[error("Voter changed their mind: {reconfigs:?}")]
-    VoterChangedMind {
-        reconfigs: BTreeSet<(PublicKeyShare, Reconfig)>,
-    },
-    #[error("Existing vote {existing_vote:?} not compatible with new vote")]
-    ExistingVoteIncompatibleWithNewVote { existing_vote: SignedVote },
-    #[error("The super majority ballot does not actually have supermajority: {ballot:?} (elders: {elders:?})")]
-    SuperMajorityBallotIsNotSuperMajority {
-        ballot: Ballot,
-        elders: BTreeSet<PublicKeyShare>,
-    },
+    #[error("Voter changed their vote")]
+    VoterChangedVote,
+    #[error("Existing vote not compatible with new vote")]
+    ExistingVoteIncompatibleWithNewVote,
+    #[error("The super majority ballot does not actually have supermajority")]
+    SuperMajorityBallotIsNotSuperMajority,
     #[error("Invalid generation {0}")]
     InvalidGeneration(Generation),
-    #[error("History contains an invalid vote {0:?}")]
-    InvalidVoteInHistory(SignedVote),
+    #[error("History contains an invalid vote")]
+    InvalidVoteInHistory,
     #[error("Failed to encode with bincode")]
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
