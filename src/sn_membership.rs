@@ -126,7 +126,7 @@ impl<T: Name> Debug for SignedVote<T> {
 }
 
 impl<T: Name> SignedVote<T> {
-    fn validate_signature(&self) -> Result<()> {
+    pub fn validate_signature(&self) -> Result<()> {
         if self.voter.verify(&self.sig, &self.vote.to_bytes()?) {
             Ok(())
         } else {
@@ -134,7 +134,7 @@ impl<T: Name> SignedVote<T> {
         }
     }
 
-    fn unpack_votes(&self) -> BTreeSet<&Self> {
+    pub fn unpack_votes(&self) -> BTreeSet<&Self> {
         match &self.vote.ballot {
             Ballot::Propose(_) => BTreeSet::from_iter([self]),
             Ballot::Merge(votes) | Ballot::SuperMajority(votes) => BTreeSet::from_iter(
@@ -143,7 +143,7 @@ impl<T: Name> SignedVote<T> {
         }
     }
 
-    fn reconfigs(&self) -> BTreeSet<(PublicKeyShare, Reconfig<T>)> {
+    pub fn reconfigs(&self) -> BTreeSet<(PublicKeyShare, Reconfig<T>)> {
         match &self.vote.ballot {
             Ballot::Propose(reconfig) => BTreeSet::from_iter([(self.voter, reconfig.clone())]),
             Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
@@ -152,7 +152,7 @@ impl<T: Name> SignedVote<T> {
         }
     }
 
-    fn supersedes(&self, signed_vote: &Self) -> bool {
+    pub fn supersedes(&self, signed_vote: &Self) -> bool {
         if self == signed_vote {
             true
         } else {

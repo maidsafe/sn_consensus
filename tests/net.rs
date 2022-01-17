@@ -5,20 +5,20 @@ use std::iter;
 
 use blsttc::PublicKeyShare;
 //use brb_membership::{Error, Generation, Reconfig, State, VoteMsg};
-use brb_membership::{Ballot, Error, Generation, Reconfig, SignedVote, State, Vote, VoteMsg};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
+use sn_membership::{Ballot, Error, Generation, Reconfig, SignedVote, State, Vote, VoteMsg};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
     pub source: PublicKeyShare,
-    pub vote_msg: VoteMsg,
+    pub vote_msg: VoteMsg<u8>,
 }
 
 #[derive(Default, Debug)]
 pub struct Net {
-    pub procs: Vec<State>,
-    pub reconfigs_by_gen: BTreeMap<Generation, BTreeSet<Reconfig>>,
+    pub procs: Vec<State<u8>>,
+    pub reconfigs_by_gen: BTreeMap<Generation, BTreeSet<Reconfig<u8>>>,
     pub members_at_gen: BTreeMap<Generation, BTreeSet<u8>>,
     pub packets: BTreeMap<PublicKeyShare, VecDeque<Packet>>,
     pub delivered_packets: Vec<Packet>,
@@ -34,7 +34,7 @@ impl Net {
         }
     }
 
-    pub fn proc(&self, public_key: PublicKeyShare) -> Option<&State> {
+    pub fn proc(&self, public_key: PublicKeyShare) -> Option<&State<u8>> {
         self.procs
             .iter()
             .find(|p| p.public_key_share() == public_key)
@@ -55,7 +55,7 @@ impl Net {
         recursion: u8,
         faulty: &BTreeSet<PublicKeyShare>,
         rng: &mut StdRng,
-    ) -> Ballot {
+    ) -> Ballot<u8> {
         match rng.gen() || recursion == 0 {
             true => Ballot::Propose(match rng.gen() {
                 true => Reconfig::Join(rng.gen()),
@@ -81,7 +81,7 @@ impl Net {
         recursion: u8,
         faulty_nodes: &BTreeSet<PublicKeyShare>,
         rng: &mut StdRng,
-    ) -> SignedVote {
+    ) -> SignedVote<u8> {
         let faulty_node = faulty_nodes
             .iter()
             .choose(rng)
