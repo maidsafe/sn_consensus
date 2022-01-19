@@ -16,6 +16,8 @@ impl<T: Ord + Clone + Debug + Serialize> Name for T {}
 #[derive(Debug)]
 pub struct State<T: Name> {
     pub elders: BTreeSet<PublicKeyShare>,
+    // TODO: we need faulty elder detection
+    // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<T>>>,
     pub secret_key: SecretKeyShare,
     pub gen: Generation,
     pub pending_gen: Generation,
@@ -346,25 +348,7 @@ impl<T: Name> State<T> {
             if let Some(our_vote) = self.votes.get(&self.public_key_share()) {
                 // We voted during this generation.
 
-                // We may have committed to some reconfigs that is not part of this super majority.
-                // This happens when the network was able to form super majority without our vote.
-                // We can not change our vote since all we know is that a subset of the network saw
-                // super majority. It could still be the case that two disjoint subsets of the network
-                // see different super majorities, this case will be resolved by the split vote detection
-                // as more messages are delivered.
-
-                let super_majority_reconfigs =
-                    self.resolve_votes(&self.votes.values().cloned().collect());
-
-                let we_have_comitted_to_reconfigs_not_in_super_majority = self
-                    .resolve_votes(&our_vote.unpack_votes().into_iter().cloned().collect())
-                    .into_iter()
-                    .any(|r| !super_majority_reconfigs.contains(&r));
-
-                if we_have_comitted_to_reconfigs_not_in_super_majority {
-                    info!("[MBR] We have committed to reconfigs that the super majority has not seen, waiting till we either have a split vote or SM/SM");
-                    return Ok(vec![]);
-                } else if our_vote.vote.is_super_majority_ballot() {
+                if our_vote.vote.is_super_majority_ballot() {
                     info!("[MBR] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
                     return Ok(vec![]);
                 }
@@ -463,17 +447,19 @@ impl<T: Name> State<T> {
         &self,
         votes: &BTreeSet<SignedVote<T>>,
     ) -> Result<bool> {
-        let winning_reconfigs = self.resolve_votes(votes);
+        let count_of_agreeing_super_majorities = self
+            .count_votes(&BTreeSet::from_iter(
+                votes
+                    .iter()
+                    .filter(|v| v.vote.is_super_majority_ballot())
+                    .cloned(),
+            ))
+            .into_iter()
+            .map(|(_, count)| count)
+            .max()
+            .unwrap_or(0);
 
-        let count_of_super_majorities = votes
-            .iter()
-            .filter(|v| {
-                BTreeSet::from_iter(v.reconfigs().into_iter().map(|(_, r)| r)) == winning_reconfigs
-            })
-            .filter(|v| v.vote.is_super_majority_ballot())
-            .count();
-
-        Ok(3 * count_of_super_majorities > 2 * self.elders.len())
+        Ok(3 * count_of_agreeing_super_majorities > 2 * self.elders.len())
     }
 
     fn resolve_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeSet<Reconfig<T>> {
