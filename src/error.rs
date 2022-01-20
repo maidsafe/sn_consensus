@@ -55,7 +55,7 @@ pub enum Error {
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]
-    Ed25519(#[from] crate::ed25519::Error),
+    Ed25519(#[from] ed25519::ed25519::Error),
 
     #[cfg(feature = "blsttc")]
     #[error("Blsttc Error {0}")]

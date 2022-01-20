@@ -8,12 +8,20 @@ pub type Error = signature::Error;
 pub struct PublicKey(ed25519::PublicKey);
 
 impl PublicKey {
+    pub fn from(public_key: ed25519::PublicKey) -> Self {
+        Self(public_key)
+    }
+
     pub fn random(rng: impl Rng + CryptoRng) -> Self {
         SecretKey::random(rng).public_key()
     }
 
     pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), Error> {
         self.0.verify(msg, &signature.0)
+    }
+
+    pub fn public_key(&self) -> &ed25519::PublicKey {
+        &self.0
     }
 }
 
@@ -34,6 +42,10 @@ impl core::fmt::Display for PublicKey {
 pub struct SecretKey(ed25519::Keypair);
 
 impl SecretKey {
+    pub fn from(keypair: ed25519::Keypair) -> Self {
+        Self(keypair)
+    }
+
     pub fn random(mut rng: impl Rng + CryptoRng) -> Self {
         Self(ed25519::Keypair::generate(&mut rng))
     }
