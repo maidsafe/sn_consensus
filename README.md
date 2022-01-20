@@ -1,13 +1,18 @@
-# brb_membership
+# sn_membership
 
 [MaidSafe website](http://maidsafe.net) | [Safe Network Forum](https://safenetforum.org/)
 :-------------------------------------: | :---------------------------------------------:
 
 ## About
 
-This BRB Dynamic Membership module enables nodes to dynamically join and leave a BRB voting group.
+This Safe Network Membership module enables nodes to dynamically join and leave a Safe Network Section.
 
-Please see the [brb crate](https://github.com/maidsafe/brb/).
+A consensus algorithm is run by Section Elders to decide on reconfigurations, the agorithm procedes in stages:
+
+1. An Elder proposes a reconfig (Join or Leave) on behalf of a joining node. The proposal is broadcast to all Elders
+2. If an Elder detects a split vote, they propose a Merge vote. (this may happen up to O(log(n)) times)
+3. If an Elder sees a super-majority of agreeing votes, they propose a SuperMajority vote
+4. Once an Elder sees a super-majority of SuperMajority votes, they execute the decided on reconfig(s).
 
 ## Tests
 

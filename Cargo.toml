@@ -1,10 +1,10 @@
 [package]
-name = "brb_membership"
+name = "sn_membership"
 version = "1.4.0"
-description = "BRB Membership: Enables nodes to dynamically join and leave a BRB voting group"
+description = "Safe Network Membership: Enables nodes to dynamically join and leave a section"
 authors = [ "David Rusu <davidrusu.me@gmail.com>" ]
 license = "MIT OR BSD-3-Clause"
-repository = "https://github.com/maidsafe/brb_membership"
+repository = "https://github.com/maidsafe/sn_membership"
 edition = "2021"
 
 [dependencies]
@@ -21,7 +21,6 @@ log = "0.4.13"
 
   [dependencies.blsttc]
   version = "3.4.0"
-  optional = true
 
   [dependencies.ed25519]
   version = "1.0.0"
@@ -30,7 +29,7 @@ log = "0.4.13"
   optional = true
 
 [features]
-default = [ "blsttc" ]
+default = [ ]
 bad_crypto = [ ]
 
 [profile.test]

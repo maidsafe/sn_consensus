@@ -1,8 +1,9 @@
+use blsttc::PublicKeyShare;
 use core::fmt::Debug;
 use std::collections::BTreeSet;
 use thiserror::Error;
 
-use crate::{Ballot, Generation, PublicKey, Reconfig, SignedVote};
+use crate::Generation;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -11,23 +12,16 @@ pub enum Error {
     #[error("The operation requested assumes we have at least one member")]
     NoMembers,
     #[error("Packet was not destined for this actor: {dest:?} != {actor:?}")]
-    WrongDestination { dest: PublicKey, actor: PublicKey },
-    #[error(
-        "We can not accept any new join requests, network member size is at capacity: {members:?}"
-    )]
-    MembersAtCapacity { members: BTreeSet<PublicKey> },
-    #[error(
-        "An existing member `{requester:?}` can not request to join again. (members: {members:?})"
-    )]
-    JoinRequestForExistingMember {
-        requester: PublicKey,
-        members: BTreeSet<PublicKey>,
+    WrongDestination {
+        dest: PublicKeyShare,
+        actor: PublicKeyShare,
     },
-    #[error("You must be a member to request to leave ({requester:?} not in {members:?})")]
-    LeaveRequestForNonMember {
-        requester: PublicKey,
-        members: BTreeSet<PublicKey>,
-    },
+    #[error("We can not accept any new join requests, network member size is at capacity")]
+    MembersAtCapacity,
+    #[error("An existing member can not request to join again")]
+    JoinRequestForExistingMember,
+    #[error("You must be a member to request to leave")]
+    LeaveRequestForNonMember,
     #[error("A merged vote must be from the same generation as the child vote: {child_gen} != {merge_gen}")]
     MergedVotesMustBeFromSameGen {
         child_gen: Generation,
@@ -39,28 +33,25 @@ pub enum Error {
         gen: Generation,
         pending_gen: Generation,
     },
-    #[error("({public_key} is not in {members:?})")]
-    NonMember {
-        public_key: PublicKey,
-        members: BTreeSet<PublicKey>,
+    #[error("({public_key:?} is not in {elders:?})")]
+    NotElder {
+        public_key: PublicKeyShare,
+        elders: BTreeSet<PublicKeyShare>,
     },
-    #[error("Voter changed their mind: {reconfigs:?}")]
-    VoterChangedMind {
-        reconfigs: BTreeSet<(PublicKey, Reconfig)>,
-    },
-    #[error("Existing vote {existing_vote:?} not compatible with new vote")]
-    ExistingVoteIncompatibleWithNewVote { existing_vote: SignedVote },
-    #[error("The super majority ballot does not actually have supermajority: {ballot:?} (members: {members:?})")]
-    SuperMajorityBallotIsNotSuperMajority {
-        ballot: Ballot,
-        members: BTreeSet<PublicKey>,
-    },
+    #[error("Voter changed their vote")]
+    VoterChangedVote,
+    #[error("Existing vote not compatible with new vote")]
+    ExistingVoteIncompatibleWithNewVote,
+    #[error("The super majority ballot does not actually have supermajority")]
+    SuperMajorityBallotIsNotSuperMajority,
     #[error("Invalid generation {0}")]
     InvalidGeneration(Generation),
-    #[error("History contains an invalid vote {0:?}")]
-    InvalidVoteInHistory(SignedVote),
+    #[error("History contains an invalid vote")]
+    InvalidVoteInHistory,
     #[error("Failed to encode with bincode")]
     Encoding(#[from] bincode::Error),
+    #[error("Elder signature is not valid")]
+    InvalidElderSignature,
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]
