@@ -1039,7 +1039,7 @@ fn prop_bft_consensus(
         p.elders = elders.clone();
     }
 
-    let n_actions = rng.gen::<u8>() % 3;
+    let n_actions = rng.gen::<u8>() % 4;
 
     for _ in 0..n_actions {
         match rng.gen::<u8>() % 3 {
