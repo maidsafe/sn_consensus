@@ -818,7 +818,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                     }
                     Err(Error::ExistingVoteIncompatibleWithNewVote) => {
                         // This proc has already committed to a vote
-                        assert!(q.votes.get(&q.public_key_share()).unwrap().supersedes(
+                        assert!(!q.votes.get(&q.public_key_share()).unwrap().supersedes(
                             &q.sign_vote(Vote {
                                 ballot: Ballot::Propose(reconfig),
                                 gen: q.gen,
@@ -1018,7 +1018,7 @@ fn prop_bft_consensus(
             .into_iter()
             .map(|p| p % n)
             .filter(|p| p != &0) // genesis can not be faulty
-            .take((n / 3) as usize),
+            .take((n / 3u8).saturating_sub(1) as usize),
     );
     // All non-faulty nodes eventually decide on a reconfig
 
