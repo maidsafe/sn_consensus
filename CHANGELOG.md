@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/maidsafe/sn_membership/compare/v1.4.0...v1.5.0) (2022-01-20)
+
+
+### Features
+
+* **static-elders:** most tests passing, still a few failing ([ab02464](https://github.com/maidsafe/sn_membership/commit/ab02464aa6e2d6d7860991a2abcd35a177504f9a))
+
+
+### Bug Fixes
+
+* **consensus:** only prevent voting a SM if we had already sent a SM ([f4b5a4b](https://github.com/maidsafe/sn_membership/commit/f4b5a4b8b9cb4ad0c7ca0b2cfb2fc33116fc12c8))
+* **tests:** fix two issues with test cases causing false positives ([2e8a011](https://github.com/maidsafe/sn_membership/commit/2e8a011df931847ffc7a1891a1b98b7f81316ff1))
+* **tests:** tests are now passing with the new static elders change ([83be4a1](https://github.com/maidsafe/sn_membership/commit/83be4a1412090d066a7a2bbe74c24129b138f27c))
+
 ## [1.4.0](https://github.com/maidsafe/brb_membership/compare/v1.3.0...v1.4.0) (2022-01-04)
 
 
