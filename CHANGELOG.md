@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/maidsafe/sn_membership/compare/v1.5.0...v1.6.0) (2022-01-25)
+
+
+### Features
+
+* handle_signed_vote now returns an Option<SignedVote> ([a8bf63a](https://github.com/maidsafe/sn_membership/commit/a8bf63a97cf907a17833c5569b14913b66b4ea0a))
+
+
+### Bug Fixes
+
+* **ci:** we don't have feature flags for crypto backends anymore ([e12dddd](https://github.com/maidsafe/sn_membership/commit/e12dddd8423f6857f57ef1f46e1f031fefa989c7))
+
 ## [1.5.0](https://github.com/maidsafe/sn_membership/compare/v1.4.0...v1.5.0) (2022-01-20)
 
 
