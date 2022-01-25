@@ -45,12 +45,8 @@ jobs:
         run: cargo fmt --all -- --check
 
       # Run Clippy.
-      - name: Clippy checks --feature blsttc
-        run: cargo clippy --all-targets --no-default-features --features "blsttc"
-
-      # Run Clippy.
-      - name: Clippy checks --feature ed25519
-        run: cargo clippy --all-targets --no-default-features --features "ed25519"
+      - name: Clippy checks # --feature blsttc
+        run: cargo clippy --all-targets # --no-default-features --features "blsttc"
 
   check_pr_size:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
