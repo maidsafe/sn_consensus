@@ -7,7 +7,7 @@ pub mod sn_membership;
 // #[cfg(feature = "ed25519")]
 // pub mod ed25519;
 
-pub use crate::sn_membership::{Ballot, Generation, Reconfig, SignedVote, State, Vote, VoteMsg};
+pub use crate::sn_membership::{Ballot, Generation, Reconfig, SignedVote, State, Vote};
 
 // #[cfg(feature = "bad_crypto")]
 // pub use crate::bad_crypto::{PublicKey, SecretKey, Signature};
