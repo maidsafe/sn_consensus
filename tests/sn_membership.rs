@@ -1,4 +1,4 @@
-use blsttc::{PublicKeyShare, SecretKeyShare};
+use blsttc::SecretKeyShare;
 use eyre::eyre;
 use net::{Net, Packet};
 use rand::{
@@ -47,7 +47,7 @@ fn test_reject_vote_from_non_member() -> Result<()> {
 #[test]
 fn test_reject_join_if_actor_is_already_a_member() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut proc = State {
+    let mut proc = State::<u8> {
         forced_reconfigs: vec![(
             0,
             BTreeSet::from_iter((0..1).map(|_| Reconfig::Join(rng.gen()))),
@@ -323,7 +323,6 @@ fn test_simple_proposal() -> Result<()> {
 
     net.generate_msc("simple_join.msc")?;
 
-    let members = net.procs[0].members(1).unwrap();
     for p in net.procs {
         assert_eq!(p.members(1).unwrap(), BTreeSet::from_iter([0]));
     }
@@ -408,7 +407,6 @@ fn test_interpreter_qc1() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, &mut rng);
     let p0 = net.procs[0].public_key_share();
-    let p1 = net.procs[1].public_key_share();
 
     let elders = BTreeSet::from_iter(net.procs.iter().map(State::public_key_share));
     for proc in net.procs.iter_mut() {
@@ -451,31 +449,29 @@ fn test_interpreter_qc2() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, &mut rng);
     let p0 = net.procs[0].public_key_share();
-    let p1 = net.procs[1].public_key_share();
-    let p2 = net.procs[2].public_key_share();
 
     let elders = BTreeSet::from_iter(net.procs.iter().map(State::public_key_share));
     for proc in net.procs.iter_mut() {
         proc.elders = elders.clone();
     }
 
-    let vote = net.procs[0].propose(Reconfig::Join(1)).unwrap();
+    let vote = net.procs[0].propose(Reconfig::Join(1))?;
     net.broadcast(p0, vote);
-    net.drain_queued_packets();
-    let vote = net.procs[0].propose(Reconfig::Join(2)).unwrap();
+    net.drain_queued_packets()?;
+    let vote = net.procs[0].propose(Reconfig::Join(2))?;
     net.broadcast(p0, vote);
-    net.drain_queued_packets().unwrap();
+    net.drain_queued_packets()?;
 
-    net.generate_msc("interpreter_qc2.msc").unwrap();
+    net.generate_msc("interpreter_qc2.msc")?;
 
     assert!(net.packets.is_empty());
 
     // We should have no more pending votes.
-    let expected_members = net.procs[0].members(net.procs[0].pending_gen).unwrap();
+    let expected_members = net.procs[0].members(net.procs[0].pending_gen)?;
     for p in net.procs.iter() {
         assert_eq!(p.gen, p.pending_gen);
         assert_eq!(p.votes, Default::default());
-        assert_eq!(p.members(p.gen).unwrap(), expected_members);
+        assert_eq!(p.members(p.gen)?, expected_members);
     }
 
     Ok(())
@@ -623,7 +619,7 @@ fn test_bft_consensus_qc1() -> Result<()> {
     while let Err(e) = net.drain_queued_packets() {
         println!("Error while draining: {e:?}");
     }
-    net.generate_msc(&format!("bft_consensus_qc1.msc"))?;
+    net.generate_msc("bft_consensus_qc1.msc")?;
 
     let honest_procs = Vec::from_iter(
         net.procs
@@ -872,12 +868,6 @@ fn prop_validate_reconfig(
         .chain(iter::once(proc.public_key_share()))
         .collect();
 
-    let all_elders = {
-        let mut elders = proc.elders.clone();
-        elders.insert(rng.gen::<SecretKeyShare>().public_key_share());
-        elders
-    };
-
     let reconfig = match join_or_leave {
         true => Reconfig::Join(member),
         false => Reconfig::Leave(member),
@@ -968,8 +958,6 @@ fn prop_bft_consensus(
             }
             1 => {
                 // node takes honest action
-                let pks = BTreeSet::from_iter(net.procs.iter().map(State::public_key_share));
-
                 let proc = if let Some(proc) = net
                     .procs
                     .iter_mut()
@@ -989,8 +977,7 @@ fn prop_bft_consensus(
                 let reconfig = match rng.gen::<bool>() {
                     true => Reconfig::Join(
                         iter::repeat_with(|| rng.gen::<u8>())
-                            .filter(|m| !proc.members(proc.gen).unwrap().contains(m))
-                            .next()
+                            .find(|m| !proc.members(proc.gen).unwrap().contains(m))
                             .unwrap(),
                     ),
                     false => Reconfig::Leave(

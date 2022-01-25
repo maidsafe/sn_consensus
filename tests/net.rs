@@ -113,13 +113,6 @@ impl Net {
         }
     }
 
-    pub fn genesis(&self) -> Result<PublicKeyShare, Error> {
-        self.procs
-            .get(0)
-            .map(State::public_key_share)
-            .ok_or(Error::NoMembers)
-    }
-
     pub fn drop_packet_from_source(&mut self, source: PublicKeyShare) {
         self.packets.get_mut(&source).map(VecDeque::pop_front);
     }
@@ -231,16 +224,6 @@ impl Net {
             .into_iter()
             .filter(|(_, queue)| !queue.is_empty())
             .collect();
-    }
-
-    pub fn force_join(&mut self, p: PublicKeyShare, member: u8) {
-        if let Some(proc) = self
-            .procs
-            .iter_mut()
-            .find(|proc| proc.public_key_share() == p)
-        {
-            proc.force_join(member);
-        }
     }
 
     pub fn enqueue_anti_entropy(&mut self, i: usize, j: usize) {
