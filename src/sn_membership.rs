@@ -168,12 +168,6 @@ impl<T: Name> SignedVote<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VoteMsg<T: Name> {
-    pub vote: SignedVote<T>,
-    pub dest: PublicKeyShare,
-}
-
 impl<T: Name> State<T> {
     pub fn from(secret_key: SecretKeyShare, elders: BTreeSet<PublicKeyShare>) -> Self {
         State {
@@ -260,37 +254,36 @@ impl<T: Name> State<T> {
         Err(Error::InvalidGeneration(gen))
     }
 
-    pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<Vec<VoteMsg<T>>> {
+    pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<SignedVote<T>> {
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
         };
         let signed_vote = self.sign_vote(vote)?;
         self.validate_signed_vote(&signed_vote)?;
-        self.cast_vote(signed_vote)
+        Ok(self.cast_vote(signed_vote))
     }
 
-    pub fn anti_entropy(&self, from_gen: Generation, actor: PublicKeyShare) -> Vec<VoteMsg<T>> {
-        info!(
-            "[MBR] anti-entropy for {:?}.{} from {:?}",
-            actor,
-            from_gen,
-            self.public_key_share()
+    pub fn anti_entropy(&self, from_gen: Generation) -> Vec<SignedVote<T>> {
+        info!("[MBR] anti-entropy from gen {}", from_gen);
+
+        let mut msgs = Vec::from_iter(
+            self.history
+                .iter() // history is a BTreeSet, .iter() is ordered by generation
+                .filter(|(gen, _)| **gen > from_gen)
+                .map(|(_, membership_proof)| membership_proof.clone()),
         );
 
-        let mut msgs: Vec<_> = self
-            .history
-            .iter() // history is a BTreeSet, .iter() is ordered by generation
-            .filter(|(gen, _)| **gen > from_gen)
-            .map(|(_, membership_proof)| self.send(membership_proof.clone(), actor))
-            .collect();
-
-        msgs.extend(self.votes.values().cloned().map(|v| self.send(v, actor)));
+        // include the current in-progres votes as well.
+        msgs.extend(self.votes.values().cloned());
 
         msgs
     }
 
-    pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<Vec<VoteMsg<T>>> {
+    pub fn handle_signed_vote(
+        &mut self,
+        signed_vote: SignedVote<T>,
+    ) -> Result<Option<SignedVote<T>>> {
         self.validate_signed_vote(&signed_vote)?;
 
         self.log_signed_vote(&signed_vote);
@@ -314,12 +307,12 @@ impl<T: Name> State<T> {
 
                 if reconfigs_we_voted_for == reconfigs_we_would_vote_for {
                     info!("[MBR] This vote didn't add new information, waiting for more votes...");
-                    return Ok(vec![]);
+                    return Ok(None);
                 }
             }
 
             info!("[MBR] Either we haven't voted or our previous vote didn't fully overlap, merge them.");
-            return self.cast_vote(signed_merge_vote);
+            return Ok(Some(self.cast_vote(signed_merge_vote)));
         }
 
         if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())? {
@@ -339,7 +332,7 @@ impl<T: Name> State<T> {
             self.votes = Default::default();
             self.gen = self.pending_gen;
 
-            return Ok(vec![]);
+            return Ok(None);
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect())? {
@@ -350,7 +343,7 @@ impl<T: Name> State<T> {
 
                 if our_vote.vote.is_super_majority_ballot() {
                     info!("[MBR] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
-                    return Ok(vec![]);
+                    return Ok(None);
                 }
             }
 
@@ -361,7 +354,7 @@ impl<T: Name> State<T> {
                 ballot,
             };
             let signed_vote = self.sign_vote(vote)?;
-            return self.cast_vote(signed_vote);
+            return Ok(Some(self.cast_vote(signed_vote)));
         }
 
         // We have determined that we don't yet have enough votes to take action.
@@ -371,10 +364,10 @@ impl<T: Name> State<T> {
                 gen: self.pending_gen,
                 ballot: signed_vote.vote.ballot,
             })?;
-            return self.cast_vote(signed_vote);
+            return Ok(Some(self.cast_vote(signed_vote)));
         }
 
-        Ok(vec![])
+        Ok(None)
     }
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
@@ -385,9 +378,9 @@ impl<T: Name> State<T> {
         })
     }
 
-    fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> Result<Vec<VoteMsg<T>>> {
+    fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> SignedVote<T> {
         self.log_signed_vote(&signed_vote);
-        self.broadcast(signed_vote)
+        signed_vote
     }
 
     fn log_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
@@ -591,18 +584,5 @@ impl<T: Name> State<T> {
                 }
             }
         }
-    }
-
-    fn broadcast(&self, signed_vote: SignedVote<T>) -> Result<Vec<VoteMsg<T>>> {
-        Ok(self
-            .elders
-            .iter()
-            .cloned()
-            .map(|elder| self.send(signed_vote.clone(), elder))
-            .collect())
-    }
-
-    fn send(&self, vote: SignedVote<T>, dest: PublicKeyShare) -> VoteMsg<T> {
-        VoteMsg { vote, dest }
     }
 }

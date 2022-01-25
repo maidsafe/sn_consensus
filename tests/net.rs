@@ -4,15 +4,15 @@ use std::io::Write;
 use std::iter;
 
 use blsttc::PublicKeyShare;
-//use brb_membership::{Error, Generation, Reconfig, State, VoteMsg};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
-use sn_membership::{Ballot, Error, Generation, Reconfig, SignedVote, State, Vote, VoteMsg};
+use sn_membership::{Ballot, Error, Generation, Reconfig, SignedVote, State, Vote};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
     pub source: PublicKeyShare,
-    pub vote_msg: VoteMsg<u8>,
+    pub dest: PublicKeyShare,
+    pub vote: SignedVote<u8>,
 }
 
 #[derive(Default, Debug)]
@@ -108,10 +108,8 @@ impl Net {
     ) -> Packet {
         Packet {
             source: *faulty.iter().choose(rng).unwrap(),
-            vote_msg: VoteMsg {
-                vote: self.gen_faulty_vote(recursion, faulty, rng),
-                dest: self.gen_public_key(rng),
-            },
+            dest: self.gen_public_key(rng),
+            vote: self.gen_faulty_vote(recursion, faulty, rng),
         }
     }
 
@@ -133,14 +131,12 @@ impl Net {
         };
         self.purge_empty_queues();
 
-        let dest = packet.vote_msg.dest;
         // println!("delivering {:?}->{:?} {:?}", packet.source, dest, packet);
 
         self.delivered_packets.push(packet.clone());
 
-        let dest_proc_opt = self.procs.iter_mut().find(|p| p.public_key_share() == dest);
-
-        let dest_proc = match dest_proc_opt {
+        let dest = packet.dest;
+        let dest_proc = match self.procs.iter_mut().find(|p| p.public_key_share() == dest) {
             Some(proc) => proc,
             None => {
                 // println!("[NET] destination proc does not exist, dropping packet");
@@ -149,18 +145,15 @@ impl Net {
         };
 
         let dest_elders = dest_proc.elders.clone();
-        let vote = packet.vote_msg.vote;
 
-        let resp = dest_proc.handle_signed_vote(vote);
+        let resp = dest_proc.handle_signed_vote(packet.vote);
         // println!("[NET] resp: {:?}", resp);
         match resp {
-            Ok(vote_msgs) => {
+            Ok(Some(vote)) => {
                 let dest_actor = dest_proc.public_key_share();
-                self.enqueue_packets(vote_msgs.into_iter().map(|vote_msg| Packet {
-                    source: dest_actor,
-                    vote_msg,
-                }));
+                self.broadcast(dest_actor, vote);
             }
+            Ok(None) => {}
             Err(Error::NotElder {
                 public_key: voter,
                 elders,
@@ -206,8 +199,23 @@ impl Net {
             self.packets
                 .entry(packet.source)
                 .or_default()
-                .push_back(packet)
+                .push_back(packet);
         }
+    }
+
+    pub fn broadcast(&mut self, source: PublicKeyShare, vote: SignedVote<u8>) {
+        let packets =
+            Vec::from_iter(
+                self.procs
+                    .iter()
+                    .map(State::public_key_share)
+                    .map(|dest| Packet {
+                        source,
+                        dest,
+                        vote: vote.clone(),
+                    }),
+            );
+        self.enqueue_packets(packets);
     }
 
     pub fn drain_queued_packets(&mut self) -> Result<(), Error> {
@@ -236,16 +244,16 @@ impl Net {
     }
 
     pub fn enqueue_anti_entropy(&mut self, i: usize, j: usize) {
-        let i_gen = self.procs[i].gen;
-        let i_actor = self.procs[i].public_key_share();
-        let j_actor = self.procs[j].public_key_share();
+        let dest_generation = self.procs[i].gen;
+        let dest = self.procs[i].public_key_share();
+        let source = self.procs[j].public_key_share();
 
-        self.enqueue_packets(self.procs[j].anti_entropy(i_gen, i_actor).into_iter().map(
-            |vote_msg| Packet {
-                source: j_actor,
-                vote_msg,
-            },
-        ));
+        self.enqueue_packets(
+            self.procs[j]
+                .anti_entropy(dest_generation)
+                .into_iter()
+                .map(|vote| Packet { source, dest, vote }),
+        );
     }
 
     pub fn generate_msc(&self, name: &str) -> Result<(), Error> {
@@ -270,7 +278,7 @@ msc {\n
         for packet in self.delivered_packets.iter() {
             msc.push_str(&format!(
                 "{:?} -> {:?} [ label=\"{:?}\"];\n",
-                packet.source, packet.vote_msg.dest, packet.vote_msg.vote
+                packet.source, packet.dest, packet.vote
             ));
         }
 

@@ -14,9 +14,7 @@ mod net;
 
 use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
-use sn_membership::{
-    Ballot, Error, Generation, Reconfig, Result, SignedVote, State, Vote, VoteMsg,
-};
+use sn_membership::{Ballot, Error, Generation, Reconfig, Result, SignedVote, State, Vote};
 
 #[test]
 fn test_reject_changing_reconfig_when_one_is_in_progress() -> Result<()> {
@@ -37,17 +35,12 @@ fn test_reject_vote_from_non_member() -> Result<()> {
     let mut net = Net::with_procs(2, &mut rng);
     let p0 = net.procs[0].public_key_share();
     let p1 = net.procs[1].public_key_share();
-    let elders = BTreeSet::from_iter(net.procs.iter().map(State::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.elders = elders.clone();
-    }
+    net.procs[0].elders = BTreeSet::from_iter([p0]);
+    net.procs[1].elders = BTreeSet::from_iter([p0, p1]);
 
-    let resp = net.procs[1].propose(Reconfig::Join(rng.gen()))?;
-    net.enqueue_packets(resp.into_iter().map(|vote_msg| Packet {
-        source: p1,
-        vote_msg,
-    }));
-    net.drain_queued_packets()?;
+    let vote = net.procs[1].propose(Reconfig::Join(rng.gen()))?;
+    let resp = net.procs[0].handle_signed_vote(vote);
+    assert!(matches!(resp, Err(Error::NotElder { .. })));
     Ok(())
 }
 
@@ -106,21 +99,28 @@ fn test_handle_vote_rejects_packet_from_previous_gen() -> Result<()> {
         proc.elders = elders.clone();
     }
 
-    let packets = net.procs[0]
-        .propose(Reconfig::Join(rng.gen()))?
-        .into_iter()
-        .map(|vote_msg| Packet {
+    let vote = net.procs[0].propose(Reconfig::Join(rng.gen()))?;
+    let packets = net
+        .procs
+        .iter()
+        .map(State::public_key_share)
+        .map(|dest| Packet {
             source: a_0,
-            vote_msg,
+            dest,
+            vote: vote.clone(),
         })
         .collect::<Vec<_>>();
 
-    let stale_packets = net.procs[1]
-        .propose(Reconfig::Join(rng.gen()))?
-        .into_iter()
-        .map(|vote_msg| Packet {
+    let stale_vote = net.procs[1].propose(Reconfig::Join(rng.gen()))?;
+
+    let stale_packets = net
+        .procs
+        .iter()
+        .map(State::public_key_share)
+        .map(|dest| Packet {
             source: a_1,
-            vote_msg,
+            dest,
+            vote: stale_vote.clone(),
         })
         .collect::<Vec<_>>();
 
@@ -134,9 +134,8 @@ fn test_handle_vote_rejects_packet_from_previous_gen() -> Result<()> {
     net.drain_queued_packets()?;
 
     for packet in stale_packets {
-        let vote = packet.vote_msg.vote;
         assert!(matches!(
-            net.procs[0].handle_signed_vote(vote),
+            net.procs[0].handle_signed_vote(packet.vote),
             Err(Error::VoteNotForNextGeneration {
                 vote_gen: 1,
                 gen: 1,
@@ -179,14 +178,8 @@ fn test_split_vote() -> Result<()> {
 
         for i in 0..net.procs.len() {
             let a_i = net.procs[i].public_key_share();
-            let packets = net.procs[i]
-                .propose(Reconfig::Join(i as u8))?
-                .into_iter()
-                .map(|vote_msg| Packet {
-                    source: a_i,
-                    vote_msg,
-                });
-            net.enqueue_packets(packets);
+            let vote = net.procs[i].propose(Reconfig::Join(i as u8))?;
+            net.broadcast(a_i, vote);
         }
 
         net.drain_queued_packets()?;
@@ -230,14 +223,8 @@ fn test_round_robin_split_vote() -> Result<()> {
 
         for i in 0..net.procs.len() {
             let a_i = net.procs[i].public_key_share();
-            let packets = net.procs[i]
-                .propose(Reconfig::Join(i as u8))?
-                .into_iter()
-                .map(|vote_msg| Packet {
-                    source: a_i,
-                    vote_msg,
-                });
-            net.enqueue_packets(packets);
+            let vote = net.procs[i].propose(Reconfig::Join(i as u8))?;
+            net.broadcast(a_i, vote);
         }
 
         while !net.packets.is_empty() {
@@ -280,15 +267,8 @@ fn test_onboarding_across_many_generations() -> Result<()> {
         proc.elders = elders.clone();
     }
 
-    let packets = net.procs[0]
-        .propose(Reconfig::Join(1))
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
-    net.enqueue_packets(packets);
+    let vote = net.procs[0].propose(Reconfig::Join(1)).unwrap();
+    net.broadcast(p0, vote);
     net.deliver_packet_from_source(p0).unwrap();
     net.deliver_packet_from_source(p0).unwrap();
     net.deliver_packet_from_source(p1).unwrap();
@@ -298,16 +278,8 @@ fn test_onboarding_across_many_generations() -> Result<()> {
     net.deliver_packet_from_source(p1).unwrap();
     net.deliver_packet_from_source(p1).unwrap();
     assert!(net.packets.is_empty());
-    let packets = net.procs[0]
-        .propose(Reconfig::Join(2))
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
-    net.enqueue_packets(packets);
-
+    let vote = net.procs[0].propose(Reconfig::Join(2)).unwrap();
+    net.broadcast(p0, vote);
     net.deliver_packet_from_source(p0).unwrap();
     net.deliver_packet_from_source(p0).unwrap();
     net.deliver_packet_from_source(p1).unwrap();
@@ -343,17 +315,9 @@ fn test_simple_proposal() -> Result<()> {
         proc.elders = elders.clone();
     }
 
-    let proc_0 = net.procs[0].public_key_share();
-    let proc_3 = net.procs[2].public_key_share();
-    let packets = net.procs[0]
-        .propose(Reconfig::Join(0))
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: proc_0,
-            vote_msg,
-        });
-    net.enqueue_packets(packets);
+    let p0 = net.procs[0].public_key_share();
+    let vote = net.procs[0].propose(Reconfig::Join(0)).unwrap();
+    net.broadcast(p0, vote);
     net.drain_queued_packets().unwrap();
     assert!(net.packets.is_empty());
 
@@ -453,16 +417,12 @@ fn test_interpreter_qc1() -> Result<()> {
 
     let reconfig = Reconfig::Join(1);
     let q = &mut net.procs[0];
-    let propose_vote_msgs = q.propose(reconfig).unwrap();
-    let propose_packets = propose_vote_msgs.into_iter().map(|vote_msg| Packet {
-        source: p0,
-        vote_msg,
-    });
     net.reconfigs_by_gen
         .entry(q.pending_gen)
         .or_default()
         .insert(reconfig);
-    net.enqueue_packets(propose_packets);
+    let vote = q.propose(reconfig).unwrap();
+    net.broadcast(p0, vote);
 
     net.enqueue_anti_entropy(1, 0);
     net.enqueue_anti_entropy(1, 0);
@@ -499,28 +459,11 @@ fn test_interpreter_qc2() -> Result<()> {
         proc.elders = elders.clone();
     }
 
-    let propose_packets = net.procs[0]
-        .propose(Reconfig::Join(1))
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
-    net.enqueue_packets(propose_packets);
-
+    let vote = net.procs[0].propose(Reconfig::Join(1)).unwrap();
+    net.broadcast(p0, vote);
     net.drain_queued_packets();
-
-    let propose_packets = net.procs[0]
-        .propose(Reconfig::Join(2))
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
-    net.enqueue_packets(propose_packets);
-
+    let vote = net.procs[0].propose(Reconfig::Join(2)).unwrap();
+    net.broadcast(p0, vote);
     net.drain_queued_packets().unwrap();
 
     net.generate_msc("interpreter_qc2.msc").unwrap();
@@ -556,15 +499,8 @@ fn test_interpreter_qc3() {
         .or_default()
         .insert(reconfig);
 
-    let propose_packets = net.procs[0]
-        .propose(reconfig)
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
-    net.enqueue_packets(propose_packets);
+    let propose_vote = net.procs[0].propose(reconfig).unwrap();
+    net.broadcast(p0, propose_vote);
 
     net.drain_queued_packets().unwrap();
 
@@ -574,25 +510,15 @@ fn test_interpreter_qc3() {
         .or_default()
         .insert(reconfig);
 
-    let propose_packets = net.procs[0]
-        .propose(reconfig)
-        .unwrap()
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
-
-    net.enqueue_packets(propose_packets);
+    let propose_vote = net.procs[0].propose(reconfig).unwrap();
+    net.broadcast(p0, propose_vote);
 
     let q_actor = net.procs[2].public_key_share();
-    let anti_entropy_packets = net.procs[0]
-        .anti_entropy(0, q_actor)
-        .into_iter()
-        .map(|vote_msg| Packet {
-            source: p0,
-            vote_msg,
-        });
+    let anti_entropy_packets = net.procs[0].anti_entropy(0).into_iter().map(|vote| Packet {
+        source: p0,
+        dest: q_actor,
+        vote,
+    });
 
     net.enqueue_packets(anti_entropy_packets);
     net.drain_queued_packets().unwrap();
@@ -671,29 +597,25 @@ fn test_bft_consensus_qc1() -> Result<()> {
     // send a randomized packet
     let packet = Packet {
         source: net.procs[1].public_key_share(),
-        vote_msg: VoteMsg {
-            vote: SignedVote {
-                voter: net.procs[1].public_key_share(),
-                ..net.procs[1].sign_vote(Vote {
-                    gen: 1,
-                    ballot: Ballot::Propose(Reconfig::Join(240)),
-                })?
-            },
-            dest: net.procs[0].public_key_share(),
+        dest: net.procs[0].public_key_share(),
+        vote: SignedVote {
+            voter: net.procs[1].public_key_share(),
+            ..net.procs[1].sign_vote(Vote {
+                gen: 1,
+                ballot: Ballot::Propose(Reconfig::Join(240)),
+            })?
         },
     };
     net.enqueue_packets(vec![packet]);
     let packet = Packet {
         source: net.procs[1].public_key_share(),
-        vote_msg: VoteMsg {
-            vote: SignedVote {
-                voter: net.procs[1].public_key_share(),
-                ..net.procs[5].sign_vote(Vote {
-                    gen: 0,
-                    ballot: Ballot::Propose(Reconfig::Join(115)),
-                })?
-            },
-            dest: net.procs[0].public_key_share(),
+        dest: net.procs[0].public_key_share(),
+        vote: SignedVote {
+            voter: net.procs[1].public_key_share(),
+            ..net.procs[5].sign_vote(Vote {
+                gen: 0,
+                ballot: Ballot::Propose(Reconfig::Join(115)),
+            })?
         },
     };
     net.enqueue_packets(vec![packet]);
@@ -757,17 +679,12 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 let q = &mut net.procs[q_idx.min(n - 1)];
                 let q_actor = q.public_key_share();
                 match q.propose(reconfig) {
-                    Ok(propose_vote_msgs) => {
-                        let propose_packets =
-                            propose_vote_msgs.into_iter().map(|vote_msg| Packet {
-                                source: q_actor,
-                                vote_msg,
-                            });
+                    Ok(vote) => {
                         net.reconfigs_by_gen
                             .entry(q.pending_gen)
                             .or_default()
                             .insert(reconfig);
-                        net.enqueue_packets(propose_packets);
+                        net.broadcast(q_actor, vote);
                     }
                     Err(Error::JoinRequestForExistingMember { .. }) => {
                         assert!(q.members(q.gen)?.contains(&p));
@@ -798,17 +715,12 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 let q = &mut net.procs[q_idx.min(n - 1)];
                 let q_actor = q.public_key_share();
                 match q.propose(reconfig) {
-                    Ok(propose_vote_msgs) => {
-                        let propose_packets =
-                            propose_vote_msgs.into_iter().map(|vote_msg| Packet {
-                                source: q_actor,
-                                vote_msg,
-                            });
+                    Ok(vote) => {
                         net.reconfigs_by_gen
                             .entry(q.pending_gen)
                             .or_default()
                             .insert(reconfig);
-                        net.enqueue_packets(propose_packets);
+                        net.broadcast(q_actor, vote);
                     }
                     Err(Error::LeaveRequestForNonMember { .. }) => {
                         assert!(!q.members(q.gen)?.contains(&p));
@@ -839,15 +751,12 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
             }
             Instruction::AntiEntropy(gen, p_idx, q_idx) => {
                 let p = &net.procs[p_idx.min(n - 1)];
-                let q_actor = net.procs[q_idx.min(n - 1)].public_key_share();
-                let p_actor = p.public_key_share();
+                let dest = net.procs[q_idx.min(n - 1)].public_key_share();
+                let source = p.public_key_share();
                 let anti_entropy_packets =
-                    p.anti_entropy(gen, q_actor)
+                    p.anti_entropy(gen)
                         .into_iter()
-                        .map(|vote_msg| Packet {
-                            source: p_actor,
-                            vote_msg,
-                        });
+                        .map(|vote| Packet { source, dest, vote });
                 net.enqueue_packets(anti_entropy_packets);
             }
         }
@@ -1093,13 +1002,8 @@ fn prop_bft_consensus(
                     ),
                 };
 
-                let packets = Vec::from_iter(
-                    proc.propose(reconfig)
-                        .unwrap()
-                        .into_iter()
-                        .map(|vote_msg| Packet { source, vote_msg }),
-                );
-                net.enqueue_packets(packets);
+                let vote = proc.propose(reconfig).unwrap();
+                net.broadcast(source, vote);
             }
             _ => {
                 // Network delivers a packet
