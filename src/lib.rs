@@ -3,12 +3,12 @@ pub mod membership;
 pub mod proposal;
 pub mod vote;
 
-// #[cfg(feature = "bad_crypto")]
-// pub mod bad_crypto;
+#[cfg(feature = "bad_crypto")]
+pub mod bad_crypto;
 // #[cfg(feature = "blsttc")]
 // pub mod blsttc;
-// #[cfg(feature = "ed25519")]
-// pub mod ed25519;
+#[cfg(feature = "ed25519")]
+pub mod ed25519;
 
 // #[cfg(feature = "bad_crypto")]
 // pub use crate::bad_crypto::{PublicKey, SecretKey, Signature};

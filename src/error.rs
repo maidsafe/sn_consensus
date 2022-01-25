@@ -13,8 +13,8 @@ pub enum Error {
     NoMembers,
     #[error("Packet was not destined for this actor: {dest:?} != {actor:?}")]
     WrongDestination {
-        dest: PublicKeyShare,
-        actor: PublicKeyShare,
+        dest: Box<PublicKeyShare>,
+        actor: Box<PublicKeyShare>,
     },
     #[error("We can not accept any new join requests, network member size is at capacity")]
     MembersAtCapacity,

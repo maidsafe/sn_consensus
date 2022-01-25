@@ -119,7 +119,7 @@ impl<T: Proposition> Vote<T> {
 
     pub fn reconfigs(&self) -> BTreeSet<(PublicKeyShare, Reconfig<T>)> {
         match &self.vote.ballot {
-            Ballot::Propose(reconfig) => BTreeSet::from_iter([(self.voter, reconfig.clone())]),
+            Ballot::Propose(reconfig) => BTreeSet::from_iter([(self.voter, *reconfig)]),
             Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
                 BTreeSet::from_iter(votes.iter().flat_map(Self::reconfigs))
             }

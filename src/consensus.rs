@@ -271,7 +271,7 @@ impl<T: Proposition> MembershipState<T> {
         }
 
         match &vote.ballot {
-            Ballot::Propose(reconfig) => self.validate_reconfig(reconfig.clone()),
+            Ballot::Propose(reconfig) => self.validate_reconfig(*reconfig),
             Ballot::Merge(votes) => {
                 for child_vote in votes.iter() {
                     if child_vote.vote.gen != vote.gen {

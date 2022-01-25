@@ -74,7 +74,7 @@ impl<T: Proposition> MembershipState<T> {
         let forced_reconfigs = self.forced_reconfigs.entry(self.gen).or_default();
 
         // remove any leave reconfigs for this actor
-        forced_reconfigs.remove(&Reconfig::Leave(actor.clone()));
+        forced_reconfigs.remove(&Reconfig::Leave(actor));
         forced_reconfigs.insert(Reconfig::Join(actor));
     }
 
@@ -82,7 +82,7 @@ impl<T: Proposition> MembershipState<T> {
         let forced_reconfigs = self.forced_reconfigs.entry(self.gen).or_default();
 
         // remove any leave reconfigs for this actor
-        forced_reconfigs.remove(&Reconfig::Join(actor.clone()));
+        forced_reconfigs.remove(&Reconfig::Join(actor));
         forced_reconfigs.insert(Reconfig::Leave(actor));
     }
 
