@@ -1,13 +1,16 @@
+pub mod consensus;
 pub mod sn_membership;
+pub mod vote;
 
-// #[cfg(feature = "bad_crypto")]
-// pub mod bad_crypto;
+#[cfg(feature = "bad_crypto")]
+pub mod bad_crypto;
 // #[cfg(feature = "blsttc")]
 // pub mod blsttc;
-// #[cfg(feature = "ed25519")]
-// pub mod ed25519;
+#[cfg(feature = "ed25519")]
+pub mod ed25519;
 
-pub use crate::sn_membership::{Ballot, Generation, Reconfig, SignedVote, State, Vote};
+pub use crate::sn_membership::{Generation, Reconfig, State};
+pub use crate::vote::{Ballot, Proposition, SignedVote, Vote};
 
 // #[cfg(feature = "bad_crypto")]
 // pub use crate::bad_crypto::{PublicKey, SecretKey, Signature};
