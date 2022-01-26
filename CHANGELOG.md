@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.7.0](https://github.com/maidsafe/sn_membership/compare/v1.6.0...v1.7.0) (2022-01-26)
+
+
+### Features
+
+* split code in different files ([8006212](https://github.com/maidsafe/sn_membership/commit/800621209a74b607fccea100d5f67aa5e0c79df1))
+
 ## [1.6.0](https://github.com/maidsafe/sn_membership/compare/v1.5.0...v1.6.0) (2022-01-25)
 
 
