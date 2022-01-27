@@ -963,7 +963,7 @@ fn prop_bft_consensus(
                     .iter_mut()
                     .filter(|p| !faulty.contains(&p.public_key_share())) // filter out faulty nodes
                     .filter(|p| p.elders.contains(&p.public_key_share())) // filter out non-members
-                    .filter(|p| p.gen != p.pending_gen) // filter out nodes who have already voted this round
+                    .filter(|p| p.gen == p.pending_gen) // filter out nodes who have already voted this round
                     .choose(&mut rng)
                 {
                     proc
@@ -973,20 +973,15 @@ fn prop_bft_consensus(
                 };
 
                 let source = proc.public_key_share();
+                let proc_members = proc.members(proc.gen).unwrap();
 
-                let reconfig = match rng.gen::<bool>() {
+                let reconfig = match rng.gen::<bool>() || proc_members.is_empty() {
                     true => Reconfig::Join(
                         iter::repeat_with(|| rng.gen::<u8>())
                             .find(|m| !proc.members(proc.gen).unwrap().contains(m))
                             .unwrap(),
                     ),
-                    false => Reconfig::Leave(
-                        proc.members(proc.gen)
-                            .unwrap()
-                            .into_iter()
-                            .choose(&mut rng)
-                            .unwrap(),
-                    ),
+                    false => Reconfig::Leave(proc_members.into_iter().choose(&mut rng).unwrap()),
                 };
 
                 let vote = proc.propose(reconfig).unwrap();
