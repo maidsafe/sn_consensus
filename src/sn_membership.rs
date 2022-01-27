@@ -6,8 +6,8 @@ use log::info;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::vote::{Ballot, Proposition, SignedVote, Vote};
 use crate::consensus::Consensus;
+use crate::vote::{Ballot, Proposition, SignedVote, Vote};
 use crate::{Error, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
@@ -15,7 +15,7 @@ pub type Generation = u64;
 
 #[derive(Debug)]
 pub struct Membership<T: Proposition> {
-    pub consensus: Consensus::<Reconfig<T>>,
+    pub consensus: Consensus<Reconfig<T>>,
     // TODO: we need faulty elder detection
     // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<Reconfig<T>>>>,
     pub gen: Generation,
@@ -171,11 +171,18 @@ impl<T: Proposition> Membership<T> {
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<Option<SignedVote<Reconfig<T>>>> {
         self.validate_signed_vote(&signed_vote)?;
+        self.log_signed_vote(&signed_vote);
 
-        let (vote, consensus_proof) = self.consensus.handle_signed_vote(signed_vote, self.pending_gen)?;
+        let (vote, consensus_proof) = self
+            .consensus
+            .handle_signed_vote(signed_vote, self.pending_gen)?;
+
         if let Some(proof) = consensus_proof {
             self.history.insert(self.pending_gen, proof);
             self.gen = self.pending_gen;
+        }
+        if let Some(v) = vote.clone() {
+            self.pending_gen = v.vote.gen;
         }
 
         Ok(vote)
@@ -206,8 +213,10 @@ impl<T: Proposition> Membership<T> {
         signed_vote.validate_signature()?;
         self.validate_vote(&signed_vote.vote)?;
         self.consensus.validate_is_elder(signed_vote.voter)?;
-        self.consensus.validate_vote_supersedes_existing_vote(signed_vote)?;
-        self.consensus.validate_voters_have_not_changed_proposals(signed_vote)?;
+        self.consensus
+            .validate_vote_supersedes_existing_vote(signed_vote)?;
+        self.consensus
+            .validate_voters_have_not_changed_proposals(signed_vote)?;
         Ok(())
     }
 

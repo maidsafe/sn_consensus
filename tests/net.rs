@@ -6,18 +6,18 @@ use std::iter;
 use blsttc::PublicKeyShare;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
-use sn_membership::{Ballot, Error, Generation, Reconfig, SignedVote, State, Vote};
+use sn_membership::{Ballot, Error, Generation, Membership, Reconfig, SignedVote, Vote};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
     pub source: PublicKeyShare,
     pub dest: PublicKeyShare,
-    pub vote: SignedVote<u8>,
+    pub vote: SignedVote<Reconfig<u8>>,
 }
 
 #[derive(Default, Debug)]
 pub struct Net {
-    pub procs: Vec<State<u8>>,
+    pub procs: Vec<Membership<u8>>,
     pub reconfigs_by_gen: BTreeMap<Generation, BTreeSet<Reconfig<u8>>>,
     pub members_at_gen: BTreeMap<Generation, BTreeSet<u8>>,
     pub packets: BTreeMap<PublicKeyShare, VecDeque<Packet>>,
@@ -26,7 +26,7 @@ pub struct Net {
 
 impl Net {
     pub fn with_procs(n: usize, mut rng: &mut StdRng) -> Self {
-        let mut procs = Vec::from_iter(iter::repeat_with(|| State::random(&mut rng)).take(n));
+        let mut procs = Vec::from_iter(iter::repeat_with(|| Membership::random(&mut rng)).take(n));
         procs.sort_by_key(|p| p.public_key_share());
         Self {
             procs,
@@ -34,7 +34,7 @@ impl Net {
         }
     }
 
-    pub fn proc(&self, public_key: PublicKeyShare) -> Option<&State<u8>> {
+    pub fn proc(&self, public_key: PublicKeyShare) -> Option<&Membership<u8>> {
         self.procs
             .iter()
             .find(|p| p.public_key_share() == public_key)
@@ -45,7 +45,7 @@ impl Net {
         self.procs
             .iter()
             .choose(rng)
-            .map(State::public_key_share)
+            .map(Membership::public_key_share)
             .unwrap()
     }
 
@@ -55,7 +55,7 @@ impl Net {
         recursion: u8,
         faulty: &BTreeSet<PublicKeyShare>,
         rng: &mut StdRng,
-    ) -> Ballot<u8> {
+    ) -> Ballot<Reconfig<u8>> {
         match rng.gen() || recursion == 0 {
             true => Ballot::Propose(match rng.gen() {
                 true => Reconfig::Join(rng.gen()),
@@ -81,7 +81,7 @@ impl Net {
         recursion: u8,
         faulty_nodes: &BTreeSet<PublicKeyShare>,
         rng: &mut StdRng,
-    ) -> SignedVote<u8> {
+    ) -> SignedVote<Reconfig<u8>> {
         let faulty_node = faulty_nodes
             .iter()
             .choose(rng)
@@ -137,7 +137,7 @@ impl Net {
             }
         };
 
-        let dest_elders = dest_proc.elders.clone();
+        let dest_elders = dest_proc.consensus.elders.clone();
 
         let resp = dest_proc.handle_signed_vote(packet.vote);
         // println!("[NET] resp: {:?}", resp);
@@ -196,18 +196,14 @@ impl Net {
         }
     }
 
-    pub fn broadcast(&mut self, source: PublicKeyShare, vote: SignedVote<u8>) {
-        let packets =
-            Vec::from_iter(
-                self.procs
-                    .iter()
-                    .map(State::public_key_share)
-                    .map(|dest| Packet {
-                        source,
-                        dest,
-                        vote: vote.clone(),
-                    }),
-            );
+    pub fn broadcast(&mut self, source: PublicKeyShare, vote: SignedVote<Reconfig<u8>>) {
+        let packets = Vec::from_iter(self.procs.iter().map(Membership::public_key_share).map(
+            |dest| Packet {
+                source,
+                dest,
+                vote: vote.clone(),
+            },
+        ));
         self.enqueue_packets(packets);
     }
 
@@ -269,7 +265,12 @@ msc {\n
 
         // Replace process identifiers with friendlier numbers
         // 1, 2, 3 ... instead of i:3b2, i:7def, ...
-        for (idx, proc_id) in self.procs.iter().map(State::public_key_share).enumerate() {
+        for (idx, proc_id) in self
+            .procs
+            .iter()
+            .map(Membership::public_key_share)
+            .enumerate()
+        {
             let proc_id_as_str = format!("{:?}", proc_id);
             msc = msc.replace(&proc_id_as_str, &format!("{}", idx + 1));
         }

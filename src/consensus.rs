@@ -50,7 +50,7 @@ impl<T: Proposition> Consensus<T> {
         if self.is_split_vote(&self.votes.values().cloned().collect())? {
             info!("[MBR] Detected split vote");
             let merge_vote = Vote {
-                gen: gen,
+                gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
@@ -80,10 +80,7 @@ impl<T: Proposition> Consensus<T> {
             // store a proof of what the network decided in our history so that we can onboard future procs.
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
 
-            let vote = Vote {
-                gen,
-                ballot,
-            };
+            let vote = Vote { gen, ballot };
             let signed_vote = self.sign_vote(vote)?;
 
             // clear our pending votes
@@ -107,10 +104,7 @@ impl<T: Proposition> Consensus<T> {
 
             info!("[MBR] broadcasting super majority");
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
-            let vote = Vote {
-                gen,
-                ballot,
-            };
+            let vote = Vote { gen, ballot };
             let signed_vote = self.sign_vote(vote)?;
             return Ok((Some(self.cast_vote(signed_vote)), None));
         }
@@ -150,15 +144,11 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    pub fn count_votes(
-        &self,
-        votes: &BTreeSet<SignedVote<T>>,
-    ) -> BTreeMap<BTreeSet<T>, usize> {
+    pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {
         let mut count: BTreeMap<BTreeSet<T>, usize> = Default::default();
 
         for vote in votes.iter() {
-            let proposals =
-                BTreeSet::from_iter(vote.proposals().into_iter().map(|(_, prop)| prop));
+            let proposals = BTreeSet::from_iter(vote.proposals().into_iter().map(|(_, prop)| prop));
             let c = count.entry(proposals).or_default();
             *c += 1;
         }
@@ -223,7 +213,10 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    pub fn validate_vote_supersedes_existing_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
+    pub fn validate_vote_supersedes_existing_vote(
+        &self,
+        signed_vote: &SignedVote<T>,
+    ) -> Result<()> {
         if self.votes.contains_key(&signed_vote.voter)
             && !signed_vote.supersedes(&self.votes[&signed_vote.voter])
             && !self.votes[&signed_vote.voter].supersedes(signed_vote)
