@@ -15,6 +15,12 @@ pub struct Consensus<T: Proposition> {
     pub votes: BTreeMap<PublicKeyShare, SignedVote<T>>,
 }
 
+pub enum VoteResponse<T: Proposition> {
+    WaitingForMoreVotes,
+    Broadcast(SignedVote<T>),
+    Decided(SignedVote<T>),
+}
+
 impl<T: Proposition> Consensus<T> {
     pub fn from(secret_key: SecretKeyShare, elders: BTreeSet<PublicKeyShare>) -> Self {
         Consensus::<T> {
@@ -44,7 +50,7 @@ impl<T: Proposition> Consensus<T> {
         &mut self,
         signed_vote: SignedVote<T>,
         gen: Generation,
-    ) -> Result<(Option<SignedVote<T>>, Option<SignedVote<T>>)> {
+    ) -> Result<VoteResponse<T>> {
         self.log_signed_vote(&signed_vote);
 
         if self.is_split_vote(&self.votes.values().cloned().collect())? {
@@ -66,12 +72,12 @@ impl<T: Proposition> Consensus<T> {
 
                 if proposals_we_voted_for == proposals_we_would_vote_for {
                     info!("[MBR] This vote didn't add new information, waiting for more votes...");
-                    return Ok((None, None));
+                    return Ok(VoteResponse::WaitingForMoreVotes);
                 }
             }
 
             info!("[MBR] Either we haven't voted or our previous vote didn't fully overlap, merge them.");
-            return Ok((Some(self.cast_vote(signed_merge_vote)), None));
+            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)));
         }
 
         if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())? {
@@ -87,7 +93,7 @@ impl<T: Proposition> Consensus<T> {
             self.votes = Default::default();
 
             // return obtained super majority over super majority (aka consensus)
-            return Ok((None, Some(signed_vote)));
+            return Ok(VoteResponse::Decided(signed_vote));
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect())? {
@@ -98,7 +104,7 @@ impl<T: Proposition> Consensus<T> {
 
                 if our_vote.vote.is_super_majority_ballot() {
                     info!("[MBR] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
-                    return Ok((None, None));
+                    return Ok(VoteResponse::WaitingForMoreVotes);
                 }
             }
 
@@ -106,7 +112,7 @@ impl<T: Proposition> Consensus<T> {
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
             let vote = Vote { gen, ballot };
             let signed_vote = self.sign_vote(vote)?;
-            return Ok((Some(self.cast_vote(signed_vote)), None));
+            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
         // We have determined that we don't yet have enough votes to take action.
@@ -116,10 +122,10 @@ impl<T: Proposition> Consensus<T> {
                 gen,
                 ballot: signed_vote.vote.ballot,
             })?;
-            return Ok((Some(self.cast_vote(signed_vote)), None));
+            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
-        Ok((None, None))
+        Ok(VoteResponse::WaitingForMoreVotes)
     }
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {

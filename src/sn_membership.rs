@@ -6,7 +6,7 @@ use log::info;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::consensus::Consensus;
+use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
 use crate::{Error, Result};
 
@@ -173,19 +173,22 @@ impl<T: Proposition> Membership<T> {
         self.validate_signed_vote(&signed_vote)?;
         self.log_signed_vote(&signed_vote);
 
-        let (vote, consensus_proof) = self
+        let vote_response = self
             .consensus
             .handle_signed_vote(signed_vote, self.pending_gen)?;
 
-        if let Some(proof) = consensus_proof {
-            self.history.insert(self.pending_gen, proof);
-            self.gen = self.pending_gen;
+        match vote_response {
+            VoteResponse::Broadcast(vote) => {
+                self.pending_gen = vote.vote.gen;
+                Ok(Some(vote))
+            },
+            VoteResponse::Decided(vote) => {
+                self.history.insert(self.pending_gen, vote);
+                self.gen = self.pending_gen;
+                Ok(None)
+            },
+            VoteResponse::WaitingForMoreVotes => Ok(None),
         }
-        if let Some(v) = vote.clone() {
-            self.pending_gen = v.vote.gen;
-        }
-
-        Ok(vote)
     }
 
     pub fn sign_vote(&self, vote: Vote<Reconfig<T>>) -> Result<SignedVote<Reconfig<T>>> {

@@ -539,10 +539,10 @@ fn test_procs_refuse_to_propose_competing_votes() -> Result<()> {
     let proc_id = proc.public_key_share();
     proc.consensus.elders = BTreeSet::from_iter([proc_id]);
 
-    proc.propose(Reconfig::Join(0 as u8))?;
+    proc.propose(Reconfig::Join(0_u8))?;
 
     // Proposing a second join reconfig for a different member should fail
-    let reconfig = Reconfig::Join(1 as u8);
+    let reconfig = Reconfig::Join(1_u8);
     assert!(matches!(
         proc.propose(reconfig),
         Err(Error::ExistingVoteIncompatibleWithNewVote)
