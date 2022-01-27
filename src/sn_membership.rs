@@ -7,22 +7,21 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+use crate::consensus::Consensus;
 use crate::{Error, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
 
 #[derive(Debug)]
-pub struct State<T: Proposition> {
-    pub elders: BTreeSet<PublicKeyShare>,
+pub struct Membership<T: Proposition> {
+    pub consensus: Consensus::<Reconfig<T>>,
     // TODO: we need faulty elder detection
-    // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<T>>>,
-    pub secret_key: SecretKeyShare,
+    // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<Reconfig<T>>>>,
     pub gen: Generation,
     pub pending_gen: Generation,
     pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>, // TODO: change to bootstrap members
-    pub history: BTreeMap<Generation, SignedVote<T>>, // for onboarding new procs, the vote proving super majority
-    pub votes: BTreeMap<PublicKeyShare, SignedVote<T>>,
+    pub history: BTreeMap<Generation, SignedVote<Reconfig<T>>>, // for onboarding new procs, the vote proving super majority
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -49,28 +48,24 @@ impl<T: Proposition> Reconfig<T> {
     }
 }
 
-impl<T: Proposition> State<T> {
+impl<T: Proposition> Membership<T> {
     pub fn from(secret_key: SecretKeyShare, elders: BTreeSet<PublicKeyShare>) -> Self {
-        State {
-            elders,
-            secret_key,
+        Membership::<T> {
+            consensus: Consensus::<Reconfig<T>>::from(secret_key, elders),
             gen: 0,
             pending_gen: 0,
             forced_reconfigs: Default::default(),
             history: Default::default(),
-            votes: Default::default(),
         }
     }
 
-    pub fn random(mut rng: impl Rng + CryptoRng) -> Self {
-        State {
-            elders: Default::default(),
-            secret_key: rng.gen(),
+    pub fn random(rng: impl Rng + CryptoRng) -> Self {
+        Membership::<T> {
+            consensus: Consensus::<Reconfig<T>>::random(rng),
             gen: 0,
             pending_gen: 0,
             forced_reconfigs: Default::default(),
             history: Default::default(),
-            votes: Default::default(),
         }
     }
 
@@ -131,7 +126,7 @@ impl<T: Proposition> State<T> {
         Err(Error::InvalidGeneration(gen))
     }
 
-    pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<SignedVote<T>> {
+    pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<SignedVote<Reconfig<T>>> {
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
@@ -141,7 +136,7 @@ impl<T: Proposition> State<T> {
         Ok(self.cast_vote(signed_vote))
     }
 
-    pub fn anti_entropy(&self, from_gen: Generation) -> Vec<SignedVote<T>> {
+    pub fn anti_entropy(&self, from_gen: Generation) -> Vec<SignedVote<Reconfig<T>>> {
         info!("[MBR] anti-entropy from gen {}", from_gen);
 
         let mut msgs = Vec::from_iter(
@@ -152,12 +147,12 @@ impl<T: Proposition> State<T> {
         );
 
         // include the current in-progres votes as well.
-        msgs.extend(self.votes.values().cloned());
+        msgs.extend(self.consensus.votes.values().cloned());
 
         msgs
     }
 
-    fn resolve_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeSet<Reconfig<T>> {
+    fn resolve_votes(&self, votes: &BTreeSet<SignedVote<Reconfig<T>>>) -> BTreeSet<Reconfig<T>> {
         let (winning_reconfigs, _) = self
             .count_votes(votes)
             .into_iter()
@@ -165,6 +160,103 @@ impl<T: Proposition> State<T> {
             .unwrap_or_default();
 
         winning_reconfigs
+    }
+
+    pub fn public_key_share(&self) -> PublicKeyShare {
+        self.consensus.public_key_share()
+    }
+
+    pub fn handle_signed_vote(
+        &mut self,
+        signed_vote: SignedVote<Reconfig<T>>,
+    ) -> Result<Option<SignedVote<Reconfig<T>>>> {
+        self.validate_signed_vote(&signed_vote)?;
+
+        let (vote, consensus_proof) = self.consensus.handle_signed_vote(signed_vote, self.pending_gen)?;
+        if let Some(proof) = consensus_proof {
+            self.history.insert(self.pending_gen, proof);
+            self.gen = self.pending_gen;
+        }
+
+        Ok(vote)
+    }
+
+    pub fn sign_vote(&self, vote: Vote<Reconfig<T>>) -> Result<SignedVote<Reconfig<T>>> {
+        self.consensus.sign_vote(vote)
+    }
+
+    pub fn cast_vote(&mut self, signed_vote: SignedVote<Reconfig<T>>) -> SignedVote<Reconfig<T>> {
+        self.log_signed_vote(&signed_vote);
+        signed_vote
+    }
+
+    fn log_signed_vote(&mut self, signed_vote: &SignedVote<Reconfig<T>>) {
+        self.pending_gen = signed_vote.vote.gen;
+        self.consensus.log_signed_vote(signed_vote);
+    }
+
+    pub fn count_votes(
+        &self,
+        votes: &BTreeSet<SignedVote<Reconfig<T>>>,
+    ) -> BTreeMap<BTreeSet<Reconfig<T>>, usize> {
+        self.consensus.count_votes(votes)
+    }
+
+    pub fn validate_signed_vote(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {
+        signed_vote.validate_signature()?;
+        self.validate_vote(&signed_vote.vote)?;
+        self.consensus.validate_is_elder(signed_vote.voter)?;
+        self.consensus.validate_vote_supersedes_existing_vote(signed_vote)?;
+        self.consensus.validate_voters_have_not_changed_proposals(signed_vote)?;
+        Ok(())
+    }
+
+    fn validate_vote(&self, vote: &Vote<Reconfig<T>>) -> Result<()> {
+        if vote.gen != self.gen + 1 {
+            return Err(Error::VoteNotForNextGeneration {
+                vote_gen: vote.gen,
+                gen: self.gen,
+                pending_gen: self.pending_gen,
+            });
+        }
+
+        match &vote.ballot {
+            Ballot::Propose(reconfig) => self.validate_reconfig(reconfig.clone()),
+            Ballot::Merge(votes) => {
+                for child_vote in votes.iter() {
+                    if child_vote.vote.gen != vote.gen {
+                        return Err(Error::MergedVotesMustBeFromSameGen {
+                            child_gen: child_vote.vote.gen,
+                            merge_gen: vote.gen,
+                        });
+                    }
+                    self.validate_signed_vote(child_vote)?;
+                }
+                Ok(())
+            }
+            Ballot::SuperMajority(votes) => {
+                if !self.consensus.is_super_majority(
+                    &votes
+                        .iter()
+                        .flat_map(SignedVote::unpack_votes)
+                        .cloned()
+                        .collect(),
+                )? {
+                    Err(Error::SuperMajorityBallotIsNotSuperMajority)
+                } else {
+                    for child_vote in votes.iter() {
+                        if child_vote.vote.gen != vote.gen {
+                            return Err(Error::MergedVotesMustBeFromSameGen {
+                                child_gen: child_vote.vote.gen,
+                                merge_gen: vote.gen,
+                            });
+                        }
+                        self.validate_signed_vote(child_vote)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
     }
 
     pub fn validate_reconfig(&self, reconfig: Reconfig<T>) -> Result<()> {

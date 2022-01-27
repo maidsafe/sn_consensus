@@ -9,7 +9,8 @@ pub mod bad_crypto;
 #[cfg(feature = "ed25519")]
 pub mod ed25519;
 
-pub use crate::sn_membership::{Generation, Reconfig, State};
+pub use crate::sn_membership::{Generation, Reconfig, Membership};
+pub use crate::consensus::Consensus;
 pub use crate::vote::{Ballot, Proposition, SignedVote, Vote};
 
 // #[cfg(feature = "bad_crypto")]
