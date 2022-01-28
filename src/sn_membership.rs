@@ -213,62 +213,19 @@ impl<T: Proposition> Membership<T> {
     }
 
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {
-        signed_vote.validate_signature()?;
-        self.validate_vote(&signed_vote.vote)?;
-        self.consensus.validate_is_elder(signed_vote.voter)?;
-        self.consensus
-            .validate_vote_supersedes_existing_vote(signed_vote)?;
-        self.consensus
-            .validate_voters_have_not_changed_proposals(signed_vote)?;
-        Ok(())
-    }
-
-    fn validate_vote(&self, vote: &Vote<Reconfig<T>>) -> Result<()> {
-        if vote.gen != self.gen + 1 {
+        if signed_vote.vote.gen != self.gen + 1 {
             return Err(Error::VoteNotForNextGeneration {
-                vote_gen: vote.gen,
+                vote_gen: signed_vote.vote.gen,
                 gen: self.gen,
                 pending_gen: self.pending_gen,
             });
         }
 
-        match &vote.ballot {
-            Ballot::Propose(reconfig) => self.validate_reconfig(reconfig.clone()),
-            Ballot::Merge(votes) => {
-                for child_vote in votes.iter() {
-                    if child_vote.vote.gen != vote.gen {
-                        return Err(Error::MergedVotesMustBeFromSameGen {
-                            child_gen: child_vote.vote.gen,
-                            merge_gen: vote.gen,
-                        });
-                    }
-                    self.validate_signed_vote(child_vote)?;
-                }
-                Ok(())
-            }
-            Ballot::SuperMajority(votes) => {
-                if !self.consensus.is_super_majority(
-                    &votes
-                        .iter()
-                        .flat_map(SignedVote::unpack_votes)
-                        .cloned()
-                        .collect(),
-                )? {
-                    Err(Error::SuperMajorityBallotIsNotSuperMajority)
-                } else {
-                    for child_vote in votes.iter() {
-                        if child_vote.vote.gen != vote.gen {
-                            return Err(Error::MergedVotesMustBeFromSameGen {
-                                child_gen: child_vote.vote.gen,
-                                merge_gen: vote.gen,
-                            });
-                        }
-                        self.validate_signed_vote(child_vote)?;
-                    }
-                    Ok(())
-                }
-            }
-        }
+        signed_vote.proposals().into_iter().map(|(_signer, reconfig)|
+            self.validate_reconfig(reconfig)
+        ).collect::<Result<()>>()?;
+
+        self.consensus.validate_signed_vote(signed_vote)
     }
 
     pub fn validate_reconfig(&self, reconfig: Reconfig<T>) -> Result<()> {

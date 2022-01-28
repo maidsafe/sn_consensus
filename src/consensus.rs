@@ -208,7 +208,58 @@ impl<T: Proposition> Consensus<T> {
         Ok(3 * count_of_agreeing_super_majorities > 2 * self.elders.len())
     }
 
-    pub fn validate_is_elder(&self, public_key: PublicKeyShare) -> Result<()> {
+    /// Validates a vote recursively all the way down to the proposition (T)
+    /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
+    pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
+        signed_vote.validate_signature()?;
+        self.validate_vote(&signed_vote.vote)?;
+        self.validate_is_elder(signed_vote.voter)?;
+        self.validate_vote_supersedes_existing_vote(signed_vote)?;
+        self.validate_voters_have_not_changed_proposals(signed_vote)?;
+        Ok(())
+    }
+
+    fn validate_vote(&self, vote: &Vote<T>) -> Result<()> {
+        match &vote.ballot {
+            Ballot::Propose(_) => Ok(()),
+            Ballot::Merge(votes) => {
+                for child_vote in votes.iter() {
+                    if child_vote.vote.gen != vote.gen {
+                        return Err(Error::MergedVotesMustBeFromSameGen {
+                            child_gen: child_vote.vote.gen,
+                            merge_gen: vote.gen,
+                        });
+                    }
+                    self.validate_signed_vote(child_vote)?;
+                }
+                Ok(())
+            }
+            Ballot::SuperMajority(votes) => {
+                if !self.is_super_majority(
+                    &votes
+                        .iter()
+                        .flat_map(SignedVote::unpack_votes)
+                        .cloned()
+                        .collect(),
+                )? {
+                    Err(Error::SuperMajorityBallotIsNotSuperMajority)
+                } else {
+                    for child_vote in votes.iter() {
+                        if child_vote.vote.gen != vote.gen {
+                            return Err(Error::MergedVotesMustBeFromSameGen {
+                                child_gen: child_vote.vote.gen,
+                                merge_gen: vote.gen,
+                            });
+                        }
+                        self.validate_signed_vote(child_vote)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    fn validate_is_elder(&self, public_key: PublicKeyShare) -> Result<()> {
         if !self.elders.contains(&public_key) {
             Err(Error::NotElder {
                 public_key,
@@ -219,7 +270,7 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    pub fn validate_vote_supersedes_existing_vote(
+    fn validate_vote_supersedes_existing_vote(
         &self,
         signed_vote: &SignedVote<T>,
     ) -> Result<()> {
@@ -233,7 +284,7 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    pub fn validate_voters_have_not_changed_proposals(
+    fn validate_voters_have_not_changed_proposals(
         &self,
         signed_vote: &SignedVote<T>,
     ) -> Result<()> {
