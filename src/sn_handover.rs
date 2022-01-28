@@ -18,7 +18,11 @@ pub struct Handover<T: Proposition> {
 }
 
 impl<T: Proposition> Handover<T> {
-    pub fn from(secret_key: SecretKeyShare, elders: BTreeSet<PublicKeyShare>, gen: UniqueSectionId) -> Self {
+    pub fn from(
+        secret_key: SecretKeyShare,
+        elders: BTreeSet<PublicKeyShare>,
+        gen: UniqueSectionId,
+    ) -> Self {
         Handover::<T> {
             consensus: Consensus::<T>::from(secret_key, elders),
             gen,
@@ -44,10 +48,7 @@ impl<T: Proposition> Handover<T> {
 
     // Get someone up to speed on our view of the current votes
     pub fn anti_entropy(&self) -> Vec<SignedVote<T>> {
-        info!(
-            "[HDVR] anti-entropy from {:?}",
-            self.public_key_share()
-        );
+        info!("[HDVR] anti-entropy from {:?}", self.public_key_share());
 
         self.consensus.votes.values().cloned().collect()
     }
@@ -74,17 +75,11 @@ impl<T: Proposition> Handover<T> {
     ) -> Result<Option<SignedVote<T>>> {
         self.validate_signed_vote(&signed_vote)?;
 
-        let vote_response = self
-            .consensus
-            .handle_signed_vote(signed_vote, self.gen)?;
+        let vote_response = self.consensus.handle_signed_vote(signed_vote, self.gen)?;
 
         match vote_response {
-            VoteResponse::Broadcast(vote) => {
-                Ok(Some(vote))
-            }
-            VoteResponse::Decided(_vote) => {
-                Ok(None)
-            }
+            VoteResponse::Broadcast(vote) => Ok(Some(vote)),
+            VoteResponse::Decided(_vote) => Ok(None),
             VoteResponse::WaitingForMoreVotes => Ok(None),
         }
     }
@@ -102,10 +97,7 @@ impl<T: Proposition> Handover<T> {
         self.consensus.log_signed_vote(signed_vote);
     }
 
-    pub fn count_votes(
-        &self,
-        votes: &BTreeSet<SignedVote<T>>,
-    ) -> BTreeMap<BTreeSet<T>, usize> {
+    pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {
         self.consensus.count_votes(votes)
     }
 
@@ -117,9 +109,10 @@ impl<T: Proposition> Handover<T> {
             });
         }
 
-        signed_vote.proposals().into_iter().map(|(_signer, prop)|
-            self.validate_proposal(prop)
-        ).collect::<Result<()>>()?;
+        signed_vote
+            .proposals()
+            .into_iter()
+            .try_for_each(|(_signer, prop)| self.validate_proposal(prop))?;
 
         self.consensus.validate_signed_vote(signed_vote)
     }

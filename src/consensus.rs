@@ -270,10 +270,7 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    fn validate_vote_supersedes_existing_vote(
-        &self,
-        signed_vote: &SignedVote<T>,
-    ) -> Result<()> {
+    fn validate_vote_supersedes_existing_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         if self.votes.contains_key(&signed_vote.voter)
             && !signed_vote.supersedes(&self.votes[&signed_vote.voter])
             && !self.votes[&signed_vote.voter].supersedes(signed_vote)
