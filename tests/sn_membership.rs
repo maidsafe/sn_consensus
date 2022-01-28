@@ -1,6 +1,6 @@
 use blsttc::SecretKeyShare;
 use eyre::eyre;
-use net::{Net, Packet};
+use membership_net::{Net, Packet};
 use rand::{
     prelude::{IteratorRandom, StdRng},
     Rng, SeedableRng,
@@ -10,14 +10,14 @@ use std::{
     iter,
 };
 
-mod net;
+mod membership_net;
 
 use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
 use sn_membership::{Ballot, Error, Generation, Membership, Reconfig, Result, SignedVote, Vote};
 
 #[test]
-fn test_reject_changing_reconfig_when_one_is_in_progress() -> Result<()> {
+fn test_membership_reject_changing_reconfig_when_one_is_in_progress() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut proc: Membership<u8> = Membership::random(&mut rng);
     proc.consensus.elders = BTreeSet::from_iter([proc.public_key_share()]);
@@ -30,7 +30,7 @@ fn test_reject_changing_reconfig_when_one_is_in_progress() -> Result<()> {
 }
 
 #[test]
-fn test_reject_vote_from_non_member() -> Result<()> {
+fn test_membership_reject_vote_from_non_member() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, &mut rng);
     let p0 = net.procs[0].public_key_share();
@@ -45,7 +45,7 @@ fn test_reject_vote_from_non_member() -> Result<()> {
 }
 
 #[test]
-fn test_reject_join_if_actor_is_already_a_member() -> Result<()> {
+fn test_membership_reject_join_if_actor_is_already_a_member() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut proc = Membership::<u8> {
         forced_reconfigs: vec![(
@@ -71,7 +71,7 @@ fn test_reject_join_if_actor_is_already_a_member() -> Result<()> {
 }
 
 #[test]
-fn test_reject_leave_if_actor_is_not_a_member() {
+fn test_membership_reject_leave_if_actor_is_not_a_member() {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut proc = Membership::<u8> {
         forced_reconfigs: vec![(
@@ -89,7 +89,7 @@ fn test_reject_leave_if_actor_is_not_a_member() {
 }
 
 #[test]
-fn test_handle_vote_rejects_packet_from_previous_gen() -> Result<()> {
+fn test_membership_handle_vote_rejects_packet_from_previous_gen() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, &mut rng);
     let a_0 = net.procs[0].public_key_share();
@@ -148,7 +148,7 @@ fn test_handle_vote_rejects_packet_from_previous_gen() -> Result<()> {
 }
 
 #[test]
-fn test_reject_votes_with_invalid_signatures() -> Result<()> {
+fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut proc: Membership<u8> = Membership::random(&mut rng);
     let ballot = Ballot::Propose(Reconfig::Join(rng.gen()));
@@ -166,7 +166,7 @@ fn test_reject_votes_with_invalid_signatures() -> Result<()> {
 }
 
 #[test]
-fn test_split_vote() -> Result<()> {
+fn test_membership_split_vote() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         let mut net = Net::with_procs(nprocs, &mut rng);
@@ -211,7 +211,7 @@ fn test_split_vote() -> Result<()> {
 }
 
 #[test]
-fn test_round_robin_split_vote() -> Result<()> {
+fn test_membership_round_robin_split_vote() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         let mut net = Net::with_procs(nprocs, &mut rng);
@@ -256,7 +256,7 @@ fn test_round_robin_split_vote() -> Result<()> {
 }
 
 #[test]
-fn test_onboarding_across_many_generations() -> Result<()> {
+fn test_membership_onboarding_across_many_generations() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, &mut rng);
     let p0 = net.procs[0].public_key_share();
@@ -306,7 +306,7 @@ fn test_onboarding_across_many_generations() -> Result<()> {
 }
 
 #[test]
-fn test_simple_proposal() -> Result<()> {
+fn test_membership_simple_proposal() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, &mut rng);
 
@@ -403,7 +403,7 @@ impl Arbitrary for Instruction {
 }
 
 #[test]
-fn test_interpreter_qc1() -> Result<()> {
+fn test_membership_interpreter_qc1() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, &mut rng);
     let p0 = net.procs[0].public_key_share();
@@ -445,7 +445,7 @@ fn test_interpreter_qc1() -> Result<()> {
 }
 
 #[test]
-fn test_interpreter_qc2() -> Result<()> {
+fn test_membership_interpreter_qc2() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, &mut rng);
     let p0 = net.procs[0].public_key_share();
@@ -478,7 +478,7 @@ fn test_interpreter_qc2() -> Result<()> {
 }
 
 #[test]
-fn test_interpreter_qc3() {
+fn test_membership_interpreter_qc3() {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(4, &mut rng);
 
@@ -527,13 +527,14 @@ fn test_interpreter_qc3() {
 
     let res = net.drain_queued_packets();
 
-    net.generate_msc("test_interpreter_qc3.msc").unwrap();
+    net.generate_msc("test_membership_interpreter_qc3.msc")
+        .unwrap();
 
     assert!(res.is_ok());
 }
 
 #[test]
-fn test_procs_refuse_to_propose_competing_votes() -> Result<()> {
+fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
     let rng = StdRng::from_seed([0u8; 32]);
     let mut proc = Membership::random(rng);
     let proc_id = proc.public_key_share();
@@ -561,7 +562,7 @@ fn test_procs_refuse_to_propose_competing_votes() -> Result<()> {
 }
 
 #[test]
-fn test_validate_reconfig_rejects_when_members_at_capacity() -> Result<()> {
+fn test_membership_validate_reconfig_rejects_when_members_at_capacity() -> Result<()> {
     let rng = StdRng::from_seed([0u8; 32]);
     let mut proc = Membership::random(rng);
 
@@ -578,7 +579,7 @@ fn test_validate_reconfig_rejects_when_members_at_capacity() -> Result<()> {
 }
 
 #[test]
-fn test_bft_consensus_qc1() -> Result<()> {
+fn test_membership_bft_consensus_qc1() -> Result<()> {
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(6, &mut rng);
     let faulty = BTreeSet::from_iter([

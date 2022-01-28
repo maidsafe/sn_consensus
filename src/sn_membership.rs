@@ -185,6 +185,8 @@ impl<T: Proposition> Membership<T> {
             VoteResponse::Decided(vote) => {
                 self.history.insert(self.pending_gen, vote);
                 self.gen = self.pending_gen;
+                // clear our pending votes
+                self.consensus.votes = Default::default();
                 Ok(None)
             }
             VoteResponse::WaitingForMoreVotes => Ok(None),

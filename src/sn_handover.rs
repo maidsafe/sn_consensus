@@ -53,7 +53,7 @@ impl<T: Proposition> Handover<T> {
         self.consensus.votes.values().cloned().collect()
     }
 
-    fn resolve_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> Option<T> {
+    pub fn resolve_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> Option<T> {
         let (winning_proposals, _) = self
             .count_votes(votes)
             .into_iter()

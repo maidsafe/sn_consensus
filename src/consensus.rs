@@ -89,9 +89,6 @@ impl<T: Proposition> Consensus<T> {
             let vote = Vote { gen, ballot };
             let signed_vote = self.sign_vote(vote)?;
 
-            // clear our pending votes
-            self.votes = Default::default();
-
             // return obtained super majority over super majority (aka consensus)
             return Ok(VoteResponse::Decided(signed_vote));
         }
