@@ -647,6 +647,76 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_membership_bft_consensus_qc2() -> Result<()> {
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs(5, &mut rng);
+
+    let faulty = BTreeSet::from_iter([net.procs[0].public_key_share()]);
+
+    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
+    for p in net.procs.iter_mut() {
+        p.consensus.elders = elders.clone();
+    }
+    // node takes honest action
+    let vote = net.procs[1].propose(Reconfig::Join(0)).unwrap();
+    net.broadcast(net.procs[1].public_key_share(), vote);
+
+    // send a randomized packet
+    let packet = Packet {
+        source: net.procs[0].public_key_share(),
+        dest: net.procs[1].public_key_share(),
+        vote: net.procs[0]
+            .sign_vote(Vote {
+                gen: 1,
+                ballot: Ballot::Propose(Reconfig::Join(1)),
+                // faults: Default::default(),
+            })
+            .unwrap(),
+    };
+    net.enqueue_packets(vec![packet]);
+
+    println!(
+        "{:#?}",
+        BTreeMap::from_iter(
+            net.procs
+                .iter()
+                .map(Membership::public_key_share)
+                .enumerate()
+        )
+    );
+
+    while let Err(e) = net.drain_queued_packets() {
+        println!("Error while draining: {e:?}");
+    }
+
+    net.generate_msc("test_bft_consensus_qc2.msc")?;
+
+    let honest_procs = Vec::from_iter(
+        net.procs
+            .iter()
+            .filter(|p| !faulty.contains(&p.public_key_share())),
+    );
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        println!("honest_proc {:?}", p.public_key_share());
+        assert_eq!(p.consensus.votes, Default::default());
+        assert_eq!(p.gen, p.pending_gen);
+    }
+
+    // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
+    let reference_proc = &honest_procs[0];
+    for p in honest_procs.iter() {
+        assert_eq!(reference_proc.gen, p.gen);
+        for g in 0..=reference_proc.gen {
+            assert_eq!(reference_proc.members(g).unwrap(), p.members(g).unwrap())
+        }
+    }
+
+    Ok(())
+}
+
 #[quickcheck]
 fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::Result<TestResult> {
     let mut seed_buf = [0u8; 32];
