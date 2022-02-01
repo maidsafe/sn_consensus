@@ -131,6 +131,7 @@ impl Net {
         let vote = Vote {
             gen: rng.gen::<u64>() % 7,
             ballot: self.gen_ballot(recursion, faulty_nodes, rng),
+            faults: Default::default(),
         };
 
         SignedVote {

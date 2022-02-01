@@ -28,6 +28,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
         .sign_vote(Vote {
             gen: 0,
             ballot: Ballot::Propose(DummyProposal(4)),
+            faults: Default::default(),
         })
         .unwrap();
     net.enqueue_packets([Packet {
@@ -72,8 +73,8 @@ fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Res
     proc.propose(111)?;
 
     assert!(matches!(
-        dbg!(proc.propose(222)),
-        Err(Error::ExistingVoteIncompatibleWithNewVote { .. })
+        proc.propose(222),
+        Err(Error::AttemptedFaultyProposal)
     ));
     Ok(())
 }
@@ -137,7 +138,11 @@ fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
     let voter = 1;
     let bytes = bincode::serialize(&(&ballot, &gen))?;
     let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
-    let vote = Vote { gen, ballot };
+    let vote = Vote {
+        gen,
+        ballot,
+        faults: Default::default(),
+    };
     let resp = proc.handle_signed_vote(SignedVote { vote, voter, sig });
 
     assert!(resp.is_err());
