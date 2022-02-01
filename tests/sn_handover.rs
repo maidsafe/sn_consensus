@@ -13,10 +13,10 @@ fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Res
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut proc: Handover<u8> = Handover::random(&mut rng, 0);
     proc.consensus.elders = BTreeSet::from_iter([proc.public_key_share()]);
-    proc.propose(rng.gen())?;
+    proc.propose(0)?;
     assert!(matches!(
-        proc.propose(rng.gen()),
-        Err(Error::ExistingVoteIncompatibleWithNewVote { .. })
+        proc.propose(1),
+        Err(Error::AttemptedFaultyProposal)
     ));
     Ok(())
 }
@@ -69,7 +69,11 @@ fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
     let voter = rng.gen::<SecretKeyShare>().public_key_share();
     let bytes = bincode::serialize(&(&ballot, &gen))?;
     let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
-    let vote = Vote { gen, ballot };
+    let vote = Vote {
+        gen,
+        ballot,
+        faults: Default::default(),
+    };
     let resp = proc.handle_signed_vote(SignedVote { vote, voter, sig });
 
     assert!(resp.is_err());

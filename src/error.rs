@@ -57,6 +57,8 @@ pub enum Error {
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
     InvalidElderSignature,
+    #[error("Client attempted a faulty proposal")]
+    AttemptedFaultyProposal,
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]

@@ -24,7 +24,7 @@ fn test_membership_reject_changing_reconfig_when_one_is_in_progress() -> Result<
     proc.propose(Reconfig::Join(rng.gen()))?;
     assert!(matches!(
         proc.propose(Reconfig::Join(rng.gen())),
-        Err(Error::ExistingVoteIncompatibleWithNewVote { .. })
+        Err(Error::AttemptedFaultyProposal)
     ));
     Ok(())
 }
@@ -156,7 +156,11 @@ fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
     let voter = rng.gen::<SecretKeyShare>().public_key_share();
     let bytes = bincode::serialize(&(&ballot, &gen))?;
     let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
-    let vote = Vote { gen, ballot };
+    let vote = Vote {
+        gen,
+        ballot,
+        faults: Default::default(),
+    };
     let resp = proc.handle_signed_vote(SignedVote { vote, voter, sig });
 
     assert!(resp.is_err());
@@ -546,7 +550,7 @@ fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
     let reconfig = Reconfig::Join(1_u8);
     assert!(matches!(
         proc.propose(reconfig),
-        Err(Error::ExistingVoteIncompatibleWithNewVote)
+        Err(Error::AttemptedFaultyProposal)
     ));
     assert!(!proc
         .consensus
@@ -556,6 +560,7 @@ fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
         .supersedes(&proc.sign_vote(Vote {
             ballot: Ballot::Propose(reconfig),
             gen: proc.gen,
+            faults: proc.consensus.faults.clone(),
         })?));
 
     Ok(())
@@ -601,6 +606,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
             ..net.procs[1].sign_vote(Vote {
                 gen: 1,
                 ballot: Ballot::Propose(Reconfig::Join(240)),
+                faults: Default::default(),
             })?
         },
     };
@@ -613,6 +619,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
             ..net.procs[5].sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(Reconfig::Join(115)),
+                faults: Default::default(),
             })?
         },
     };
@@ -670,7 +677,7 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
             .sign_vote(Vote {
                 gen: 1,
                 ballot: Ballot::Propose(Reconfig::Join(1)),
-                // faults: Default::default(),
+                faults: Default::default(),
             })
             .unwrap(),
     };
@@ -760,7 +767,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                     Err(Error::NotElder { .. }) => {
                         assert!(!q.consensus.elders.contains(&q.public_key_share()));
                     }
-                    Err(Error::ExistingVoteIncompatibleWithNewVote) => {
+                    Err(Error::AttemptedFaultyProposal) => {
                         // This proc has already committed to a vote this round
 
                         // This proc has already committed to a vote
@@ -772,6 +779,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                             .supersedes(&q.sign_vote(Vote {
                                 ballot: Ballot::Propose(reconfig),
                                 gen: q.gen,
+                                faults: q.consensus.faults.clone(),
                             })?));
                     }
                     Err(err) => {
@@ -799,7 +807,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                     Err(Error::NotElder { .. }) => {
                         assert!(!q.consensus.elders.contains(&q.public_key_share()));
                     }
-                    Err(Error::ExistingVoteIncompatibleWithNewVote) => {
+                    Err(Error::AttemptedFaultyProposal) => {
                         // This proc has already committed to a vote
                         assert!(!q
                             .consensus
@@ -810,6 +818,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                                 &q.sign_vote(Vote {
                                     ballot: Ballot::Propose(reconfig),
                                     gen: q.gen,
+                                    faults: q.consensus.faults.clone(),
                                 })
                                 .unwrap()
                             ))

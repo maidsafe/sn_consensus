@@ -1,11 +1,11 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use blsttc::{PublicKeyShare, SignatureShare};
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 use crate::sn_membership::Generation;
-use crate::{Error, Result};
+use crate::{Error, Fault, FaultError, Result};
 
 pub trait Proposition: Ord + Clone + Debug + Serialize {}
 impl<T: Ord + Clone + Debug + Serialize> Proposition for T {}
@@ -58,17 +58,23 @@ impl<T: Proposition> Ballot<T> {
 pub struct Vote<T: Proposition> {
     pub gen: Generation,
     pub ballot: Ballot<T>,
+    pub faults: BTreeMap<PublicKeyShare, Fault<T>>,
 }
 
 impl<T: Proposition> Debug for Vote<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "G{}-{:?}", self.gen, self.ballot)
+        write!(f, "G{}-{:?}", self.gen, self.ballot)?;
+
+        if !self.faults.is_empty() {
+            write!(f, "-F{:?}", self.faults)?;
+        }
+        Ok(())
     }
 }
 
 impl<T: Proposition> Vote<T> {
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.ballot, &self.gen))?)
+        Ok(bincode::serialize(&self)?)
     }
 
     pub fn is_super_majority_ballot(&self) -> bool {
@@ -117,7 +123,15 @@ impl<T: Proposition> SignedVote<T> {
     }
 
     pub fn supersedes(&self, signed_vote: &Self) -> bool {
-        if self == signed_vote {
+        if (&self.voter, self.vote.gen, &self.vote.ballot)
+            == (
+                &signed_vote.voter,
+                signed_vote.vote.gen,
+                &signed_vote.vote.ballot,
+            )
+            && BTreeSet::from_iter(self.vote.faults.keys())
+                .is_superset(&BTreeSet::from_iter(signed_vote.vote.faults.keys()))
+        {
             true
         } else {
             match &self.vote.ballot {

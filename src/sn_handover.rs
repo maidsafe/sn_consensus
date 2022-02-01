@@ -40,9 +40,13 @@ impl<T: Proposition> Handover<T> {
         let vote = Vote {
             gen: self.gen,
             ballot: Ballot::Propose(proposal),
+            faults: self.consensus.faults.clone(),
         };
         let signed_vote = self.sign_vote(vote)?;
         self.validate_signed_vote(&signed_vote)?;
+        self.consensus
+            .detect_byzantine_voters(&signed_vote)
+            .map_err(|_| Error::AttemptedFaultyProposal)?;
         Ok(self.cast_vote(signed_vote))
     }
 

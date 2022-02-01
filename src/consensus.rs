@@ -6,13 +6,14 @@ use rand::{CryptoRng, Rng};
 
 use crate::sn_membership::Generation;
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, Result};
+use crate::{Error, Fault, Result};
 
 #[derive(Debug)]
 pub struct Consensus<T: Proposition> {
     pub elders: BTreeSet<PublicKeyShare>,
     pub secret_key: SecretKeyShare,
     pub votes: BTreeMap<PublicKeyShare, SignedVote<T>>,
+    pub faults: BTreeMap<PublicKeyShare, Fault<T>>,
 }
 
 pub enum VoteResponse<T: Proposition> {
@@ -27,6 +28,7 @@ impl<T: Proposition> Consensus<T> {
             secret_key,
             elders,
             votes: Default::default(),
+            faults: Default::default(),
         }
     }
 
@@ -35,6 +37,7 @@ impl<T: Proposition> Consensus<T> {
             secret_key: rng.gen(),
             elders: Default::default(),
             votes: Default::default(),
+            faults: Default::default(),
         }
     }
 
@@ -51,6 +54,10 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: SignedVote<T>,
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
+        if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
+            self.faults.extend(faults);
+        }
+
         self.log_signed_vote(&signed_vote);
 
         if self.is_split_vote(&self.votes.values().cloned().collect())? {
@@ -58,6 +65,7 @@ impl<T: Proposition> Consensus<T> {
             let merge_vote = Vote {
                 gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
+                faults: self.faults.clone(),
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
 
@@ -70,7 +78,9 @@ impl<T: Proposition> Consensus<T> {
                     .map(|(_, r)| r)
                     .collect();
 
-                if proposals_we_voted_for == proposals_we_would_vote_for {
+                if proposals_we_voted_for == proposals_we_would_vote_for
+                    && our_vote.vote.faults.len() == signed_merge_vote.vote.faults.len()
+                {
                     info!("[MBR] This vote didn't add new information, waiting for more votes...");
                     return Ok(VoteResponse::WaitingForMoreVotes);
                 }
@@ -86,7 +96,12 @@ impl<T: Proposition> Consensus<T> {
             // store a proof of what the network decided in our history so that we can onboard future procs.
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
 
-            let vote = Vote { gen, ballot };
+            let vote = Vote {
+                gen,
+                ballot,
+                faults: self.faults.clone(),
+            };
+
             let signed_vote = self.sign_vote(vote)?;
 
             // return obtained super majority over super majority (aka consensus)
@@ -107,7 +122,11 @@ impl<T: Proposition> Consensus<T> {
 
             info!("[MBR] broadcasting super majority");
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
-            let vote = Vote { gen, ballot };
+            let vote = Vote {
+                gen,
+                ballot,
+                faults: self.faults.clone(),
+            };
             let signed_vote = self.sign_vote(vote)?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
@@ -118,6 +137,7 @@ impl<T: Proposition> Consensus<T> {
             let signed_vote = self.sign_vote(Vote {
                 gen,
                 ballot: signed_vote.vote.ballot,
+                faults: self.faults.clone(),
             })?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
@@ -151,7 +171,12 @@ impl<T: Proposition> Consensus<T> {
         let mut count: BTreeMap<BTreeSet<T>, usize> = Default::default();
 
         for vote in votes.iter() {
-            let proposals = BTreeSet::from_iter(vote.proposals().into_iter().map(|(_, prop)| prop));
+            let proposals = BTreeSet::from_iter(
+                vote.proposals()
+                    .into_iter()
+                    .filter(|(voter, _)| !vote.vote.faults.contains_key(voter))
+                    .map(|(_, prop)| prop),
+            );
             let c = count.entry(proposals).or_default();
             *c += 1;
         }
@@ -205,14 +230,48 @@ impl<T: Proposition> Consensus<T> {
         Ok(3 * count_of_agreeing_super_majorities > 2 * self.elders.len())
     }
 
+    pub fn detect_byzantine_voters(
+        &self,
+        signed_vote: &SignedVote<T>,
+    ) -> std::result::Result<(), BTreeMap<PublicKeyShare, Fault<T>>> {
+        let mut faults = BTreeMap::new();
+        if let Some(existing_vote) = self.votes.get(&signed_vote.voter) {
+            let fault = Fault::ChangedVote {
+                a: existing_vote.clone(),
+                b: signed_vote.clone(),
+            };
+
+            if let Ok(()) = fault.validate() {
+                faults.insert(signed_vote.voter, fault);
+            }
+        }
+
+        {
+            let fault = Fault::InvalidFault {
+                signed_vote: signed_vote.clone(),
+            };
+            if let Ok(()) = fault.validate() {
+                faults.insert(signed_vote.voter, fault);
+            }
+        }
+
+        // TODO: recursively check for faulty votes
+
+        if faults.is_empty() {
+            Ok(())
+        } else {
+            Err(faults)
+        }
+    }
+
     /// Validates a vote recursively all the way down to the proposition (T)
     /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         signed_vote.validate_signature()?;
         self.validate_vote(&signed_vote.vote)?;
         self.validate_is_elder(signed_vote.voter)?;
-        self.validate_vote_supersedes_existing_vote(signed_vote)?;
-        self.validate_voters_have_not_changed_proposals(signed_vote)?;
+        // self.validate_vote_supersedes_existing_vote(signed_vote)?;
+        // self.validate_voters_have_not_changed_proposals(signed_vote)?;
         Ok(())
     }
 
