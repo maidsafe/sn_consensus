@@ -78,11 +78,11 @@ impl Net {
     /// Generate a random faulty vote
     pub fn gen_faulty_vote(
         &self,
-        recursion: u8,
-        faulty_nodes: &BTreeSet<PublicKeyShare>,
+        recursion_limit: u8,
+        faulty: &BTreeSet<PublicKeyShare>,
         rng: &mut StdRng,
     ) -> SignedVote<u8> {
-        let faulty_node = faulty_nodes
+        let faulty_node = faulty
             .iter()
             .choose(rng)
             .and_then(|pk| self.proc(*pk))
@@ -90,7 +90,8 @@ impl Net {
 
         let vote = Vote {
             gen: rng.gen::<u64>() % 7,
-            ballot: self.gen_ballot(recursion, faulty_nodes, rng),
+            ballot: self.gen_ballot(recursion_limit, faulty, rng),
+            faults: Default::default(), // TODO: generate faulty faults here
         };
 
         let mut signed_vote = faulty_node.sign_vote(vote).unwrap();
@@ -271,7 +272,7 @@ msc {\n
         // 1, 2, 3 ... instead of i:3b2, i:7def, ...
         for (idx, proc_id) in self.procs.iter().map(State::public_key_share).enumerate() {
             let proc_id_as_str = format!("{:?}", proc_id);
-            msc = msc.replace(&proc_id_as_str, &format!("{}", idx + 1));
+            msc = msc.replace(&proc_id_as_str, &format!("{}", idx));
         }
 
         let mut msc_file = File::create(name)?;

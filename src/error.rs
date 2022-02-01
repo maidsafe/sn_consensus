@@ -42,8 +42,10 @@ pub enum Error {
     VoterChangedVote,
     #[error("Existing vote not compatible with new vote")]
     ExistingVoteIncompatibleWithNewVote,
-    #[error("The super majority ballot does not actually have supermajority")]
+    #[error("The SuperMajority ballot does not actually have supermajority")]
     SuperMajorityBallotIsNotSuperMajority,
+    #[error("The Merge ballot does not actually have a split vote")]
+    MergeBallotIsNotForSplitVote,
     #[error("Invalid generation {0}")]
     InvalidGeneration(Generation),
     #[error("History contains an invalid vote")]
@@ -52,6 +54,12 @@ pub enum Error {
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
     InvalidElderSignature,
+    #[error("The claimed ChangedVote fault is dealing with votes from different voters")]
+    ChangedVoteFaultIsFromDifferentVoters,
+    #[error("The claimed ChangedVote fault is not actually incompatible votes")]
+    ChangedVoteIsNotActuallyChanged,
+    #[error("Attempted a faulty proposal")]
+    AttemptedFaultyProposal,
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]

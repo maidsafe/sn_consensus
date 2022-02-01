@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use blsttc::{PublicKeyShare, SecretKeyShare, SignatureShare};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{Error, Result};
 use core::fmt::Debug;
@@ -16,14 +17,73 @@ impl<T: Ord + Clone + Debug + Serialize> Name for T {}
 #[derive(Debug)]
 pub struct State<T: Name> {
     pub elders: BTreeSet<PublicKeyShare>,
-    // TODO: we need faulty elder detection
-    // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<T>>>,
     pub secret_key: SecretKeyShare,
     pub gen: Generation,
     pub pending_gen: Generation,
     pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>, // TODO: change to bootstrap members
     pub history: BTreeMap<Generation, SignedVote<T>>, // for onboarding new procs, the vote proving super majority
+    pub faults: BTreeMap<PublicKeyShare, Fault<T>>,   // proof that an elder is faulty
     pub votes: BTreeMap<PublicKeyShare, SignedVote<T>>,
+}
+
+#[derive(Debug, Error)]
+pub enum FaultError {
+    #[error("The claimed ChangedVote fault is dealing with votes from different voters")]
+    ChangedVoteFaultIsFromDifferentVoters,
+    #[error("The claimed ChangedVote fault is not actually incompatible votes")]
+    ChangedVoteIsNotActuallyChanged,
+    #[error("FaultProof used a vote that was improperly signed")]
+    AccusedAnImproperlySignedVote,
+    #[error("InvalidFaultProof was actually valid")]
+    AccusedVoteOfInvalidFaultButAllFaultsAreValid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Fault<T: Name> {
+    ChangedVote { a: SignedVote<T>, b: SignedVote<T> },
+    InvalidFault { signed_vote: SignedVote<T> },
+}
+
+impl<T: Name> Fault<T> {
+    pub fn voter_at_fault(&self) -> PublicKeyShare {
+        match self {
+            Fault::ChangedVote { a, .. } => a.voter,
+            Fault::InvalidFault { signed_vote } => signed_vote.voter,
+        }
+    }
+
+    pub fn validate(&self) -> std::result::Result<(), FaultError> {
+        match self {
+            Self::ChangedVote { a, b } => {
+                a.validate_signature()
+                    .map_err(|_| FaultError::AccusedAnImproperlySignedVote)?;
+                b.validate_signature()
+                    .map_err(|_| FaultError::AccusedAnImproperlySignedVote)?;
+                if a.voter != b.voter {
+                    return Err(FaultError::ChangedVoteFaultIsFromDifferentVoters);
+                }
+                if a.supersedes(b) || b.supersedes(a) {
+                    return Err(FaultError::ChangedVoteIsNotActuallyChanged);
+                }
+                Ok(())
+            }
+            Self::InvalidFault { signed_vote } => {
+                signed_vote
+                    .validate_signature()
+                    .map_err(|_| FaultError::AccusedAnImproperlySignedVote)?;
+                if signed_vote
+                    .vote
+                    .faults
+                    .values()
+                    .any(|f| f.validate().is_ok())
+                {
+                    Err(FaultError::AccusedVoteOfInvalidFaultButAllFaultsAreValid)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -96,17 +156,23 @@ impl<T: Name> Ballot<T> {
 pub struct Vote<T: Name> {
     pub gen: Generation,
     pub ballot: Ballot<T>,
+    pub faults: BTreeMap<PublicKeyShare, Fault<T>>,
 }
 
 impl<T: Name> Debug for Vote<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "G{}-{:?}", self.gen, self.ballot)
+        write!(f, "G{}-{:?}", self.gen, self.ballot)?;
+
+        if !self.faults.is_empty() {
+            write!(f, "-F{:?}", self.faults)?;
+        }
+        Ok(())
     }
 }
 
 impl<T: Name> Vote<T> {
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.ballot, &self.gen))?)
+        Ok(bincode::serialize(&self)?)
     }
 
     pub fn is_super_majority_ballot(&self) -> bool {
@@ -155,7 +221,12 @@ impl<T: Name> SignedVote<T> {
     }
 
     pub fn supersedes(&self, signed_vote: &Self) -> bool {
-        if self == signed_vote {
+        if self.voter == signed_vote.voter
+            && self.vote.gen == signed_vote.vote.gen
+            && self.vote.ballot == signed_vote.vote.ballot
+            && BTreeSet::from_iter(self.vote.faults.keys())
+                .is_superset(&BTreeSet::from_iter(signed_vote.vote.faults.keys()))
+        {
             true
         } else {
             match &self.vote.ballot {
@@ -177,6 +248,7 @@ impl<T: Name> State<T> {
             pending_gen: 0,
             forced_reconfigs: Default::default(),
             history: Default::default(),
+            faults: Default::default(),
             votes: Default::default(),
         }
     }
@@ -189,6 +261,7 @@ impl<T: Name> State<T> {
             pending_gen: 0,
             forced_reconfigs: Default::default(),
             history: Default::default(),
+            faults: Default::default(),
             votes: Default::default(),
         }
     }
@@ -258,9 +331,12 @@ impl<T: Name> State<T> {
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
+            faults: self.faults.clone(),
         };
         let signed_vote = self.sign_vote(vote)?;
         self.validate_signed_vote(&signed_vote)?;
+        self.detect_byzantine_voters(&signed_vote)
+            .map_err(|_| Error::AttemptedFaultyProposal)?;
         Ok(self.cast_vote(signed_vote))
     }
 
@@ -286,13 +362,28 @@ impl<T: Name> State<T> {
     ) -> Result<Option<SignedVote<T>>> {
         self.validate_signed_vote(&signed_vote)?;
 
+        if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
+            self.faults.extend(faults);
+        }
+
         self.log_signed_vote(&signed_vote);
 
+        let default_response = match self.votes.get(&self.public_key_share()).cloned() {
+            Some(vote) if vote.vote.faults.len() != self.faults.len() => {
+                Some(self.cast_vote(self.sign_vote(Vote {
+                    faults: self.faults.clone(),
+                    ..vote.vote
+                })?))
+            }
+            _ => None,
+        };
+
         if self.is_split_vote(&self.votes.values().cloned().collect())? {
-            info!("[MBR] Detected split vote");
+            println!("[MBR] {:?} Detected split vote", self.public_key_share());
             let merge_vote = Vote {
                 gen: self.pending_gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
+                faults: self.faults.clone(),
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
 
@@ -306,17 +397,22 @@ impl<T: Name> State<T> {
                     .collect();
 
                 if reconfigs_we_voted_for == reconfigs_we_would_vote_for {
-                    info!("[MBR] This vote didn't add new information, waiting for more votes...");
-                    return Ok(None);
+                    println!(
+                        "[MBR] This vote didn't add new information, waiting for more votes..."
+                    );
+                    return Ok(default_response);
                 }
             }
 
-            info!("[MBR] Either we haven't voted or our previous vote didn't fully overlap, merge them.");
+            println!("[MBR] Either we haven't voted or our previous vote didn't fully overlap, merge them.");
             return Ok(Some(self.cast_vote(signed_merge_vote)));
         }
 
         if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())? {
-            info!("[MBR] Detected super majority over super majorities");
+            println!(
+                "[MBR] {:?} Detected super majority over super majorities",
+                self.public_key_share()
+            );
             assert!(self.elders.contains(&self.public_key_share()));
             // store a proof of what the network decided in our history so that we can onboard future procs.
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
@@ -324,6 +420,7 @@ impl<T: Name> State<T> {
             let vote = Vote {
                 gen: self.pending_gen,
                 ballot,
+                faults: self.faults.clone(),
             };
             let signed_vote = self.sign_vote(vote)?;
 
@@ -332,28 +429,38 @@ impl<T: Name> State<T> {
             self.votes = Default::default();
             self.gen = self.pending_gen;
 
-            return Ok(None);
+            return Ok(default_response);
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect())? {
-            info!("[MBR] Detected super majority");
+            println!(
+                "[MBR] {:?} Detected super majority",
+                self.public_key_share()
+            );
 
             if let Some(our_vote) = self.votes.get(&self.public_key_share()) {
                 // We voted during this generation.
 
                 if our_vote.vote.is_super_majority_ballot() {
-                    info!("[MBR] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
+                    println!("[MBR] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
                     return Ok(None);
                 }
             }
 
-            info!("[MBR] broadcasting super majority");
-            let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
+            let ballot = dbg!(dbg!(Ballot::SuperMajority(
+                self.votes.values().cloned().collect()
+            ))
+            .simplify());
+            dbg!(&self.votes);
+            dbg!(&self.faults);
             let vote = Vote {
                 gen: self.pending_gen,
                 ballot,
+                faults: self.faults.clone(),
             };
             let signed_vote = self.sign_vote(vote)?;
+
+            println!("[MBR] broadcasting super majority {:?}", signed_vote);
             return Ok(Some(self.cast_vote(signed_vote)));
         }
 
@@ -362,12 +469,13 @@ impl<T: Name> State<T> {
         if !self.votes.contains_key(&self.public_key_share()) {
             let signed_vote = self.sign_vote(Vote {
                 gen: self.pending_gen,
-                ballot: signed_vote.vote.ballot,
+                ballot: Ballot::Merge(BTreeSet::from_iter([signed_vote])),
+                faults: self.faults.clone(),
             })?;
             return Ok(Some(self.cast_vote(signed_vote)));
         }
 
-        Ok(None)
+        Ok(default_response)
     }
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
@@ -390,6 +498,10 @@ impl<T: Name> State<T> {
             if vote.supersedes(existing_vote) {
                 *existing_vote = vote.clone()
             }
+
+            for (faulty, fault) in vote.vote.faults.iter() {
+                self.faults.entry(*faulty).or_insert_with(|| fault.clone());
+            }
         }
     }
 
@@ -400,8 +512,12 @@ impl<T: Name> State<T> {
         let mut count: BTreeMap<BTreeSet<Reconfig<T>>, usize> = Default::default();
 
         for vote in votes.iter() {
-            let reconfigs =
-                BTreeSet::from_iter(vote.reconfigs().into_iter().map(|(_, reconfig)| reconfig));
+            let reconfigs = BTreeSet::from_iter(
+                vote.reconfigs()
+                    .into_iter()
+                    .filter(|(voter, _)| !vote.vote.faults.contains_key(voter))
+                    .map(|(_, reconfig)| reconfig),
+            );
             let c = count.entry(reconfigs).or_default();
             *c += 1;
         }
@@ -487,23 +603,27 @@ impl<T: Name> State<T> {
         }
     }
 
-    fn validate_voters_have_not_changed_proposals(
+    pub fn detect_byzantine_voters(
         &self,
         signed_vote: &SignedVote<T>,
-    ) -> Result<()> {
-        // Ensure that nobody is trying to change their reconfig proposals.
-        let reconfigs: BTreeSet<(PublicKeyShare, Reconfig<T>)> = self
-            .votes
-            .values()
-            .flat_map(|v| v.reconfigs())
-            .chain(signed_vote.reconfigs())
-            .collect();
+    ) -> std::result::Result<(), BTreeMap<PublicKeyShare, Fault<T>>> {
+        let mut faults = BTreeMap::new();
 
-        let voters = BTreeSet::from_iter(reconfigs.iter().map(|(actor, _)| actor));
-        if voters.len() != reconfigs.len() {
-            Err(Error::VoterChangedVote)
-        } else {
+        if let Some(existing_vote) = self.votes.get(&signed_vote.voter) {
+            let fault = Fault::ChangedVote {
+                a: existing_vote.clone(),
+                b: signed_vote.clone(),
+            };
+
+            if let Ok(()) = fault.validate() {
+                faults.insert(signed_vote.voter, fault);
+            }
+        }
+
+        if faults.is_empty() {
             Ok(())
+        } else {
+            Err(faults)
         }
     }
 
@@ -511,8 +631,8 @@ impl<T: Name> State<T> {
         signed_vote.validate_signature()?;
         self.validate_vote(&signed_vote.vote)?;
         self.validate_is_elder(signed_vote.voter)?;
-        self.validate_vote_supersedes_existing_vote(signed_vote)?;
-        self.validate_voters_have_not_changed_proposals(signed_vote)?;
+        // self.validate_vote_supersedes_existing_vote(signed_vote)?;
+        // self.validate_voters_have_not_changed_proposals(signed_vote)?;
         Ok(())
     }
 
@@ -528,6 +648,16 @@ impl<T: Name> State<T> {
         match &vote.ballot {
             Ballot::Propose(reconfig) => self.validate_reconfig(reconfig.clone()),
             Ballot::Merge(votes) => {
+                // if !self.is_split_vote(
+                //     &votes
+                //         .iter()
+                //         .flat_map(SignedVote::unpack_votes)
+                //         .cloned()
+                //         .collect(),
+                // )? {
+                //     println!("{vote:#?}");
+                //     Err(Error::MergeBallotIsNotForSplitVote)
+                // } else {
                 for child_vote in votes.iter() {
                     if child_vote.vote.gen != vote.gen {
                         return Err(Error::MergedVotesMustBeFromSameGen {
@@ -538,6 +668,7 @@ impl<T: Name> State<T> {
                     self.validate_signed_vote(child_vote)?;
                 }
                 Ok(())
+                // }
             }
             Ballot::SuperMajority(votes) => {
                 if !self.is_super_majority(
