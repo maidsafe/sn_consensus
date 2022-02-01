@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use std::collections::BTreeSet;
 use thiserror::Error;
 
-use crate::Generation;
+use crate::{Generation, UniqueSectionId};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -32,6 +32,11 @@ pub enum Error {
         vote_gen: Generation,
         gen: Generation,
         pending_gen: Generation,
+    },
+    #[error("Vote received has a different unique section id: vote gen {vote_gen} != {gen}")]
+    VoteWithInvalidUniqueSectionId {
+        vote_gen: UniqueSectionId,
+        gen: UniqueSectionId,
     },
     #[error("({public_key:?} is not in {elders:?})")]
     NotElder {

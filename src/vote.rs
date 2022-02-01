@@ -4,7 +4,7 @@ use blsttc::{PublicKeyShare, SignatureShare};
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
-use crate::sn_membership::{Generation, Reconfig};
+use crate::sn_membership::Generation;
 use crate::{Error, Result};
 
 pub trait Proposition: Ord + Clone + Debug + Serialize {}
@@ -12,7 +12,7 @@ impl<T: Ord + Clone + Debug + Serialize> Proposition for T {}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Ballot<T: Proposition> {
-    Propose(Reconfig<T>),
+    Propose(T),
     Merge(BTreeSet<SignedVote<T>>),
     SuperMajority(BTreeSet<SignedVote<T>>),
 }
@@ -107,11 +107,11 @@ impl<T: Proposition> SignedVote<T> {
         }
     }
 
-    pub fn reconfigs(&self) -> BTreeSet<(PublicKeyShare, Reconfig<T>)> {
+    pub fn proposals(&self) -> BTreeSet<(PublicKeyShare, T)> {
         match &self.vote.ballot {
-            Ballot::Propose(reconfig) => BTreeSet::from_iter([(self.voter, reconfig.clone())]),
+            Ballot::Propose(proposal) => BTreeSet::from_iter([(self.voter, proposal.clone())]),
             Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
-                BTreeSet::from_iter(votes.iter().flat_map(Self::reconfigs))
+                BTreeSet::from_iter(votes.iter().flat_map(Self::proposals))
             }
         }
     }

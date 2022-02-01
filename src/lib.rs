@@ -1,4 +1,5 @@
 pub mod consensus;
+pub mod sn_handover;
 pub mod sn_membership;
 pub mod vote;
 
@@ -9,7 +10,9 @@ pub mod bad_crypto;
 #[cfg(feature = "ed25519")]
 pub mod ed25519;
 
-pub use crate::sn_membership::{Generation, Reconfig, State};
+pub use crate::consensus::Consensus;
+pub use crate::sn_handover::{Handover, UniqueSectionId};
+pub use crate::sn_membership::{Generation, Membership, Reconfig};
 pub use crate::vote::{Ballot, Proposition, SignedVote, Vote};
 
 // #[cfg(feature = "bad_crypto")]
