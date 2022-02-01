@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.8.0](https://github.com/maidsafe/sn_membership/compare/v1.7.0...v1.8.0) (2022-02-01)
+
+
+### Features
+
+* add tests and fix handover issue when consensus is reached ([592c2f8](https://github.com/maidsafe/sn_membership/commit/592c2f8cde021fb6370a81ef035e557aae20272d))
+* generic consensus module (tests wip) ([765fa0a](https://github.com/maidsafe/sn_membership/commit/765fa0a8470a3ef5b52b3dd57dd01f24ea38bf43))
+* handover wrapper ([f6d5348](https://github.com/maidsafe/sn_membership/commit/f6d534873d937d1479e17b867a5a2f3bd5189ce1))
+* improve handle vote response ([2729ecd](https://github.com/maidsafe/sn_membership/commit/2729ecdcd7fb13de85821a49e09ed4262db6e711))
+* move validation back to consensus with pre-check for proposals ([92392a6](https://github.com/maidsafe/sn_membership/commit/92392a69aabb1a193fd56cd52e735b8dfcd68863))
+
+
+### Bug Fixes
+
+* tests and gen handling in membership ([728f0d9](https://github.com/maidsafe/sn_membership/commit/728f0d92e2953eeee15bccf26daa87f2981b90cc))
+
 ## [1.7.0](https://github.com/maidsafe/sn_membership/compare/v1.6.0...v1.7.0) (2022-01-26)
 
 
