@@ -1,13 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeyShare, SecretKeyShare};
+use blsttc::{PublicKeySet, SecretKeyShare};
 use core::fmt::Debug;
 use log::info;
-use rand::{CryptoRng, Rng};
 
 use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, Result};
+use crate::{Error, NodeId, Result};
 
 pub type UniqueSectionId = u64;
 
@@ -19,19 +18,13 @@ pub struct Handover<T: Proposition> {
 
 impl<T: Proposition> Handover<T> {
     pub fn from(
-        secret_key: SecretKeyShare,
-        elders: BTreeSet<PublicKeyShare>,
+        secret_key: (NodeId, SecretKeyShare),
+        elders: PublicKeySet,
+        n_elders: usize,
         gen: UniqueSectionId,
     ) -> Self {
         Handover::<T> {
-            consensus: Consensus::<T>::from(secret_key, elders),
-            gen,
-        }
-    }
-
-    pub fn random(rng: impl Rng + CryptoRng, gen: UniqueSectionId) -> Self {
-        Handover::<T> {
-            consensus: Consensus::<T>::random(rng),
+            consensus: Consensus::<T>::from(secret_key, elders, n_elders),
             gen,
         }
     }
@@ -48,7 +41,7 @@ impl<T: Proposition> Handover<T> {
 
     // Get someone up to speed on our view of the current votes
     pub fn anti_entropy(&self) -> Vec<SignedVote<T>> {
-        info!("[HDVR] anti-entropy from {:?}", self.public_key_share());
+        info!("[HDVR] anti-entropy from {:?}", self.id());
 
         self.consensus.votes.values().cloned().collect()
     }
@@ -65,8 +58,8 @@ impl<T: Proposition> Handover<T> {
         winning_proposals.into_iter().max()
     }
 
-    pub fn public_key_share(&self) -> PublicKeyShare {
-        self.consensus.public_key_share()
+    pub fn id(&self) -> NodeId {
+        self.consensus.id()
     }
 
     pub fn handle_signed_vote(

@@ -1,6 +1,4 @@
-use blsttc::PublicKeyShare;
 use core::fmt::Debug;
-use std::collections::BTreeSet;
 use thiserror::Error;
 
 use crate::{Generation, UniqueSectionId};
@@ -11,11 +9,6 @@ pub enum Error {
     IO(#[from] std::io::Error),
     #[error("The operation requested assumes we have at least one member")]
     NoMembers,
-    #[error("Packet was not destined for this actor: {dest:?} != {actor:?}")]
-    WrongDestination {
-        dest: PublicKeyShare,
-        actor: PublicKeyShare,
-    },
     #[error("We can not accept any new join requests, network member size is at capacity")]
     MembersAtCapacity,
     #[error("An existing member can not request to join again")]
@@ -38,11 +31,8 @@ pub enum Error {
         vote_gen: UniqueSectionId,
         gen: UniqueSectionId,
     },
-    #[error("({public_key:?} is not in {elders:?})")]
-    NotElder {
-        public_key: PublicKeyShare,
-        elders: BTreeSet<PublicKeyShare>,
-    },
+    #[error("The voter is not an elder")]
+    NotElder,
     #[error("Voter changed their vote")]
     VoterChangedVote,
     #[error("Existing vote not compatible with new vote")]

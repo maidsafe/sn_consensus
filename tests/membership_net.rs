@@ -3,15 +3,15 @@ use std::fs::File;
 use std::io::Write;
 use std::iter;
 
-use blsttc::PublicKeyShare;
+use blsttc::SecretKeySet;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
-use sn_membership::{Ballot, Error, Generation, Membership, Reconfig, SignedVote, Vote};
+use sn_membership::{Ballot, Error, Generation, Membership, NodeId, Reconfig, SignedVote, Vote};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
-    pub source: PublicKeyShare,
-    pub dest: PublicKeyShare,
+    pub source: NodeId,
+    pub dest: NodeId,
     pub vote: SignedVote<Reconfig<u8>>,
 }
 
@@ -20,40 +20,40 @@ pub struct Net {
     pub procs: Vec<Membership<u8>>,
     pub reconfigs_by_gen: BTreeMap<Generation, BTreeSet<Reconfig<u8>>>,
     pub members_at_gen: BTreeMap<Generation, BTreeSet<u8>>,
-    pub packets: BTreeMap<PublicKeyShare, VecDeque<Packet>>,
+    pub packets: BTreeMap<NodeId, VecDeque<Packet>>,
     pub delivered_packets: Vec<Packet>,
 }
 
 impl Net {
-    pub fn with_procs(n: usize, mut rng: &mut StdRng) -> Self {
-        let mut procs = Vec::from_iter(iter::repeat_with(|| Membership::random(&mut rng)).take(n));
-        procs.sort_by_key(|p| p.public_key_share());
+    pub fn with_procs(threshold: u8, n: u8, mut rng: &mut StdRng) -> Self {
+        let elders_sk = SecretKeySet::random(threshold as usize, &mut rng);
+        let procs = Vec::from_iter((1u8..(n + 1)).into_iter().map(|i| {
+            Membership::from(
+                (i, elders_sk.secret_key_share(i as u64)),
+                elders_sk.public_keys(),
+                n as usize,
+            )
+        }));
         Self {
             procs,
             ..Default::default()
         }
     }
 
-    pub fn proc(&self, public_key: PublicKeyShare) -> Option<&Membership<u8>> {
-        self.procs
-            .iter()
-            .find(|p| p.public_key_share() == public_key)
+    pub fn proc(&self, id: NodeId) -> Option<&Membership<u8>> {
+        self.procs.iter().find(|p| p.id() == id)
     }
 
     /// Pick a random public key from the set of procs
-    pub fn gen_public_key(&self, rng: &mut StdRng) -> PublicKeyShare {
-        self.procs
-            .iter()
-            .choose(rng)
-            .map(Membership::public_key_share)
-            .unwrap()
+    pub fn pick_id(&self, rng: &mut StdRng) -> NodeId {
+        self.procs.iter().choose(rng).unwrap().id()
     }
 
     /// Generate a randomized ballot
     pub fn gen_ballot(
         &self,
         recursion: u8,
-        faulty: &BTreeSet<PublicKeyShare>,
+        faulty: &BTreeSet<NodeId>,
         rng: &mut StdRng,
     ) -> Ballot<Reconfig<u8>> {
         match rng.gen() || recursion == 0 {
@@ -79,7 +79,7 @@ impl Net {
     pub fn gen_faulty_vote(
         &self,
         recursion: u8,
-        faulty_nodes: &BTreeSet<PublicKeyShare>,
+        faulty_nodes: &BTreeSet<NodeId>,
         rng: &mut StdRng,
     ) -> SignedVote<Reconfig<u8>> {
         let faulty_node = faulty_nodes
@@ -93,31 +93,31 @@ impl Net {
             ballot: self.gen_ballot(recursion, faulty_nodes, rng),
         };
 
-        let mut signed_vote = faulty_node.sign_vote(vote).unwrap();
-        let node_to_impersonate = self.procs.iter().choose(rng).unwrap().public_key_share();
-        signed_vote.voter = node_to_impersonate;
-        signed_vote
+        SignedVote {
+            voter: self.pick_id(rng),
+            ..faulty_node.sign_vote(vote).unwrap()
+        }
     }
 
     /// Generate a faulty random packet
     pub fn gen_faulty_packet(
         &self,
         recursion: u8,
-        faulty: &BTreeSet<PublicKeyShare>,
+        faulty: &BTreeSet<NodeId>,
         rng: &mut StdRng,
     ) -> Packet {
         Packet {
             source: *faulty.iter().choose(rng).unwrap(),
-            dest: self.gen_public_key(rng),
+            dest: self.pick_id(rng),
             vote: self.gen_faulty_vote(recursion, faulty, rng),
         }
     }
 
-    pub fn drop_packet_from_source(&mut self, source: PublicKeyShare) {
+    pub fn drop_packet_from_source(&mut self, source: NodeId) {
         self.packets.get_mut(&source).map(VecDeque::pop_front);
     }
 
-    pub fn deliver_packet_from_source(&mut self, source: PublicKeyShare) -> Result<(), Error> {
+    pub fn deliver_packet_from_source(&mut self, source: NodeId) -> Result<(), Error> {
         let packet = match self.packets.get_mut(&source).map(|ps| ps.pop_front()) {
             Some(Some(p)) => p,
             _ => return Ok(()), // nothing to do
@@ -128,8 +128,8 @@ impl Net {
 
         self.delivered_packets.push(packet.clone());
 
-        let dest = packet.dest;
-        let dest_proc = match self.procs.iter_mut().find(|p| p.public_key_share() == dest) {
+        let source_elders = self.proc(source).unwrap().consensus.elders.clone();
+        let dest_proc = match self.procs.iter_mut().find(|p| p.id() == packet.dest) {
             Some(proc) => proc,
             None => {
                 // println!("[NET] destination proc does not exist, dropping packet");
@@ -137,27 +137,15 @@ impl Net {
             }
         };
 
-        let dest_elders = dest_proc.consensus.elders.clone();
-
         let resp = dest_proc.handle_signed_vote(packet.vote);
         // println!("[NET] resp: {:?}", resp);
         match resp {
             Ok(Some(vote)) => {
-                let dest_actor = dest_proc.public_key_share();
-                self.broadcast(dest_actor, vote);
+                self.broadcast(packet.dest, vote);
             }
             Ok(None) => {}
-            Err(Error::NotElder {
-                public_key: voter,
-                elders,
-            }) => {
-                assert_eq!(elders, dest_elders);
-                assert!(
-                    !dest_elders.contains(&voter),
-                    "{:?} should not be in {:?}",
-                    source,
-                    dest_elders
-                );
+            Err(Error::NotElder) => {
+                assert_ne!(dest_proc.consensus.elders, source_elders);
             }
             Err(Error::VoteNotForNextGeneration {
                 vote_gen,
@@ -171,7 +159,7 @@ impl Net {
             Err(err) => return Err(err),
         }
 
-        match self.procs.iter().find(|p| p.public_key_share() == dest) {
+        match self.procs.iter().find(|p| p.id() == packet.dest) {
             Some(proc) => {
                 let (mut proc_members, gen) = (proc.members(proc.gen)?, proc.gen);
 
@@ -196,14 +184,12 @@ impl Net {
         }
     }
 
-    pub fn broadcast(&mut self, source: PublicKeyShare, vote: SignedVote<Reconfig<u8>>) {
-        let packets = Vec::from_iter(self.procs.iter().map(Membership::public_key_share).map(
-            |dest| Packet {
-                source,
-                dest,
-                vote: vote.clone(),
-            },
-        ));
+    pub fn broadcast(&mut self, source: NodeId, vote: SignedVote<Reconfig<u8>>) {
+        let packets = Vec::from_iter(self.procs.iter().map(Membership::id).map(|dest| Packet {
+            source,
+            dest,
+            vote: vote.clone(),
+        }));
         self.enqueue_packets(packets);
     }
 
@@ -224,8 +210,8 @@ impl Net {
 
     pub fn enqueue_anti_entropy(&mut self, i: usize, j: usize) {
         let dest_generation = self.procs[i].gen;
-        let dest = self.procs[i].public_key_share();
-        let source = self.procs[j].public_key_share();
+        let dest = self.procs[i].id();
+        let source = self.procs[j].id();
 
         self.enqueue_packets(
             self.procs[j]
@@ -246,10 +232,10 @@ msc {\n
         let procs = self
             .procs
             .iter()
-            .map(|p| p.public_key_share())
+            .map(|p| p.id())
             .collect::<BTreeSet<_>>() // sort by actor id
             .into_iter()
-            .map(|id| format!("{:?}", id))
+            .map(|id| format!("{}", id))
             .collect::<Vec<_>>()
             .join(",");
         msc.push_str(&procs);
@@ -260,20 +246,7 @@ msc {\n
                 packet.source, packet.dest, packet.vote
             ));
         }
-
         msc.push_str("}\n");
-
-        // Replace process identifiers with friendlier numbers
-        // 1, 2, 3 ... instead of i:3b2, i:7def, ...
-        for (idx, proc_id) in self
-            .procs
-            .iter()
-            .map(Membership::public_key_share)
-            .enumerate()
-        {
-            let proc_id_as_str = format!("{:?}", proc_id);
-            msc = msc.replace(&proc_id_as_str, &format!("{}", idx + 1));
-        }
 
         let mut msc_file = File::create(name)?;
         msc_file.write_all(msc.as_bytes())?;
