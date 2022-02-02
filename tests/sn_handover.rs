@@ -31,11 +31,13 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     assert!(net.packets.is_empty());
 
     // by the time everyone agreed on smth segregated_elder is back online and receives the bad vote
-    let bad_vote = net.procs[0].sign_vote(Vote {
-        gen: 0,
-        ballot: Ballot::Propose(DummyProposal(4)),
-    }).unwrap();
-    net.enqueue_packets([Packet{
+    let bad_vote = net.procs[0]
+        .sign_vote(Vote {
+            gen: 0,
+            ballot: Ballot::Propose(DummyProposal(4)),
+        })
+        .unwrap();
+    net.enqueue_packets([Packet {
         source: p0,
         dest: segregated_elder.public_key_share(),
         vote: bad_vote,
