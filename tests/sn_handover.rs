@@ -43,6 +43,13 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
         vote: bad_vote,
     }]);
     net.procs.push(segregated_elder);
+
+    // make sure everyone is on the same page
+    for i in 0..5 {
+        for j in 0..5 {
+            net.enqueue_anti_entropy(i, j);
+        }
+    }
     net.drain_queued_packets().unwrap();
 
     // since everyone agreed already they can't change their votes
