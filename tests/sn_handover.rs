@@ -1,12 +1,68 @@
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 mod handover_net;
-use handover_net::{DummyProposal, Net};
+use handover_net::{DummyProposal, Net, Packet};
 
 use blsttc::SecretKeyShare;
 use std::collections::BTreeSet;
 
 use sn_membership::{Ballot, Error, Handover, Result, SignedVote, Vote};
+
+#[test]
+fn test_handover_one_faulty_node_and_many_packet_drops() {
+    // make network of 5 elders with one segregated (his network is really bad)
+    let mut rng = StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs(4, &mut rng);
+    let segregated_elder = Handover::random(&mut rng, 0);
+    let mut elders = BTreeSet::from_iter(net.procs.iter().map(Handover::public_key_share));
+    elders.insert(segregated_elder.public_key_share());
+    for proc in net.procs.iter_mut() {
+        proc.consensus.elders = elders.clone();
+    }
+
+    // p0 is a bad node and the network is really bad for the segregated elder so he's not connected yet
+    // p0 makes 2 proposals:
+    // - 1 for the elders to see
+    // - 4 for the segregated elder
+    let p0 = net.procs[0].public_key_share();
+    let vote = net.procs[0].propose(DummyProposal(1)).unwrap();
+    net.broadcast(p0, vote);
+    net.drain_queued_packets().unwrap();
+    assert!(net.packets.is_empty());
+
+    // by the time everyone agreed on smth segregated_elder is back online and receives the bad vote
+    let bad_vote = net.procs[0].sign_vote(Vote {
+        gen: 0,
+        ballot: Ballot::Propose(DummyProposal(4)),
+    }).unwrap();
+    net.enqueue_packets([Packet{
+        source: p0,
+        dest: segregated_elder.public_key_share(),
+        vote: bad_vote,
+    }]);
+    net.procs.push(segregated_elder);
+    net.drain_queued_packets().unwrap();
+
+    // since everyone agreed already they can't change their votes
+    // they have reached consensus
+    let first_voters_value = net.consensus_value(0);
+    for i in 0..4 {
+        println!(
+            "[TEST] checking voter {}'s consensus value: {:?}",
+            i,
+            net.consensus_value(i)
+        );
+        assert_eq!(net.consensus_value(i), first_voters_value);
+    }
+
+    // segregated_elder is stuck because he can't accept the SM because it's poisoned
+    // segregated_elder couldn't reach consensus
+    println!(
+        "[TEST] checking voter 4's consensus value: {:?}",
+        net.consensus_value(4)
+    );
+    assert_eq!(net.consensus_value(4), None);
+}
 
 #[test]
 fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Result<()> {
