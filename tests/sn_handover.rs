@@ -64,13 +64,13 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
         assert_eq!(net.consensus_value(i), first_voters_value);
     }
 
-    // segregated_elder is stuck because he can't accept the SM because it's poisoned
-    // segregated_elder couldn't reach consensus
+    // segregated_elder could be stuck because he can't accept the SM because it's poisoned
+    // check that segregated_elder was still able to reach consensus
     println!(
         "[TEST] checking voter 4's consensus value: {:?}",
         net.consensus_value(4)
     );
-    assert_eq!(net.consensus_value(4), None);
+    assert_eq!(net.consensus_value(4), first_voters_value);
 }
 
 #[test]
