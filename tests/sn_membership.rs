@@ -1,4 +1,4 @@
-use blsttc::SecretKeyShare;
+use blsttc::{SecretKeySet, SecretKeyShare};
 use eyre::eyre;
 use membership_net::{Net, Packet};
 use rand::{
@@ -19,8 +19,12 @@ use sn_membership::{Ballot, Error, Generation, Membership, Reconfig, Result, Sig
 #[test]
 fn test_membership_reject_changing_reconfig_when_one_is_in_progress() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut proc: Membership<u8> = Membership::random(&mut rng);
-    proc.consensus.elders = BTreeSet::from_iter([proc.public_key_share()]);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut proc = Membership::<u8>::from(
+        (0, elders_sk.secret_key_share(0)),
+        elders_sk.public_keys(),
+        1,
+    );
     proc.propose(Reconfig::Join(rng.gen()))?;
     assert!(matches!(
         proc.propose(Reconfig::Join(rng.gen())),
@@ -32,78 +36,71 @@ fn test_membership_reject_changing_reconfig_when_one_is_in_progress() -> Result<
 #[test]
 fn test_membership_reject_vote_from_non_member() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(2, &mut rng);
-    let p0 = net.procs[0].public_key_share();
-    let p1 = net.procs[1].public_key_share();
-    net.procs[0].consensus.elders = BTreeSet::from_iter([p0]);
-    net.procs[1].consensus.elders = BTreeSet::from_iter([p0, p1]);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut p0 = Membership::<u8>::from(
+        (0, elders_sk.secret_key_share(0)),
+        elders_sk.public_keys(),
+        1,
+    );
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut p1 = Membership::<u8>::from(
+        (1, elders_sk.secret_key_share(1)),
+        elders_sk.public_keys(),
+        1,
+    );
 
-    let vote = net.procs[1].propose(Reconfig::Join(rng.gen()))?;
-    let resp = net.procs[0].handle_signed_vote(vote);
-    assert!(matches!(resp, Err(Error::NotElder { .. })));
+    let vote = p1.propose(Reconfig::Join(rng.gen()))?;
+    let resp = p0.handle_signed_vote(vote);
+    assert!(matches!(resp, Err(Error::InvalidElderSignature)));
     Ok(())
 }
 
 #[test]
-fn test_membership_reject_join_if_actor_is_already_a_member() -> Result<()> {
+fn test_membership_reject_join_if_actor_is_already_a_member() {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut proc = Membership::<u8> {
-        forced_reconfigs: vec![(
-            0,
-            BTreeSet::from_iter((0..1).map(|_| Reconfig::Join(rng.gen()))),
-        )]
-        .into_iter()
-        .collect(),
-        ..Membership::random(&mut rng)
-    };
-    proc.consensus.elders = BTreeSet::from_iter([proc.public_key_share()]);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut proc = Membership::from(
+        (0, elders_sk.secret_key_share(0)),
+        elders_sk.public_keys(),
+        1,
+    );
+    proc.force_join(111);
 
-    let member = proc
-        .members(proc.gen)?
-        .into_iter()
-        .next()
-        .ok_or(Error::NoMembers)?;
     assert!(matches!(
-        proc.propose(Reconfig::Join(member)),
+        proc.propose(Reconfig::Join(111)),
         Err(Error::JoinRequestForExistingMember { .. })
     ));
-    Ok(())
 }
 
 #[test]
 fn test_membership_reject_leave_if_actor_is_not_a_member() {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut proc = Membership::<u8> {
-        forced_reconfigs: vec![(
-            0,
-            BTreeSet::from_iter((0..1).map(|_| Reconfig::Join(rng.gen()))),
-        )]
-        .into_iter()
-        .collect(),
-        ..Membership::random(&mut rng)
-    };
-    proc.consensus.elders = BTreeSet::from_iter([proc.public_key_share()]);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut proc = Membership::from(
+        (0, elders_sk.secret_key_share(0)),
+        elders_sk.public_keys(),
+        1,
+    );
+    proc.force_join(111);
 
-    let resp = proc.propose(Reconfig::Leave(rng.gen()));
-    assert!(matches!(resp, Err(Error::LeaveRequestForNonMember { .. })));
+    assert!(matches!(
+        proc.propose(Reconfig::Leave(222)),
+        Err(Error::LeaveRequestForNonMember { .. })
+    ));
 }
 
 #[test]
 fn test_membership_handle_vote_rejects_packet_from_previous_gen() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(2, &mut rng);
-    let a_0 = net.procs[0].public_key_share();
-    let a_1 = net.procs[1].public_key_share();
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
+    let mut net = Net::with_procs(1, 2, &mut rng);
+    let a_0 = net.procs[0].id();
+    let a_1 = net.procs[1].id();
 
-    let vote = net.procs[0].propose(Reconfig::Join(rng.gen()))?;
+    let vote = net.procs[0].propose(Reconfig::Join(111))?;
     let packets = net
         .procs
         .iter()
-        .map(Membership::public_key_share)
+        .map(Membership::id)
         .map(|dest| Packet {
             source: a_0,
             dest,
@@ -111,12 +108,12 @@ fn test_membership_handle_vote_rejects_packet_from_previous_gen() -> Result<()> 
         })
         .collect::<Vec<_>>();
 
-    let stale_vote = net.procs[1].propose(Reconfig::Join(rng.gen()))?;
+    let stale_vote = net.procs[1].propose(Reconfig::Join(222))?;
 
     let stale_packets = net
         .procs
         .iter()
-        .map(Membership::public_key_share)
+        .map(Membership::id)
         .map(|dest| Packet {
             source: a_1,
             dest,
@@ -150,18 +147,20 @@ fn test_membership_handle_vote_rejects_packet_from_previous_gen() -> Result<()> 
 #[test]
 fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut proc: Membership<u8> = Membership::random(&mut rng);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut proc = Membership::<u8>::from(
+        (0, elders_sk.secret_key_share(0)),
+        elders_sk.public_keys(),
+        1,
+    );
     let ballot = Ballot::Propose(Reconfig::Join(rng.gen()));
     let gen = proc.gen + 1;
-    let voter = rng.gen::<SecretKeyShare>().public_key_share();
-    let bytes = bincode::serialize(&(&ballot, &gen))?;
-    let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
     let vote = Vote { gen, ballot };
+    let bytes = bincode::serialize(&vote)?;
+    let voter = 0;
+    let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
     let resp = proc.handle_signed_vote(SignedVote { vote, voter, sig });
-
-    assert!(resp.is_err());
     assert!(matches!(resp, Err(Error::InvalidElderSignature)));
-
     Ok(())
 }
 
@@ -169,15 +168,10 @@ fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
 fn test_membership_split_vote() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
-        let mut net = Net::with_procs(nprocs, &mut rng);
-
-        let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-        for proc in net.procs.iter_mut() {
-            proc.consensus.elders = elders.clone();
-        }
+        let mut net = Net::with_procs(((nprocs + 1) * 2 / 3).min(nprocs - 1), nprocs, &mut rng);
 
         for i in 0..net.procs.len() {
-            let a_i = net.procs[i].public_key_share();
+            let a_i = net.procs[i].id();
             let vote = net.procs[i].propose(Reconfig::Join(i as u8))?;
             net.broadcast(a_i, vote);
         }
@@ -185,7 +179,7 @@ fn test_membership_split_vote() -> Result<()> {
         net.drain_queued_packets()?;
         for i in 0..nprocs {
             for j in 0..nprocs {
-                net.enqueue_anti_entropy(i, j);
+                net.enqueue_anti_entropy(i as usize, j as usize);
             }
         }
         net.drain_queued_packets()?;
@@ -195,15 +189,15 @@ fn test_membership_split_vote() -> Result<()> {
         net.generate_msc(&format!("split_vote_{}.msc", nprocs))?;
 
         for i in 0..nprocs {
-            assert_eq!(net.procs[i].gen, net.procs[i].pending_gen);
+            assert_eq!(net.procs[i as usize].gen, net.procs[i as usize].pending_gen);
         }
         let proc0_gen = net.procs[0].gen;
         let expected_members = net.procs[0].members(proc0_gen)?;
 
         for i in 0..nprocs {
-            let proc_i_gen = net.procs[i].gen;
+            let proc_i_gen = net.procs[i as usize].gen;
             assert_eq!(proc_i_gen, proc0_gen);
-            assert_eq!(net.procs[i].members(proc_i_gen)?, expected_members);
+            assert_eq!(net.procs[i as usize].members(proc_i_gen)?, expected_members);
         }
     }
 
@@ -214,22 +208,17 @@ fn test_membership_split_vote() -> Result<()> {
 fn test_membership_round_robin_split_vote() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
-        let mut net = Net::with_procs(nprocs, &mut rng);
-
-        let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-        for proc in net.procs.iter_mut() {
-            proc.consensus.elders = elders.clone();
-        }
+        let mut net = Net::with_procs(((nprocs + 1) * 2 / 3).min(nprocs - 1), nprocs, &mut rng);
 
         for i in 0..net.procs.len() {
-            let a_i = net.procs[i].public_key_share();
+            let a_i = net.procs[i].id();
             let vote = net.procs[i].propose(Reconfig::Join(i as u8))?;
             net.broadcast(a_i, vote);
         }
 
         while !net.packets.is_empty() {
             for i in 0..net.procs.len() {
-                net.deliver_packet_from_source(net.procs[i].public_key_share())?;
+                net.deliver_packet_from_source(net.procs[i].id())?;
             }
         }
 
@@ -247,9 +236,9 @@ fn test_membership_round_robin_split_vote() -> Result<()> {
         assert_eq!(expected_members, BTreeSet::from_iter(0..(nprocs as u8)));
 
         for i in 0..nprocs {
-            let gen = net.procs[i].gen;
+            let gen = net.procs[i as usize].gen;
             assert_eq!(gen, proc_0_gen);
-            assert_eq!(net.procs[i].members(gen)?, expected_members);
+            assert_eq!(net.procs[i as usize].members(gen)?, expected_members);
         }
     }
     Ok(())
@@ -258,14 +247,9 @@ fn test_membership_round_robin_split_vote() -> Result<()> {
 #[test]
 fn test_membership_onboarding_across_many_generations() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(2, &mut rng);
-    let p0 = net.procs[0].public_key_share();
-    let p1 = net.procs[1].public_key_share();
-
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
+    let mut net = Net::with_procs(1, 2, &mut rng);
+    let p0 = net.procs[0].id();
+    let p1 = net.procs[1].id();
 
     let vote = net.procs[0].propose(Reconfig::Join(1)).unwrap();
     net.broadcast(p0, vote);
@@ -308,14 +292,9 @@ fn test_membership_onboarding_across_many_generations() -> Result<()> {
 #[test]
 fn test_membership_simple_proposal() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(3, &mut rng);
+    let mut net = Net::with_procs(2, 3, &mut rng);
 
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
-
-    let p0 = net.procs[0].public_key_share();
+    let p0 = net.procs[0].id();
     let vote = net.procs[0].propose(Reconfig::Join(0)).unwrap();
     net.broadcast(p0, vote);
     net.drain_queued_packets().unwrap();
@@ -405,13 +384,8 @@ impl Arbitrary for Instruction {
 #[test]
 fn test_membership_interpreter_qc1() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(2, &mut rng);
-    let p0 = net.procs[0].public_key_share();
-
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
+    let mut net = Net::with_procs(1, 2, &mut rng);
+    let p0 = net.procs[0].id();
 
     let reconfig = Reconfig::Join(1);
     let q = &mut net.procs[0];
@@ -447,13 +421,8 @@ fn test_membership_interpreter_qc1() -> Result<()> {
 #[test]
 fn test_membership_interpreter_qc2() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(3, &mut rng);
-    let p0 = net.procs[0].public_key_share();
-
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
+    let mut net = Net::with_procs(2, 3, &mut rng);
+    let p0 = net.procs[0].id();
 
     let vote = net.procs[0].propose(Reconfig::Join(1))?;
     net.broadcast(p0, vote);
@@ -480,14 +449,9 @@ fn test_membership_interpreter_qc2() -> Result<()> {
 #[test]
 fn test_membership_interpreter_qc3() {
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(4, &mut rng);
+    let mut net = Net::with_procs(3, 4, &mut rng);
 
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
-
-    let p0 = net.procs[0].public_key_share();
+    let p0 = net.procs[0].id();
     // 1 requests to join genesis
     let reconfig = Reconfig::Join(0);
     net.reconfigs_by_gen
@@ -509,7 +473,7 @@ fn test_membership_interpreter_qc3() {
     let propose_vote = net.procs[0].propose(reconfig).unwrap();
     net.broadcast(p0, propose_vote);
 
-    let q_actor = net.procs[2].public_key_share();
+    let q_actor = net.procs[2].id();
     let anti_entropy_packets = net.procs[0].anti_entropy(0).into_iter().map(|vote| Packet {
         source: p0,
         dest: q_actor,
@@ -535,10 +499,13 @@ fn test_membership_interpreter_qc3() {
 
 #[test]
 fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
-    let rng = StdRng::from_seed([0u8; 32]);
-    let mut proc = Membership::random(rng);
-    let proc_id = proc.public_key_share();
-    proc.consensus.elders = BTreeSet::from_iter([proc_id]);
+    let mut rng = StdRng::from_seed([0u8; 32]);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut proc = Membership::<u8>::from(
+        (0, elders_sk.secret_key_share(0)),
+        elders_sk.public_keys(),
+        1,
+    );
 
     proc.propose(Reconfig::Join(0_u8))?;
 
@@ -551,7 +518,7 @@ fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
     assert!(!proc
         .consensus
         .votes
-        .get(&proc_id)
+        .get(&proc.id())
         .unwrap()
         .supersedes(&proc.sign_vote(Vote {
             ballot: Ballot::Propose(reconfig),
@@ -563,8 +530,13 @@ fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
 
 #[test]
 fn test_membership_validate_reconfig_rejects_when_members_at_capacity() -> Result<()> {
-    let rng = StdRng::from_seed([0u8; 32]);
-    let mut proc = Membership::random(rng);
+    let mut rng = StdRng::from_seed([0u8; 32]);
+    let elders_sk = SecretKeySet::random(0, &mut rng);
+    let mut proc = Membership::<u8>::from(
+        (0, elders_sk.secret_key_share(0usize)),
+        elders_sk.public_keys(),
+        1,
+    );
 
     for m in 0..7 {
         proc.force_join(m);
@@ -581,35 +553,24 @@ fn test_membership_validate_reconfig_rejects_when_members_at_capacity() -> Resul
 #[test]
 fn test_membership_bft_consensus_qc1() -> Result<()> {
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(6, &mut rng);
-    let faulty = BTreeSet::from_iter([
-        net.procs[1].public_key_share(),
-        net.procs[5].public_key_share(),
-    ]);
-
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for p in net.procs.iter_mut() {
-        p.consensus.elders = elders.clone();
-    }
+    let mut net = Net::with_procs(4, 6, &mut rng);
+    let faulty = BTreeSet::from_iter([net.procs[1].id(), net.procs[5].id()]);
 
     // send a randomized packet
     let packet = Packet {
-        source: net.procs[1].public_key_share(),
-        dest: net.procs[0].public_key_share(),
-        vote: SignedVote {
-            voter: net.procs[1].public_key_share(),
-            ..net.procs[1].sign_vote(Vote {
-                gen: 1,
-                ballot: Ballot::Propose(Reconfig::Join(240)),
-            })?
-        },
+        source: net.procs[1].id(),
+        dest: net.procs[0].id(),
+        vote: net.procs[1].sign_vote(Vote {
+            gen: 1,
+            ballot: Ballot::Propose(Reconfig::Join(240)),
+        })?,
     };
     net.enqueue_packets(vec![packet]);
     let packet = Packet {
-        source: net.procs[1].public_key_share(),
-        dest: net.procs[0].public_key_share(),
+        source: net.procs[1].id(),
+        dest: net.procs[0].id(),
         vote: SignedVote {
-            voter: net.procs[1].public_key_share(),
+            voter: net.procs[1].id(),
             ..net.procs[5].sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(Reconfig::Join(115)),
@@ -623,11 +584,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
     }
     net.generate_msc("bft_consensus_qc1.msc")?;
 
-    let honest_procs = Vec::from_iter(
-        net.procs
-            .iter()
-            .filter(|p| !faulty.contains(&p.public_key_share())),
-    );
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| !faulty.contains(&p.id())));
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
@@ -662,12 +619,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
         return Ok(TestResult::discard());
     }
 
-    let mut net = Net::with_procs(n, &mut rng);
-
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for proc in net.procs.iter_mut() {
-        proc.consensus.elders = elders.clone();
-    }
+    let mut net = Net::with_procs(((n as u8 + 1) * 2 / 3).min(n as u8 - 1), n as u8, &mut rng);
 
     for instruction in instructions {
         match instruction {
@@ -675,34 +627,28 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 let reconfig = Reconfig::Join(p);
 
                 let q = &mut net.procs[q_idx.min(n - 1)];
-                let q_actor = q.public_key_share();
+                let q_id = q.id();
                 match q.propose(reconfig) {
                     Ok(vote) => {
                         net.reconfigs_by_gen
                             .entry(q.pending_gen)
                             .or_default()
                             .insert(reconfig);
-                        net.broadcast(q_actor, vote);
+                        net.broadcast(q_id, vote);
                     }
                     Err(Error::JoinRequestForExistingMember { .. }) => {
                         assert!(q.members(q.gen)?.contains(&p));
-                    }
-                    Err(Error::NotElder { .. }) => {
-                        assert!(!q.consensus.elders.contains(&q.public_key_share()));
                     }
                     Err(Error::ExistingVoteIncompatibleWithNewVote) => {
                         // This proc has already committed to a vote this round
 
                         // This proc has already committed to a vote
-                        assert!(!q
-                            .consensus
-                            .votes
-                            .get(&q.public_key_share())
-                            .unwrap()
-                            .supersedes(&q.sign_vote(Vote {
+                        assert!(!q.consensus.votes.get(&q.id()).unwrap().supersedes(
+                            &q.sign_vote(Vote {
                                 ballot: Ballot::Propose(reconfig),
                                 gen: q.gen,
-                            })?));
+                            })?
+                        ));
                     }
                     Err(err) => {
                         // invalid request.
@@ -714,35 +660,27 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 let reconfig = Reconfig::Leave(p);
 
                 let q = &mut net.procs[q_idx.min(n - 1)];
-                let q_actor = q.public_key_share();
+                let q_id = q.id();
                 match q.propose(reconfig) {
                     Ok(vote) => {
                         net.reconfigs_by_gen
                             .entry(q.pending_gen)
                             .or_default()
                             .insert(reconfig);
-                        net.broadcast(q_actor, vote);
+                        net.broadcast(q_id, vote);
                     }
                     Err(Error::LeaveRequestForNonMember { .. }) => {
                         assert!(!q.members(q.gen)?.contains(&p));
                     }
-                    Err(Error::NotElder { .. }) => {
-                        assert!(!q.consensus.elders.contains(&q.public_key_share()));
-                    }
                     Err(Error::ExistingVoteIncompatibleWithNewVote) => {
                         // This proc has already committed to a vote
-                        assert!(!q
-                            .consensus
-                            .votes
-                            .get(&q.public_key_share())
+                        assert!(!q.consensus.votes.get(&q.id()).unwrap().supersedes(
+                            &q.sign_vote(Vote {
+                                ballot: Ballot::Propose(reconfig),
+                                gen: q.gen,
+                            })
                             .unwrap()
-                            .supersedes(
-                                &q.sign_vote(Vote {
-                                    ballot: Ballot::Propose(reconfig),
-                                    gen: q.gen,
-                                })
-                                .unwrap()
-                            ))
+                        ))
                     }
                     Err(err) => {
                         // invalid request.
@@ -752,13 +690,13 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
             }
             Instruction::DeliverPacketFromSource(source_idx) => {
                 // deliver packet
-                let source = net.procs[source_idx.min(n - 1)].public_key_share();
+                let source = net.procs[source_idx.min(n - 1)].id();
                 net.deliver_packet_from_source(source)?;
             }
             Instruction::AntiEntropy(gen, p_idx, q_idx) => {
                 let p = &net.procs[p_idx.min(n - 1)];
-                let dest = net.procs[q_idx.min(n - 1)].public_key_share();
-                let source = p.public_key_share();
+                let dest = net.procs[q_idx.min(n - 1)].id();
+                let source = p.id();
                 let anti_entropy_packets =
                     p.anti_entropy(gen)
                         .into_iter()
@@ -845,7 +783,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
     let proc_at_max_gen = procs_by_gen[max_gen].get(0).ok_or(Error::NoMembers)?;
     assert!(super_majority(
         procs_by_gen[max_gen].len(),
-        proc_at_max_gen.consensus.elders.len()
+        proc_at_max_gen.consensus.n_elders
     ));
 
     Ok(TestResult::passed())
@@ -856,27 +794,27 @@ fn prop_validate_reconfig(
     join_or_leave: bool,
     member: u8,
     initial_members: BTreeSet<u8>,
-    num_elders: u8,
+    threshold: u8,
     seed: u128,
 ) -> Result<TestResult> {
     let mut seed_buf = [0u8; 32];
     seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
     let mut rng = StdRng::from_seed(seed_buf);
 
-    if num_elders >= 7 {
+    if threshold > 5 {
         return Ok(TestResult::discard());
     }
 
-    let mut proc = Membership::random(&mut rng);
+    let elders_sk = SecretKeySet::random(threshold as usize, &mut rng);
+    let mut proc = Membership::<u8>::from(
+        (1, elders_sk.secret_key_share(1usize)),
+        elders_sk.public_keys(),
+        (3 * threshold / 2) as usize,
+    );
 
     for m in initial_members.iter().copied() {
         proc.force_join(m);
     }
-
-    proc.consensus.elders = iter::repeat_with(|| rng.gen::<SecretKeyShare>().public_key_share())
-        .take(num_elders as usize)
-        .chain(iter::once(proc.public_key_share()))
-        .collect();
 
     let reconfig = match join_or_leave {
         true => Reconfig::Join(member),
@@ -935,18 +873,9 @@ fn prop_bft_consensus(
     seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
     let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
 
-    let mut net = Net::with_procs(n as usize, &mut rng);
+    let mut net = Net::with_procs(((n + 1) * 2 / 3).min(n - 1), n, &mut rng);
 
-    let faulty = BTreeSet::from_iter(
-        faulty
-            .into_iter()
-            .map(|idx| net.procs[idx as usize].public_key_share()),
-    );
-
-    let elders = BTreeSet::from_iter(net.procs.iter().map(Membership::public_key_share));
-    for p in net.procs.iter_mut() {
-        p.consensus.elders = elders.clone();
-    }
+    let faulty = BTreeSet::from_iter(faulty.into_iter().map(|idx| net.procs[idx as usize].id()));
 
     let n_actions = rng.gen::<u8>() % 4;
 
@@ -961,7 +890,7 @@ fn prop_bft_consensus(
                     }
                     false => {
                         // drop a random packet
-                        let source = net.gen_public_key(&mut rng);
+                        let source = net.pick_id(&mut rng);
                         net.drop_packet_from_source(source);
                     }
                 };
@@ -971,8 +900,7 @@ fn prop_bft_consensus(
                 let proc = if let Some(proc) = net
                     .procs
                     .iter_mut()
-                    .filter(|p| !faulty.contains(&p.public_key_share())) // filter out faulty nodes
-                    .filter(|p| p.consensus.elders.contains(&p.public_key_share())) // filter out non-members
+                    .filter(|p| !faulty.contains(&p.id())) // filter out faulty nodes
                     .filter(|p| p.gen == p.pending_gen) // filter out nodes who have already voted this round
                     .choose(&mut rng)
                 {
@@ -982,7 +910,7 @@ fn prop_bft_consensus(
                     continue;
                 };
 
-                let source = proc.public_key_share();
+                let source = proc.id();
                 let proc_members = proc.members(proc.gen).unwrap();
 
                 let reconfig = match rng.gen::<bool>() || proc_members.is_empty() {
@@ -999,7 +927,7 @@ fn prop_bft_consensus(
             }
             _ => {
                 // Network delivers a packet
-                let source = net.gen_public_key(&mut rng);
+                let source = net.pick_id(&mut rng);
                 let _ = net.deliver_packet_from_source(source);
             }
         };
@@ -1009,11 +937,7 @@ fn prop_bft_consensus(
         println!("Error while draining: {e:?}");
     }
 
-    let honest_procs = Vec::from_iter(
-        net.procs
-            .iter()
-            .filter(|p| !faulty.contains(&p.public_key_share())),
-    );
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| !faulty.contains(&p.id())));
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {

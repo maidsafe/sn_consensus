@@ -1,18 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeyShare, SecretKeyShare};
+use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
 use log::info;
-use rand::{CryptoRng, Rng};
+use serde::Serialize;
 
 use crate::sn_membership::Generation;
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, Result};
+use crate::{Error, NodeId, Result};
 
 #[derive(Debug)]
 pub struct Consensus<T: Proposition> {
-    pub elders: BTreeSet<PublicKeyShare>,
-    pub secret_key: SecretKeyShare,
-    pub votes: BTreeMap<PublicKeyShare, SignedVote<T>>,
+    pub elders: PublicKeySet,
+    pub n_elders: usize,
+    pub secret_key: (NodeId, SecretKeyShare),
+    pub votes: BTreeMap<NodeId, SignedVote<T>>,
 }
 
 pub enum VoteResponse<T: Proposition> {
@@ -22,24 +23,40 @@ pub enum VoteResponse<T: Proposition> {
 }
 
 impl<T: Proposition> Consensus<T> {
-    pub fn from(secret_key: SecretKeyShare, elders: BTreeSet<PublicKeyShare>) -> Self {
+    pub fn from(
+        secret_key: (NodeId, SecretKeyShare),
+        elders: PublicKeySet,
+        n_elders: usize,
+    ) -> Self {
         Consensus::<T> {
-            secret_key,
             elders,
+            n_elders,
+            secret_key,
             votes: Default::default(),
         }
     }
 
-    pub fn random(mut rng: impl Rng + CryptoRng) -> Self {
-        Consensus::<T> {
-            secret_key: rng.gen(),
-            elders: Default::default(),
-            votes: Default::default(),
+    pub fn verify_sig_share<M: Serialize>(
+        &self,
+        msg: &M,
+        elder: NodeId,
+        sig: &SignatureShare,
+    ) -> Result<()> {
+        let public_key = self.elders.public_key_share(elder as u64);
+        let msg_bytes = bincode::serialize(msg)?;
+        if public_key.verify(sig, msg_bytes) {
+            Ok(())
+        } else {
+            Err(Error::InvalidElderSignature)
         }
     }
 
-    pub fn public_key_share(&self) -> PublicKeyShare {
-        self.secret_key.public_key_share()
+    pub fn sign<M: Serialize>(&self, msg: &M) -> Result<SignatureShare> {
+        Ok(self.secret_key.1.sign(&bincode::serialize(msg)?))
+    }
+
+    pub fn id(&self) -> NodeId {
+        self.secret_key.0
     }
 
     // handover: gen = gen
@@ -53,7 +70,7 @@ impl<T: Proposition> Consensus<T> {
     ) -> Result<VoteResponse<T>> {
         self.log_signed_vote(&signed_vote);
 
-        if self.is_split_vote(&self.votes.values().cloned().collect())? {
+        if self.is_split_vote(&self.votes.values().cloned().collect()) {
             info!("[MBR] Detected split vote");
             let merge_vote = Vote {
                 gen,
@@ -61,7 +78,7 @@ impl<T: Proposition> Consensus<T> {
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
 
-            if let Some(our_vote) = self.votes.get(&self.public_key_share()) {
+            if let Some(our_vote) = self.votes.get(&self.id()) {
                 let proposals_we_voted_for =
                     BTreeSet::from_iter(our_vote.proposals().into_iter().map(|(_, r)| r));
                 let proposals_we_would_vote_for: BTreeSet<_> = signed_merge_vote
@@ -80,9 +97,8 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)));
         }
 
-        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())? {
+        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect()) {
             info!("[MBR] Detected super majority over super majorities");
-            assert!(self.elders.contains(&self.public_key_share()));
             // store a proof of what the network decided in our history so that we can onboard future procs.
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
 
@@ -93,10 +109,10 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::Decided(signed_vote));
         }
 
-        if self.is_super_majority(&self.votes.values().cloned().collect())? {
+        if self.is_super_majority(&self.votes.values().cloned().collect()) {
             info!("[MBR] Detected super majority");
 
-            if let Some(our_vote) = self.votes.get(&self.public_key_share()) {
+            if let Some(our_vote) = self.votes.get(&self.id()) {
                 // We voted during this generation.
 
                 if our_vote.vote.is_super_majority_ballot() {
@@ -114,7 +130,7 @@ impl<T: Proposition> Consensus<T> {
 
         // We have determined that we don't yet have enough votes to take action.
         // If we have not yet voted, this is where we would contribute our vote
-        if !self.votes.contains_key(&self.public_key_share()) {
+        if !self.votes.contains_key(&self.id()) {
             let signed_vote = self.sign_vote(Vote {
                 gen,
                 ballot: signed_vote.vote.ballot,
@@ -127,8 +143,8 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
         Ok(SignedVote {
-            voter: self.public_key_share(),
-            sig: self.secret_key.sign(&vote.to_bytes()?),
+            voter: self.secret_key.0,
+            sig: self.sign(&vote)?,
             vote,
         })
     }
@@ -159,22 +175,19 @@ impl<T: Proposition> Consensus<T> {
         count
     }
 
-    fn is_split_vote(&self, votes: &BTreeSet<SignedVote<T>>) -> Result<bool> {
+    fn is_split_vote(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
         let counts = self.count_votes(votes);
         let most_votes = counts.values().max().cloned().unwrap_or_default();
         let voters = BTreeSet::from_iter(votes.iter().map(|v| v.voter));
-        let remaining_voters = self.elders.difference(&voters).count();
+        let remaining_voters = self.n_elders - voters.len();
 
         // give the remaining votes to the proposals with the most votes.
         let predicted_votes = most_votes + remaining_voters;
 
-        Ok(
-            3 * voters.len() > 2 * self.elders.len()
-                && 3 * predicted_votes <= 2 * self.elders.len(),
-        )
+        voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
     }
 
-    pub fn is_super_majority(&self, votes: &BTreeSet<SignedVote<T>>) -> Result<bool> {
+    pub fn is_super_majority(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
         // TODO: super majority should always just be the largest 7 members
         let most_votes = self
             .count_votes(votes)
@@ -183,13 +196,10 @@ impl<T: Proposition> Consensus<T> {
             .cloned()
             .unwrap_or_default();
 
-        Ok(3 * most_votes > 2 * self.elders.len())
+        most_votes > self.elders.threshold()
     }
 
-    fn is_super_majority_over_super_majorities(
-        &self,
-        votes: &BTreeSet<SignedVote<T>>,
-    ) -> Result<bool> {
+    fn is_super_majority_over_super_majorities(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
         let count_of_agreeing_super_majorities = self
             .count_votes(&BTreeSet::from_iter(
                 votes
@@ -202,15 +212,14 @@ impl<T: Proposition> Consensus<T> {
             .max()
             .unwrap_or(0);
 
-        Ok(3 * count_of_agreeing_super_majorities > 2 * self.elders.len())
+        count_of_agreeing_super_majorities > self.elders.threshold()
     }
 
     /// Validates a vote recursively all the way down to the proposition (T)
     /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
-        signed_vote.validate_signature()?;
+        self.verify_sig_share(&signed_vote.vote, signed_vote.voter, &signed_vote.sig)?;
         self.validate_vote(&signed_vote.vote)?;
-        self.validate_is_elder(signed_vote.voter)?;
         self.validate_vote_supersedes_existing_vote(signed_vote)?;
         self.validate_voters_have_not_changed_proposals(signed_vote)?;
         Ok(())
@@ -238,7 +247,7 @@ impl<T: Proposition> Consensus<T> {
                         .flat_map(SignedVote::unpack_votes)
                         .cloned()
                         .collect(),
-                )? {
+                ) {
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
                 } else {
                     for child_vote in votes.iter() {
@@ -253,17 +262,6 @@ impl<T: Proposition> Consensus<T> {
                     Ok(())
                 }
             }
-        }
-    }
-
-    fn validate_is_elder(&self, public_key: PublicKeyShare) -> Result<()> {
-        if !self.elders.contains(&public_key) {
-            Err(Error::NotElder {
-                public_key,
-                elders: self.elders.clone(),
-            })
-        } else {
-            Ok(())
         }
     }
 
@@ -283,7 +281,7 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: &SignedVote<T>,
     ) -> Result<()> {
         // Ensure that nobody is trying to change their Proposal proposals.
-        let proposals: BTreeSet<(PublicKeyShare, T)> = self
+        let proposals: BTreeSet<(NodeId, T)> = self
             .votes
             .values()
             .flat_map(|v| v.proposals())

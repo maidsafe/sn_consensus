@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 
-use blsttc::{PublicKeyShare, SignatureShare};
+use blsttc::SignatureShare;
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 use crate::sn_membership::Generation;
-use crate::{Error, Result};
+use crate::NodeId;
 
 pub trait Proposition: Ord + Clone + Debug + Serialize {}
 impl<T: Ord + Clone + Debug + Serialize> Proposition for T {}
@@ -45,6 +45,7 @@ fn simplify_votes<T: Proposition>(
 }
 
 impl<T: Proposition> Ballot<T> {
+    #[must_use]
     pub fn simplify(&self) -> Self {
         match &self {
             Ballot::Propose(_) => self.clone(), // already in simplest form
@@ -67,10 +68,6 @@ impl<T: Proposition> Debug for Vote<T> {
 }
 
 impl<T: Proposition> Vote<T> {
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.ballot, &self.gen))?)
-    }
-
     pub fn is_super_majority_ballot(&self) -> bool {
         matches!(self.ballot, Ballot::SuperMajority(_))
     }
@@ -79,25 +76,17 @@ impl<T: Proposition> Vote<T> {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SignedVote<T: Proposition> {
     pub vote: Vote<T>,
-    pub voter: PublicKeyShare,
+    pub voter: NodeId,
     pub sig: SignatureShare,
 }
 
 impl<T: Proposition> Debug for SignedVote<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}@{:?}", self.vote, self.voter)
+        write!(f, "{:?}@{}", self.vote, self.voter)
     }
 }
 
 impl<T: Proposition> SignedVote<T> {
-    pub fn validate_signature(&self) -> Result<()> {
-        if self.voter.verify(&self.sig, &self.vote.to_bytes()?) {
-            Ok(())
-        } else {
-            Err(Error::InvalidElderSignature)
-        }
-    }
-
     pub fn unpack_votes(&self) -> BTreeSet<&Self> {
         match &self.vote.ballot {
             Ballot::Propose(_) => BTreeSet::from_iter([self]),
@@ -107,7 +96,7 @@ impl<T: Proposition> SignedVote<T> {
         }
     }
 
-    pub fn proposals(&self) -> BTreeSet<(PublicKeyShare, T)> {
+    pub fn proposals(&self) -> BTreeSet<(NodeId, T)> {
         match &self.vote.ballot {
             Ballot::Propose(proposal) => BTreeSet::from_iter([(self.voter, proposal.clone())]),
             Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {

@@ -1,14 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeyShare, SecretKeyShare};
+use blsttc::{PublicKeySet, SecretKeyShare};
 use core::fmt::Debug;
 use log::info;
-use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
 use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, Result};
+use crate::{Error, NodeId, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
@@ -49,19 +48,13 @@ impl<T: Proposition> Reconfig<T> {
 }
 
 impl<T: Proposition> Membership<T> {
-    pub fn from(secret_key: SecretKeyShare, elders: BTreeSet<PublicKeyShare>) -> Self {
+    pub fn from(
+        secret_key: (NodeId, SecretKeyShare),
+        elders: PublicKeySet,
+        n_elders: usize,
+    ) -> Self {
         Membership::<T> {
-            consensus: Consensus::<Reconfig<T>>::from(secret_key, elders),
-            gen: 0,
-            pending_gen: 0,
-            forced_reconfigs: Default::default(),
-            history: Default::default(),
-        }
-    }
-
-    pub fn random(rng: impl Rng + CryptoRng) -> Self {
-        Membership::<T> {
-            consensus: Consensus::<Reconfig<T>>::random(rng),
+            consensus: Consensus::<Reconfig<T>>::from(secret_key, elders, n_elders),
             gen: 0,
             pending_gen: 0,
             forced_reconfigs: Default::default(),
@@ -162,8 +155,8 @@ impl<T: Proposition> Membership<T> {
         winning_reconfigs
     }
 
-    pub fn public_key_share(&self) -> PublicKeyShare {
-        self.consensus.public_key_share()
+    pub fn id(&self) -> NodeId {
+        self.consensus.id()
     }
 
     pub fn handle_signed_vote(
