@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.0](https://github.com/maidsafe/sn_membership/compare/v1.8.1...v1.9.0) (2022-02-03)
+
+
+### Features
+
+* **agg-sig:** move to blsttc::PublicKeySet from Set<PublicKeyShare> ([7084a31](https://github.com/maidsafe/sn_membership/commit/7084a31ce849b09589941e2d254079619df008cd))
+
 ### [1.8.1](https://github.com/maidsafe/sn_membership/compare/v1.8.0...v1.8.1) (2022-02-01)
 
 
