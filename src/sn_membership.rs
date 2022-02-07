@@ -219,7 +219,7 @@ impl<T: Proposition> Membership<T> {
         signed_vote
             .proposals()
             .into_iter()
-            .try_for_each(|(_signer, reconfig)| self.validate_reconfig(reconfig))?;
+            .try_for_each(|reconfig| self.validate_reconfig(reconfig))?;
 
         self.consensus.validate_signed_vote(signed_vote)
     }

@@ -71,6 +71,15 @@ impl<T: Proposition> Vote<T> {
     pub fn is_super_majority_ballot(&self) -> bool {
         matches!(self.ballot, Ballot::SuperMajority(_))
     }
+
+    pub fn proposals(&self) -> BTreeSet<T> {
+        match &self.ballot {
+            Ballot::Propose(proposal) => BTreeSet::from_iter([proposal.clone()]),
+            Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
+                BTreeSet::from_iter(votes.iter().flat_map(SignedVote::proposals))
+            }
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -96,13 +105,8 @@ impl<T: Proposition> SignedVote<T> {
         }
     }
 
-    pub fn proposals(&self) -> BTreeSet<(NodeId, T)> {
-        match &self.vote.ballot {
-            Ballot::Propose(proposal) => BTreeSet::from_iter([(self.voter, proposal.clone())]),
-            Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
-                BTreeSet::from_iter(votes.iter().flat_map(Self::proposals))
-            }
-        }
+    pub fn proposals(&self) -> BTreeSet<T> {
+	self.vote.proposals()
     }
 
     pub fn supersedes(&self, signed_vote: &Self) -> bool {

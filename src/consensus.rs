@@ -79,13 +79,8 @@ impl<T: Proposition> Consensus<T> {
             let signed_merge_vote = self.sign_vote(merge_vote)?;
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
-                let proposals_we_voted_for =
-                    BTreeSet::from_iter(our_vote.proposals().into_iter().map(|(_, r)| r));
-                let proposals_we_would_vote_for: BTreeSet<_> = signed_merge_vote
-                    .proposals()
-                    .into_iter()
-                    .map(|(_, r)| r)
-                    .collect();
+                let proposals_we_voted_for = our_vote.proposals();
+                let proposals_we_would_vote_for = signed_merge_vote.proposals();
 
                 if proposals_we_voted_for == proposals_we_would_vote_for {
                     info!("[MBR] This vote didn't add new information, waiting for more votes...");
@@ -167,7 +162,7 @@ impl<T: Proposition> Consensus<T> {
         let mut count: BTreeMap<BTreeSet<T>, usize> = Default::default();
 
         for vote in votes.iter() {
-            let proposals = BTreeSet::from_iter(vote.proposals().into_iter().map(|(_, prop)| prop));
+            let proposals = vote.proposals();
             let c = count.entry(proposals).or_default();
             *c += 1;
         }
@@ -221,7 +216,6 @@ impl<T: Proposition> Consensus<T> {
         self.verify_sig_share(&signed_vote.vote, signed_vote.voter, &signed_vote.sig)?;
         self.validate_vote(&signed_vote.vote)?;
         self.validate_vote_supersedes_existing_vote(signed_vote)?;
-        self.validate_voters_have_not_changed_proposals(signed_vote)?;
         Ok(())
     }
 
@@ -271,26 +265,6 @@ impl<T: Proposition> Consensus<T> {
             && !self.votes[&signed_vote.voter].supersedes(signed_vote)
         {
             Err(Error::ExistingVoteIncompatibleWithNewVote)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn validate_voters_have_not_changed_proposals(
-        &self,
-        signed_vote: &SignedVote<T>,
-    ) -> Result<()> {
-        // Ensure that nobody is trying to change their Proposal proposals.
-        let proposals: BTreeSet<(NodeId, T)> = self
-            .votes
-            .values()
-            .flat_map(|v| v.proposals())
-            .chain(signed_vote.proposals())
-            .collect();
-
-        let voters = BTreeSet::from_iter(proposals.iter().map(|(actor, _)| actor));
-        if voters.len() != proposals.len() {
-            Err(Error::VoterChangedVote)
         } else {
             Ok(())
         }
