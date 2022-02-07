@@ -103,7 +103,7 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: SignedVote<T>,
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
-        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
+        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())
             && self.contains_new_vote(&signed_vote)
         {
             info!("[MBR] Obtained new vote after having already reached termination, sending out broadcast for others to catch up.");
@@ -355,15 +355,22 @@ impl<T: Proposition> Consensus<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blsttc::SecretKeySet;
     use rand::{prelude::StdRng, SeedableRng};
 
     #[test]
     fn test_contains_new_vote() {
         let mut rng = StdRng::from_seed([0u8; 32]);
-        let mut consensus = Consensus::random(rng.clone());
+        let elders_sk = SecretKeySet::random(10, &mut rng);
+        let mut consensus = Consensus::from(
+            (1u8, elders_sk.secret_key_share(1usize)),
+            elders_sk.public_keys(),
+            10,
+        );
+
         consensus.votes = BTreeMap::from_iter((0..10u8).map(|i| {
             (
-                rng.gen::<SecretKeyShare>().public_key_share(),
+                i,
                 consensus
                     .sign_vote(Vote {
                         gen: 0,
@@ -376,7 +383,7 @@ mod tests {
         let new_vote = consensus
             .sign_vote(Vote {
                 gen: 0,
-                ballot: Ballot::Propose(44),
+                ballot: Ballot::Propose(44u8),
             })
             .unwrap();
         assert!(consensus.contains_new_vote(&new_vote));
@@ -384,7 +391,7 @@ mod tests {
         let new_vote = consensus
             .sign_vote(Vote {
                 gen: 0,
-                ballot: Ballot::Propose(2),
+                ballot: Ballot::Propose(2u8),
             })
             .unwrap();
         assert!(!consensus.contains_new_vote(&new_vote));
@@ -392,7 +399,7 @@ mod tests {
         let new_vote = consensus
             .sign_vote(Vote {
                 gen: 0,
-                ballot: Ballot::Propose(9),
+                ballot: Ballot::Propose(9u8),
             })
             .unwrap();
         assert!(!consensus.contains_new_vote(&new_vote));
