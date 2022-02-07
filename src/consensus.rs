@@ -80,6 +80,20 @@ impl<T: Proposition> Consensus<T> {
         self.sign_vote(vote)
     }
 
+    pub fn contains_new_vote(&self, signed_vote: &SignedVote<T>) -> bool {
+        let our_votes: BTreeSet<&SignedVote<T>> = self
+            .votes
+            .iter()
+            .map(|(_, v)| v.unpack_votes())
+            .flatten()
+            .collect();
+        signed_vote
+            .unpack_votes()
+            .iter()
+            .any(|vote| !our_votes.contains(vote))
+    }
+    }
+
     // handover: gen = gen
     // membership: gen = pending_gen
     /// Handles a signed vote
@@ -89,6 +103,15 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: SignedVote<T>,
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
+        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
+            && self.contains_new_vote(&signed_vote)
+        {
+            info!("[MBR] Obtained new vote after having already reached termination, sending out broadcast for others to catch up.");
+            let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
+            let sm_over_sm_proof = self.sign_vote(Vote { gen, ballot })?;
+            return Ok(VoteResponse::Broadcast(sm_over_sm_proof));
+        }
+
         self.log_signed_vote(&signed_vote);
 
         if self.is_split_vote(&self.votes.values().cloned().collect()) {
@@ -326,5 +349,54 @@ impl<T: Proposition> Consensus<T> {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{prelude::StdRng, SeedableRng};
+
+    #[test]
+    fn test_contains_new_vote() {
+        let mut rng = StdRng::from_seed([0u8; 32]);
+        let mut consensus = Consensus::random(rng.clone());
+        consensus.votes = BTreeMap::from_iter((0..10u8).map(|i| {
+            (
+                rng.gen::<SecretKeyShare>().public_key_share(),
+                consensus
+                    .sign_vote(Vote {
+                        gen: 0,
+                        ballot: Ballot::Propose(i),
+                    })
+                    .unwrap(),
+            )
+        }));
+
+        let new_vote = consensus
+            .sign_vote(Vote {
+                gen: 0,
+                ballot: Ballot::Propose(44),
+            })
+            .unwrap();
+        assert!(consensus.contains_new_vote(&new_vote));
+
+        let new_vote = consensus
+            .sign_vote(Vote {
+                gen: 0,
+                ballot: Ballot::Propose(2),
+            })
+            .unwrap();
+        assert!(!consensus.contains_new_vote(&new_vote));
+
+        let new_vote = consensus
+            .sign_vote(Vote {
+                gen: 0,
+                ballot: Ballot::Propose(9),
+            })
+            .unwrap();
+        assert!(!consensus.contains_new_vote(&new_vote));
+        // println!("new_vote: {:#?}", new_vote);
+        // println!("our_vote: {:#?}", consensus.votes);
     }
 }
