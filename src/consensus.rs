@@ -59,6 +59,21 @@ impl<T: Proposition> Consensus<T> {
         self.secret_key.0
     }
 
+    pub fn build_super_majority_vote(&self, gen: Generation) -> Result<SignedVote<T>> {
+        let votes = self.votes.values().cloned().collect();
+        let proposals: BTreeMap<T, (NodeId, SignatureShare)> = self
+            .proposals(&votes)
+            .into_iter()
+            .map(|p| {
+                let sig = self.sign(&p)?;
+                Ok((p, (self.secret_key.0, sig)))
+            })
+            .collect::<Result<_>>()?;
+        let ballot = Ballot::SuperMajority { votes, proposals }.simplify();
+        let vote = Vote { gen, ballot };
+        self.sign_vote(vote)
+    }
+
     // handover: gen = gen
     // membership: gen = pending_gen
     /// Handles a signed vote
@@ -94,14 +109,8 @@ impl<T: Proposition> Consensus<T> {
 
         if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect()) {
             info!("[MBR] Detected super majority over super majorities");
-            // store a proof of what the network decided in our history so that we can onboard future procs.
-            let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
-
-            let vote = Vote { gen, ballot };
-            let signed_vote = self.sign_vote(vote)?;
-
             // return obtained super majority over super majority (aka consensus)
-            return Ok(VoteResponse::Decided(signed_vote));
+            return Ok(VoteResponse::Decided(self.build_super_majority_vote(gen)?));
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect()) {
@@ -117,9 +126,7 @@ impl<T: Proposition> Consensus<T> {
             }
 
             info!("[MBR] broadcasting super majority");
-            let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
-            let vote = Vote { gen, ballot };
-            let signed_vote = self.sign_vote(vote)?;
+            let signed_vote = self.build_super_majority_vote(gen)?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
@@ -168,6 +175,10 @@ impl<T: Proposition> Consensus<T> {
         }
 
         count
+    }
+
+    fn proposals(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeSet<T> {
+        BTreeSet::from_iter(votes.iter().flat_map(|v| v.proposals()))
     }
 
     fn is_split_vote(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
@@ -234,7 +245,7 @@ impl<T: Proposition> Consensus<T> {
                 }
                 Ok(())
             }
-            Ballot::SuperMajority(votes) => {
+            Ballot::SuperMajority { votes, proposals } => {
                 if !self.is_super_majority(
                     &votes
                         .iter()
@@ -243,6 +254,14 @@ impl<T: Proposition> Consensus<T> {
                         .collect(),
                 ) {
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
+                } else if vote.proposals() != BTreeSet::from_iter(proposals.keys().cloned()) {
+                    Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
+                } else if proposals
+                    .iter()
+                    .try_for_each(|(p, (id, sig))| self.verify_sig_share(&p, *id, sig))
+                    .is_err()
+                {
+                    Err(Error::InvalidElderSignature)
                 } else {
                     for child_vote in votes.iter() {
                         if child_vote.vote.gen != vote.gen {

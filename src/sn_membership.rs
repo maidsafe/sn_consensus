@@ -101,7 +101,10 @@ impl<T: Proposition> Membership<T> {
                 .for_each(|r| r.apply(&mut members));
 
             let supermajority_votes = match &signed_vote.vote.ballot {
-                Ballot::SuperMajority(votes) => votes,
+                Ballot::SuperMajority {
+                    votes,
+                    proposals: _,
+                } => votes, // TODO: we should probably be using the signed proposals here
                 _ => {
                     return Err(Error::InvalidVoteInHistory);
                 }

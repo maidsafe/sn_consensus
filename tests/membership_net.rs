@@ -3,10 +3,12 @@ use std::fs::File;
 use std::io::Write;
 use std::iter;
 
-use blsttc::SecretKeySet;
+use blsttc::{SecretKeySet, SignatureShare};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
-use sn_membership::{Ballot, Error, Generation, Membership, NodeId, Reconfig, SignedVote, Vote};
+use sn_membership::{
+    Ballot, Error, Generation, Membership, NodeId, Reconfig, Result, SignedVote, Vote,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
@@ -63,13 +65,34 @@ impl Net {
             }),
             false => {
                 let n_votes = rng.gen::<usize>() % self.procs.len().pow(2);
-                let random_votes = BTreeSet::from_iter(
+                let votes = BTreeSet::from_iter(
                     iter::repeat_with(|| self.gen_faulty_vote(recursion - 1, faulty, rng))
                         .take(n_votes),
                 );
                 match rng.gen() {
-                    true => Ballot::Merge(random_votes),
-                    false => Ballot::SuperMajority(random_votes),
+                    true => Ballot::Merge(votes),
+                    false => {
+                        let n_proposals = rng.gen::<usize>() % (self.procs.len() + 1);
+                        let proposals: BTreeMap<Reconfig<u8>, (NodeId, SignatureShare)> =
+                            std::iter::repeat_with(|| {
+                                let prop = match rng.gen() {
+                                    true => Reconfig::Join(rng.gen()),
+                                    false => Reconfig::Leave(rng.gen()),
+                                };
+                                let sig = self
+                                    .procs
+                                    .iter()
+                                    .choose(rng)
+                                    .unwrap()
+                                    .consensus
+                                    .sign(&prop)?;
+                                Ok((prop, (self.pick_id(rng), sig)))
+                            })
+                            .take(n_proposals)
+                            .collect::<Result<_>>()
+                            .unwrap();
+                        Ballot::SuperMajority { votes, proposals }
+                    }
                 }
             }
         }
@@ -117,7 +140,7 @@ impl Net {
         self.packets.get_mut(&source).map(VecDeque::pop_front);
     }
 
-    pub fn deliver_packet_from_source(&mut self, source: NodeId) -> Result<(), Error> {
+    pub fn deliver_packet_from_source(&mut self, source: NodeId) -> Result<()> {
         let packet = match self.packets.get_mut(&source).map(|ps| ps.pop_front()) {
             Some(Some(p)) => p,
             _ => return Ok(()), // nothing to do
@@ -193,7 +216,7 @@ impl Net {
         self.enqueue_packets(packets);
     }
 
-    pub fn drain_queued_packets(&mut self) -> Result<(), Error> {
+    pub fn drain_queued_packets(&mut self) -> Result<()> {
         while let Some(source) = self.packets.keys().next().cloned() {
             self.deliver_packet_from_source(source)?;
             self.purge_empty_queues();
@@ -221,7 +244,7 @@ impl Net {
         );
     }
 
-    pub fn generate_msc(&self, name: &str) -> Result<(), Error> {
+    pub fn generate_msc(&self, name: &str) -> Result<()> {
         // See: http://www.mcternan.me.uk/mscgen/
         let mut msc = String::from(
             "

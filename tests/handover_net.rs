@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::iter;
 
-use blsttc::SecretKeySet;
+use blsttc::{SecretKeySet, SignatureShare};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -84,13 +84,31 @@ impl Net {
             }),
             false => {
                 let n_votes = rng.gen::<usize>() % self.procs.len().pow(2);
-                let random_votes = BTreeSet::from_iter(
+                let votes = BTreeSet::from_iter(
                     iter::repeat_with(|| self.gen_faulty_vote(recursion - 1, faulty, rng))
                         .take(n_votes),
                 );
                 match rng.gen() {
-                    true => Ballot::Merge(random_votes),
-                    false => Ballot::SuperMajority(random_votes),
+                    true => Ballot::Merge(votes),
+                    false => {
+                        let n_proposals = rng.gen::<usize>() % (self.procs.len() + 1);
+                        let proposals: BTreeMap<DummyProposal, (NodeId, SignatureShare)> =
+                            std::iter::repeat_with(|| {
+                                let prop = DummyProposal(rng.gen());
+                                let sig = self
+                                    .procs
+                                    .iter()
+                                    .choose(rng)
+                                    .unwrap()
+                                    .consensus
+                                    .sign(&prop)?;
+                                Ok((prop, (self.pick_id(rng), sig)))
+                            })
+                            .take(n_proposals)
+                            .collect::<Result<_>>()
+                            .unwrap();
+                        Ballot::SuperMajority { votes, proposals }
+                    }
                 }
             }
         }
