@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.10.0](https://github.com/maidsafe/sn_membership/compare/v1.9.0...v1.10.0) (2022-02-09)
+
+
+### Features
+
+* aggregated signed decisions are now produced on decision ([fa34abd](https://github.com/maidsafe/sn_membership/commit/fa34abd728a237a2668a3387d7ac1ee2edfd6083))
+* include signed proposals in SuperMajority ballot ([55b2ff5](https://github.com/maidsafe/sn_membership/commit/55b2ff53fb660f929818702a51b4521d40526cd0))
+
 ## [1.9.0](https://github.com/maidsafe/sn_membership/compare/v1.8.1...v1.9.0) (2022-02-03)
 
 
