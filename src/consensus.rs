@@ -80,18 +80,24 @@ impl<T: Proposition> Consensus<T> {
         self.sign_vote(vote)
     }
 
-    pub fn contains_new_vote(&self, signed_vote: &SignedVote<T>) -> bool {
-        let our_votes: BTreeSet<&SignedVote<T>> = self
+    pub fn contains_new_proposal(&self, signed_vote: &SignedVote<T>) -> bool {
+        let our_votes: BTreeSet<T> = self
             .votes
             .iter()
             .map(|(_, v)| v.unpack_votes())
             .flatten()
+            .map(|v| v.proposals())
+            .flatten()
+            .map(|(_, p)| p)
             .collect();
+
         signed_vote
             .unpack_votes()
             .iter()
-            .any(|vote| !our_votes.contains(vote))
-    }
+            .map(|v| v.proposals())
+            .flatten()
+            .map(|(_, p)| p)
+            .any(|vote| !our_votes.contains(&vote))
     }
 
     // handover: gen = gen
@@ -104,9 +110,9 @@ impl<T: Proposition> Consensus<T> {
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
         if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())
-            && self.contains_new_vote(&signed_vote)
+            && self.contains_new_proposal(&signed_vote)
         {
-            info!("[MBR] Obtained new vote after having already reached termination, sending out broadcast for others to catch up.");
+            info!("[MBR] Obtained new proposal after having already reached termination, sending out broadcast for others to catch up.");
             let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
             let sm_over_sm_proof = self.sign_vote(Vote { gen, ballot })?;
             return Ok(VoteResponse::Broadcast(sm_over_sm_proof));
@@ -386,7 +392,7 @@ mod tests {
                 ballot: Ballot::Propose(44u8),
             })
             .unwrap();
-        assert!(consensus.contains_new_vote(&new_vote));
+        assert!(consensus.contains_new_proposal(&new_vote));
 
         let new_vote = consensus
             .sign_vote(Vote {
@@ -394,7 +400,7 @@ mod tests {
                 ballot: Ballot::Propose(2u8),
             })
             .unwrap();
-        assert!(!consensus.contains_new_vote(&new_vote));
+        assert!(!consensus.contains_new_proposal(&new_vote));
 
         let new_vote = consensus
             .sign_vote(Vote {
@@ -402,7 +408,7 @@ mod tests {
                 ballot: Ballot::Propose(9u8),
             })
             .unwrap();
-        assert!(!consensus.contains_new_vote(&new_vote));
+        assert!(!consensus.contains_new_proposal(&new_vote));
         // println!("new_vote: {:#?}", new_vote);
         // println!("our_vote: {:#?}", consensus.votes);
     }
