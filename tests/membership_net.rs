@@ -239,6 +239,7 @@ impl Net {
         self.enqueue_packets(
             self.procs[j]
                 .anti_entropy(dest_generation)
+                .unwrap()
                 .into_iter()
                 .map(|vote| Packet { source, dest, vote }),
         );

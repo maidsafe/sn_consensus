@@ -410,10 +410,7 @@ fn test_membership_interpreter_qc1() -> Result<()> {
     assert!(net.packets.is_empty());
 
     for p in net.procs.iter() {
-        assert!(p
-            .history
-            .iter()
-            .all(|(_, v)| v.vote.is_super_majority_ballot()));
+        assert_eq!(p.members(p.gen)?, net.procs[0].members(p.gen)?);
     }
     Ok(())
 }
@@ -474,11 +471,15 @@ fn test_membership_interpreter_qc3() {
     net.broadcast(p0, propose_vote);
 
     let q_actor = net.procs[2].id();
-    let anti_entropy_packets = net.procs[0].anti_entropy(0).into_iter().map(|vote| Packet {
-        source: p0,
-        dest: q_actor,
-        vote,
-    });
+    let anti_entropy_packets = net.procs[0]
+        .anti_entropy(0)
+        .unwrap()
+        .into_iter()
+        .map(|vote| Packet {
+            source: p0,
+            dest: q_actor,
+            vote,
+        });
 
     net.enqueue_packets(anti_entropy_packets);
     net.drain_queued_packets().unwrap();
@@ -698,7 +699,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 let dest = net.procs[q_idx.min(n - 1)].id();
                 let source = p.id();
                 let anti_entropy_packets =
-                    p.anti_entropy(gen)
+                    p.anti_entropy(gen)?
                         .into_iter()
                         .map(|vote| Packet { source, dest, vote });
                 net.enqueue_packets(anti_entropy_packets);

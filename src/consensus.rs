@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
+use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 use log::info;
 use serde::Serialize;
 
@@ -19,7 +19,10 @@ pub struct Consensus<T: Proposition> {
 pub enum VoteResponse<T: Proposition> {
     WaitingForMoreVotes,
     Broadcast(SignedVote<T>),
-    Decided(SignedVote<T>),
+    Decided {
+        votes: BTreeSet<SignedVote<T>>,
+        proposals: BTreeMap<T, Signature>,
+    },
 }
 
 impl<T: Proposition> Consensus<T> {
@@ -59,8 +62,11 @@ impl<T: Proposition> Consensus<T> {
         self.secret_key.0
     }
 
-    pub fn build_super_majority_vote(&self, gen: Generation) -> Result<SignedVote<T>> {
-        let votes = self.votes.values().cloned().collect();
+    pub fn build_super_majority_vote(
+        &self,
+        votes: BTreeSet<SignedVote<T>>,
+        gen: Generation,
+    ) -> Result<SignedVote<T>> {
         let proposals: BTreeMap<T, (NodeId, SignatureShare)> = self
             .proposals(&votes)
             .into_iter()
@@ -107,10 +113,14 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)));
         }
 
-        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect()) {
-            info!("[MBR] Detected super majority over super majorities");
-            // return obtained super majority over super majority (aka consensus)
-            return Ok(VoteResponse::Decided(self.build_super_majority_vote(gen)?));
+        if let Some(proposals) =
+            self.get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
+        {
+            info!("[MBR] Detected super majority over super majorities: {proposals:?}");
+            return Ok(VoteResponse::Decided {
+                votes: self.votes.values().cloned().collect(),
+                proposals,
+            });
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect()) {
@@ -126,7 +136,8 @@ impl<T: Proposition> Consensus<T> {
             }
 
             info!("[MBR] broadcasting super majority");
-            let signed_vote = self.build_super_majority_vote(gen)?;
+            let signed_vote =
+                self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
@@ -205,20 +216,48 @@ impl<T: Proposition> Consensus<T> {
         most_votes > self.elders.threshold()
     }
 
-    fn is_super_majority_over_super_majorities(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
-        let count_of_agreeing_super_majorities = self
-            .count_votes(&BTreeSet::from_iter(
-                votes
-                    .iter()
-                    .filter(|v| v.vote.is_super_majority_ballot())
-                    .cloned(),
-            ))
+    fn get_super_majority_over_super_majorities(
+        &self,
+        votes: &BTreeSet<SignedVote<T>>,
+    ) -> Result<Option<BTreeMap<T, Signature>>> {
+        let sm_votes = BTreeSet::from_iter(
+            votes
+                .iter()
+                .filter(|v| v.vote.is_super_majority_ballot())
+                .cloned(),
+        );
+        if let Some((props, count_of_sm)) = self
+            .count_votes(&sm_votes)
             .into_iter()
-            .map(|(_, count)| count)
-            .max()
-            .unwrap_or(0);
+            .max_by_key(|(_, c)| *c)
+        {
+            if count_of_sm > self.elders.threshold() {
+                let mut proposal_sigs: BTreeMap<T, BTreeSet<(u64, SignatureShare)>> =
+                    Default::default();
+                let proposals_from_each_supermajority = sm_votes
+                    .iter()
+                    .filter(|sm| sm.proposals() == props)
+                    .flat_map(|v| match &v.vote.ballot {
+                        Ballot::SuperMajority { proposals, .. } => proposals.clone(),
+                        _ => Default::default(),
+                    });
+                for (prop, (id, sig)) in proposals_from_each_supermajority {
+                    proposal_sigs
+                        .entry(prop)
+                        .or_default()
+                        .insert((id as u64, sig));
+                }
 
-        count_of_agreeing_super_majorities > self.elders.threshold()
+                return Ok(Some(
+                    proposal_sigs
+                        .into_iter()
+                        .map(|(prop, sigs)| Ok((prop, self.elders.combine_signatures(sigs)?)))
+                        .collect::<Result<_>>()?,
+                ));
+            }
+        }
+
+        Ok(None)
     }
 
     /// Validates a vote recursively all the way down to the proposition (T)
