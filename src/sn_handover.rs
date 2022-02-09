@@ -72,7 +72,7 @@ impl<T: Proposition> Handover<T> {
 
         match vote_response {
             VoteResponse::Broadcast(vote) => Ok(Some(vote)),
-            VoteResponse::Decided(_vote) => Ok(None),
+            VoteResponse::Decided { .. } => Ok(None),
             VoteResponse::WaitingForMoreVotes => Ok(None),
         }
     }
@@ -105,7 +105,7 @@ impl<T: Proposition> Handover<T> {
         signed_vote
             .proposals()
             .into_iter()
-            .try_for_each(|(_signer, prop)| self.validate_proposal(prop))?;
+            .try_for_each(|prop| self.validate_proposal(prop))?;
 
         self.consensus.validate_signed_vote(signed_vote)
     }

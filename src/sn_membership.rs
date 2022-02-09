@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeySet, SecretKeyShare};
+use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use core::fmt::Debug;
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,12 @@ const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
 
 #[derive(Debug)]
+pub struct HistoryEntry<T: Proposition> {
+    votes: BTreeSet<SignedVote<Reconfig<T>>>,
+    proposals: BTreeMap<Reconfig<T>, Signature>,
+}
+
+#[derive(Debug)]
 pub struct Membership<T: Proposition> {
     pub consensus: Consensus<Reconfig<T>>,
     // TODO: we need faulty elder detection
@@ -20,7 +26,7 @@ pub struct Membership<T: Proposition> {
     pub gen: Generation,
     pub pending_gen: Generation,
     pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>, // TODO: change to bootstrap members
-    pub history: BTreeMap<Generation, SignedVote<Reconfig<T>>>, // for onboarding new procs, the vote proving super majority
+    pub history: BTreeMap<Generation, HistoryEntry<T>>, // for onboarding new procs, the vote proving super majority
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -39,10 +45,10 @@ impl<T: Proposition> Debug for Reconfig<T> {
 }
 
 impl<T: Proposition> Reconfig<T> {
-    fn apply(self, members: &mut BTreeSet<T>) {
+    fn apply(&self, members: &mut BTreeSet<T>) {
         match self {
-            Reconfig::Join(p) => members.insert(p),
-            Reconfig::Leave(p) => members.remove(&p),
+            Reconfig::Join(p) => members.insert(p.clone()),
+            Reconfig::Leave(p) => members.remove(p),
         };
     }
 }
@@ -58,7 +64,7 @@ impl<T: Proposition> Membership<T> {
             gen: 0,
             pending_gen: 0,
             forced_reconfigs: Default::default(),
-            history: Default::default(),
+            history: BTreeMap::new(),
         }
     }
 
@@ -92,7 +98,7 @@ impl<T: Proposition> Membership<T> {
             return Ok(members);
         }
 
-        for (history_gen, signed_vote) in self.history.iter() {
+        for (history_gen, history_entry) in self.history.iter() {
             self.forced_reconfigs
                 .get(history_gen)
                 .cloned()
@@ -100,16 +106,9 @@ impl<T: Proposition> Membership<T> {
                 .into_iter()
                 .for_each(|r| r.apply(&mut members));
 
-            let supermajority_votes = match &signed_vote.vote.ballot {
-                Ballot::SuperMajority(votes) => votes,
-                _ => {
-                    return Err(Error::InvalidVoteInHistory);
-                }
-            };
-
-            self.resolve_votes(supermajority_votes)
-                .into_iter()
-                .for_each(|r| r.apply(&mut members));
+            for (reconfig, _sig) in history_entry.proposals.iter() {
+                reconfig.apply(&mut members);
+            }
 
             if history_gen == &gen {
                 return Ok(members);
@@ -129,30 +128,23 @@ impl<T: Proposition> Membership<T> {
         Ok(self.cast_vote(signed_vote))
     }
 
-    pub fn anti_entropy(&self, from_gen: Generation) -> Vec<SignedVote<Reconfig<T>>> {
+    pub fn anti_entropy(&self, from_gen: Generation) -> Result<Vec<SignedVote<Reconfig<T>>>> {
         info!("[MBR] anti-entropy from gen {}", from_gen);
 
-        let mut msgs = Vec::from_iter(
-            self.history
-                .iter() // history is a BTreeSet, .iter() is ordered by generation
-                .filter(|(gen, _)| **gen > from_gen)
-                .map(|(_, membership_proof)| membership_proof.clone()),
-        );
+        let mut msgs = self
+            .history
+            .iter() // history is a BTreeSet, .iter() is ordered by generation
+            .filter(|(gen, _)| **gen > from_gen)
+            .map(|(gen, history_entry)| {
+                self.consensus
+                    .build_super_majority_vote(history_entry.votes.clone(), *gen)
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         // include the current in-progres votes as well.
         msgs.extend(self.consensus.votes.values().cloned());
 
-        msgs
-    }
-
-    fn resolve_votes(&self, votes: &BTreeSet<SignedVote<Reconfig<T>>>) -> BTreeSet<Reconfig<T>> {
-        let (winning_reconfigs, _) = self
-            .count_votes(votes)
-            .into_iter()
-            .max_by_key(|(_, count)| *count)
-            .unwrap_or_default();
-
-        winning_reconfigs
+        Ok(msgs)
     }
 
     pub fn id(&self) -> NodeId {
@@ -175,8 +167,9 @@ impl<T: Proposition> Membership<T> {
                 self.pending_gen = vote.vote.gen;
                 Ok(Some(vote))
             }
-            VoteResponse::Decided(vote) => {
-                self.history.insert(self.pending_gen, vote);
+            VoteResponse::Decided { votes, proposals } => {
+                self.history
+                    .insert(self.pending_gen, HistoryEntry { votes, proposals });
                 self.gen = self.pending_gen;
                 // clear our pending votes
                 self.consensus.votes = Default::default();
@@ -219,7 +212,7 @@ impl<T: Proposition> Membership<T> {
         signed_vote
             .proposals()
             .into_iter()
-            .try_for_each(|(_signer, reconfig)| self.validate_reconfig(reconfig))?;
+            .try_for_each(|reconfig| self.validate_reconfig(reconfig))?;
 
         self.consensus.validate_signed_vote(signed_vote)
     }

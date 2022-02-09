@@ -47,14 +47,14 @@ pub enum Error {
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
     InvalidElderSignature,
+    #[error("SuperMajority signed a different set of proposals than the proposals in the vote")]
+    SuperMajorityProposalsDoesNotMatchVoteProposals,
+    #[error("Blsttc Error {0}")]
+    Blsttc(#[from] blsttc::error::Error),
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]
     Ed25519(#[from] crate::ed25519::Error),
-
-    #[cfg(feature = "blsttc")]
-    #[error("Blsttc Error {0}")]
-    Blsttc(#[from] crate::blsttc::Error),
 
     #[cfg(feature = "bad_crypto")]
     #[error("Failed Signature Verification")]

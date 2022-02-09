@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use blsttc::SignatureShare;
 use core::fmt::Debug;
@@ -14,7 +14,10 @@ impl<T: Ord + Clone + Debug + Serialize> Proposition for T {}
 pub enum Ballot<T: Proposition> {
     Propose(T),
     Merge(BTreeSet<SignedVote<T>>),
-    SuperMajority(BTreeSet<SignedVote<T>>),
+    SuperMajority {
+        votes: BTreeSet<SignedVote<T>>,
+        proposals: BTreeMap<T, (NodeId, SignatureShare)>,
+    },
 }
 
 impl<T: Proposition> Debug for Ballot<T> {
@@ -22,7 +25,12 @@ impl<T: Proposition> Debug for Ballot<T> {
         match self {
             Ballot::Propose(r) => write!(f, "P({:?})", r),
             Ballot::Merge(votes) => write!(f, "M{:?}", votes),
-            Ballot::SuperMajority(votes) => write!(f, "SM{:?}", votes),
+            Ballot::SuperMajority { votes, proposals } => write!(
+                f,
+                "SM{:?}-{:?}",
+                votes,
+                BTreeSet::from_iter(proposals.keys())
+            ),
         }
     }
 }
@@ -50,7 +58,10 @@ impl<T: Proposition> Ballot<T> {
         match &self {
             Ballot::Propose(_) => self.clone(), // already in simplest form
             Ballot::Merge(votes) => Ballot::Merge(simplify_votes(votes)),
-            Ballot::SuperMajority(votes) => Ballot::SuperMajority(simplify_votes(votes)),
+            Ballot::SuperMajority { votes, proposals } => Ballot::SuperMajority {
+                votes: simplify_votes(votes),
+                proposals: proposals.clone(),
+            },
         }
     }
 }
@@ -69,7 +80,17 @@ impl<T: Proposition> Debug for Vote<T> {
 
 impl<T: Proposition> Vote<T> {
     pub fn is_super_majority_ballot(&self) -> bool {
-        matches!(self.ballot, Ballot::SuperMajority(_))
+        matches!(self.ballot, Ballot::SuperMajority { .. })
+    }
+
+    pub fn proposals(&self) -> BTreeSet<T> {
+        match &self.ballot {
+            Ballot::Propose(proposal) => BTreeSet::from_iter([proposal.clone()]),
+            Ballot::Merge(votes) | Ballot::SuperMajority { votes, .. } => {
+                // TAI: use proposals instead of recursing on SuperMajority?
+                BTreeSet::from_iter(votes.iter().flat_map(SignedVote::proposals))
+            }
+        }
     }
 }
 
@@ -90,19 +111,14 @@ impl<T: Proposition> SignedVote<T> {
     pub fn unpack_votes(&self) -> BTreeSet<&Self> {
         match &self.vote.ballot {
             Ballot::Propose(_) => BTreeSet::from_iter([self]),
-            Ballot::Merge(votes) | Ballot::SuperMajority(votes) => BTreeSet::from_iter(
+            Ballot::Merge(votes) | Ballot::SuperMajority { votes, .. } => BTreeSet::from_iter(
                 std::iter::once(self).chain(votes.iter().flat_map(Self::unpack_votes)),
             ),
         }
     }
 
-    pub fn proposals(&self) -> BTreeSet<(NodeId, T)> {
-        match &self.vote.ballot {
-            Ballot::Propose(proposal) => BTreeSet::from_iter([(self.voter, proposal.clone())]),
-            Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
-                BTreeSet::from_iter(votes.iter().flat_map(Self::proposals))
-            }
-        }
+    pub fn proposals(&self) -> BTreeSet<T> {
+        self.vote.proposals()
     }
 
     pub fn supersedes(&self, signed_vote: &Self) -> bool {
@@ -111,7 +127,7 @@ impl<T: Proposition> SignedVote<T> {
         } else {
             match &self.vote.ballot {
                 Ballot::Propose(_) => false,
-                Ballot::Merge(votes) | Ballot::SuperMajority(votes) => {
+                Ballot::Merge(votes) | Ballot::SuperMajority { votes, .. } => {
                     votes.iter().any(|v| v.supersedes(signed_vote))
                 }
             }
