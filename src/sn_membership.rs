@@ -25,7 +25,7 @@ pub struct Membership<T: Proposition> {
     // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<Reconfig<T>>>>,
     pub gen: Generation,
     pub pending_gen: Generation,
-    pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>, // TODO: change to bootstrap members
+    pub forced_reconfigs: BTreeMap<Generation, BTreeMap<Reconfig<T>, Signature>>, // TODO: change to bootstrap members
     pub history: BTreeMap<Generation, HistoryEntry<T>>, // for onboarding new procs, the vote proving super majority
 }
 
@@ -45,9 +45,9 @@ impl<T: Proposition> Debug for Reconfig<T> {
 }
 
 impl<T: Proposition> Reconfig<T> {
-    fn apply(&self, members: &mut BTreeSet<T>) {
+    fn apply(&self, members: &mut BTreeMap<T, Signature>, sig: Signature) {
         match self {
-            Reconfig::Join(p) => members.insert(p.clone()),
+            Reconfig::Join(p) => members.insert(p.clone(), sig),
             Reconfig::Leave(p) => members.remove(p),
         };
     }
@@ -63,36 +63,36 @@ impl<T: Proposition> Membership<T> {
             consensus: Consensus::<Reconfig<T>>::from(secret_key, elders, n_elders),
             gen: 0,
             pending_gen: 0,
-            forced_reconfigs: Default::default(),
+            forced_reconfigs: BTreeMap::new(),
             history: BTreeMap::new(),
         }
     }
 
-    pub fn force_join(&mut self, actor: T) {
+    pub fn force_join(&mut self, actor: T, sig: Signature) {
         let forced_reconfigs = self.forced_reconfigs.entry(self.gen).or_default();
 
         // remove any leave reconfigs for this actor
         forced_reconfigs.remove(&Reconfig::Leave(actor.clone()));
-        forced_reconfigs.insert(Reconfig::Join(actor));
+        forced_reconfigs.insert(Reconfig::Join(actor), sig);
     }
 
-    pub fn force_leave(&mut self, actor: T) {
+    pub fn force_leave(&mut self, actor: T, sig: Signature) {
         let forced_reconfigs = self.forced_reconfigs.entry(self.gen).or_default();
 
         // remove any leave reconfigs for this actor
         forced_reconfigs.remove(&Reconfig::Join(actor.clone()));
-        forced_reconfigs.insert(Reconfig::Leave(actor));
+        forced_reconfigs.insert(Reconfig::Leave(actor), sig);
     }
 
-    pub fn members(&self, gen: Generation) -> Result<BTreeSet<T>> {
-        let mut members = BTreeSet::new();
+    pub fn members(&self, gen: Generation) -> Result<BTreeMap<T, Signature>> {
+        let mut members = BTreeMap::new();
 
         self.forced_reconfigs
             .get(&0) // forced reconfigs at generation 0
             .cloned()
             .unwrap_or_default()
             .into_iter()
-            .for_each(|r| r.apply(&mut members));
+            .for_each(|(r, sig)| r.apply(&mut members, sig));
 
         if gen == 0 {
             return Ok(members);
@@ -104,10 +104,10 @@ impl<T: Proposition> Membership<T> {
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
-                .for_each(|r| r.apply(&mut members));
+                .for_each(|(r, sig)| r.apply(&mut members, sig));
 
-            for (reconfig, _sig) in history_entry.proposals.iter() {
-                reconfig.apply(&mut members);
+            for (reconfig, sig) in history_entry.proposals.iter() {
+                reconfig.apply(&mut members, sig.clone());
             }
 
             if history_gen == &gen {
@@ -226,7 +226,7 @@ impl<T: Proposition> Membership<T> {
         let members = self.members(self.gen)?;
         match reconfig {
             Reconfig::Join(actor) => {
-                if members.contains(&actor) {
+                if members.contains_key(&actor) {
                     Err(Error::JoinRequestForExistingMember)
                 } else if members.len() >= SOFT_MAX_MEMBERS {
                     Err(Error::MembersAtCapacity)
@@ -235,7 +235,7 @@ impl<T: Proposition> Membership<T> {
                 }
             }
             Reconfig::Leave(actor) => {
-                if !members.contains(&actor) {
+                if !members.contains_key(&actor) {
                     Err(Error::LeaveRequestForNonMember)
                 } else {
                     Ok(())
