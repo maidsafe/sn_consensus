@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.11.0](https://github.com/maidsafe/sn_membership/compare/v1.10.1...v1.11.0) (2022-02-10)
+
+
+### Features
+
+* return VoteResponse from Membership::handle_signed_vote API ([4a9fb0d](https://github.com/maidsafe/sn_membership/commit/4a9fb0de4907ffff48c021b52c021b24c8be8781))
+
 ### [1.10.1](https://github.com/maidsafe/sn_membership/compare/v1.10.0...v1.10.1) (2022-02-10)
 
 ## [1.10.0](https://github.com/maidsafe/sn_membership/compare/v1.9.0...v1.10.0) (2022-02-09)
