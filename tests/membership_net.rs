@@ -7,7 +7,8 @@ use blsttc::{SecretKeySet, SignatureShare};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
 use sn_membership::{
-    Ballot, Error, Generation, Membership, NodeId, Reconfig, Result, SignedVote, Vote,
+    consensus::VoteResponse, Ballot, Error, Generation, Membership, NodeId, Reconfig, Result,
+    SignedVote, Vote,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,10 +164,10 @@ impl Net {
         let resp = dest_proc.handle_signed_vote(packet.vote);
         // println!("[NET] resp: {:?}", resp);
         match resp {
-            Ok(Some(vote)) => {
+            Ok(VoteResponse::Broadcast(vote)) => {
                 self.broadcast(packet.dest, vote);
             }
-            Ok(None) => {}
+            Ok(VoteResponse::Decided { .. } | VoteResponse::WaitingForMoreVotes) => {}
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
