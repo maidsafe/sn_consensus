@@ -14,8 +14,8 @@ pub type Generation = u64;
 
 #[derive(Debug)]
 pub struct HistoryEntry<T: Proposition> {
-    votes: BTreeSet<SignedVote<Reconfig<T>>>,
-    proposals: BTreeMap<Reconfig<T>, Signature>,
+    pub votes: BTreeSet<SignedVote<Reconfig<T>>>,
+    pub proposals: BTreeMap<Reconfig<T>, Signature>,
 }
 
 #[derive(Debug)]
