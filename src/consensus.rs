@@ -88,7 +88,6 @@ impl<T: Proposition> Consensus<T> {
             .flatten()
             .map(|v| v.proposals())
             .flatten()
-            .map(|(_, p)| p)
             .collect();
 
         signed_vote
@@ -96,7 +95,6 @@ impl<T: Proposition> Consensus<T> {
             .iter()
             .map(|v| v.proposals())
             .flatten()
-            .map(|(_, p)| p)
             .any(|vote| !our_votes.contains(&vote))
     }
 
@@ -109,13 +107,15 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: SignedVote<T>,
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
-        if self.is_super_majority_over_super_majorities(&self.votes.values().cloned().collect())
-            && self.contains_new_proposal(&signed_vote)
-        {
-            info!("[MBR] Obtained new proposal after having already reached termination, sending out broadcast for others to catch up.");
-            let ballot = Ballot::SuperMajority(self.votes.values().cloned().collect()).simplify();
-            let sm_over_sm_proof = self.sign_vote(Vote { gen, ballot })?;
-            return Ok(VoteResponse::Broadcast(sm_over_sm_proof));
+        if self.contains_new_proposal(&signed_vote) {
+            if let Some(_proposals) = self
+                .get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
+            {
+                info!("[MBR] Obtained new proposal after having already reached termination, sending out broadcast for others to catch up.");
+                let proof_sm_over_sm =
+                    self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
+                return Ok(VoteResponse::Broadcast(proof_sm_over_sm));
+            }
         }
 
         self.log_signed_vote(&signed_vote);
