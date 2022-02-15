@@ -80,22 +80,17 @@ impl<T: Proposition> Consensus<T> {
         self.sign_vote(vote)
     }
 
-    pub fn contains_new_proposal(&self, signed_vote: &SignedVote<T>) -> bool {
-        let our_votes: BTreeSet<T> = self
-            .votes
-            .iter()
-            .map(|(_, v)| v.unpack_votes())
-            .flatten()
-            .map(|v| v.proposals())
-            .flatten()
-            .collect();
-
-        signed_vote
-            .unpack_votes()
-            .iter()
-            .map(|v| v.proposals())
-            .flatten()
-            .any(|vote| !our_votes.contains(&vote))
+    pub fn contains_new_vote_from_voter(&self, signed_vote: &SignedVote<T>) -> bool {
+        if let Some(previous_vote_from_voter) = self.votes.get(&signed_vote.voter) {
+            if signed_vote == previous_vote_from_voter {
+                false
+            } else {
+                signed_vote.supersedes(previous_vote_from_voter)
+            }
+        } else {
+            // if we have no votes from this voter, then it is new
+            true
+        }
     }
 
     // handover: gen = gen
@@ -107,18 +102,32 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: SignedVote<T>,
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
-        if self.contains_new_proposal(&signed_vote) {
-            if let Some(_proposals) = self
-                .get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
-            {
-                info!("[MBR] Obtained new proposal after having already reached termination, sending out broadcast for others to catch up.");
-                let proof_sm_over_sm =
-                    self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
-                return Ok(VoteResponse::Broadcast(proof_sm_over_sm));
-            }
+        let they_terminated = self
+            .get_super_majority_over_super_majorities(&signed_vote.unpack_votes().into_iter().map(|v| v.to_owned()).collect())?
+            .is_some();
+        let we_terminated = self
+            .get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
+            .is_some();
+
+        if we_terminated && !they_terminated && self.contains_new_vote_from_voter(&signed_vote) {
+            info!("[MBR] Obtained new vote from {} after having already reached termination, sending out broadcast for others to catch up.", signed_vote.voter);
+            println!("[MBR] {} Obtained new vote from {} after having already reached termination, sending out broadcast for others to catch up. vote: {:?}", self.id(), signed_vote.voter, signed_vote);//
+            let proof_sm_over_sm =
+                self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
+            println!("BCAST {}: {:?}", self.id(), proof_sm_over_sm);
+            assert!(self
+                .get_super_majority_over_super_majorities(&proof_sm_over_sm.clone().unpack_votes().into_iter().map(|v| v.to_owned()).collect())?
+                .is_some());
+            return Ok(VoteResponse::Broadcast(proof_sm_over_sm));
         }
 
-        self.log_signed_vote(&signed_vote);
+        if we_terminated {
+            println!("INGORING VOTE BECAUSE TERMINATED {}", self.id());
+        }
+        // don't log new votes anymore if we terminated
+        if !we_terminated {
+            self.log_signed_vote(&signed_vote);
+        }
 
         if self.is_split_vote(&self.votes.values().cloned().collect()) {
             info!("[MBR] Detected split vote");
@@ -167,6 +176,7 @@ impl<T: Proposition> Consensus<T> {
             info!("[MBR] broadcasting super majority");
             let signed_vote =
                 self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
+            println!("SM BCAST {}: {:?}", self.id(), signed_vote);
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
@@ -351,6 +361,7 @@ impl<T: Proposition> Consensus<T> {
             && !signed_vote.supersedes(&self.votes[&signed_vote.voter])
             && !self.votes[&signed_vote.voter].supersedes(signed_vote)
         {
+            println!("ERR {}: {:?} \n\n old vote: {:?}", self.id(), signed_vote, self.votes.get(&signed_vote.voter));
             Err(Error::ExistingVoteIncompatibleWithNewVote)
         } else {
             Ok(())
@@ -365,7 +376,7 @@ mod tests {
     use rand::{prelude::StdRng, SeedableRng};
 
     #[test]
-    fn test_contains_new_vote() {
+    fn contains_new_vote_from_voter() {
         let mut rng = StdRng::from_seed([0u8; 32]);
         let elders_sk = SecretKeySet::random(10, &mut rng);
         let mut consensus = Consensus::from(
@@ -386,30 +397,39 @@ mod tests {
             )
         }));
 
-        let new_vote = consensus
-            .sign_vote(Vote {
-                gen: 0,
-                ballot: Ballot::Propose(44u8),
-            })
-            .unwrap();
-        assert!(consensus.contains_new_proposal(&new_vote));
-
+        // try existing vote
         let new_vote = consensus
             .sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(2u8),
             })
             .unwrap();
-        assert!(!consensus.contains_new_proposal(&new_vote));
+        println!("new_vote: {:#?}", new_vote);
+        println!("our_vote: {:#?}", consensus.votes);
+        assert!(!consensus.contains_new_vote_from_voter(&new_vote));
 
+        // try merge vote superseding existing vote
         let new_vote = consensus
             .sign_vote(Vote {
                 gen: 0,
-                ballot: Ballot::Propose(9u8),
+                ballot: Ballot::Merge(BTreeSet::from_iter(
+                    consensus.votes.iter().map(|(_, v)| v.clone()),
+                )),
             })
             .unwrap();
-        assert!(!consensus.contains_new_proposal(&new_vote));
-        // println!("new_vote: {:#?}", new_vote);
-        // println!("our_vote: {:#?}", consensus.votes);
+        println!("new_vote: {:#?}", new_vote);
+        println!("our_vote: {:#?}", consensus.votes);
+        assert!(consensus.contains_new_vote_from_voter(&new_vote));
+
+        // try bad vote not superseding existing
+        let new_vote = consensus
+            .sign_vote(Vote {
+                gen: 0,
+                ballot: Ballot::Propose(44u8),
+            })
+            .unwrap();
+        println!("new_vote: {:#?}", new_vote);
+        println!("our_vote: {:#?}", consensus.votes);
+        assert!(!consensus.contains_new_vote_from_voter(&new_vote));
     }
 }
