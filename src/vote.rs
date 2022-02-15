@@ -133,4 +133,8 @@ impl<T: Proposition> SignedVote<T> {
             }
         }
     }
+
+    pub fn strict_supersedes(&self, signed_vote: &Self) -> bool {
+        self != signed_vote && self.supersedes(signed_vote)
+    }
 }

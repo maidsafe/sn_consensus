@@ -82,11 +82,7 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn is_new_vote_from_voter(&self, signed_vote: &SignedVote<T>) -> bool {
         if let Some(previous_vote_from_voter) = self.votes.get(&signed_vote.voter) {
-            if signed_vote == previous_vote_from_voter {
-                false
-            } else {
-                signed_vote.supersedes(previous_vote_from_voter)
-            }
+            signed_vote.strict_supersedes(previous_vote_from_voter)
         } else {
             // if we have no votes from this voter, then it is new
             true
