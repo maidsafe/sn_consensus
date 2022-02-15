@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.12.0](https://github.com/maidsafe/sn_membership/compare/v1.11.0...v1.12.0) (2022-02-15)
+
+
+### Features
+
+* check for smsm before splits ([ffa97f5](https://github.com/maidsafe/sn_membership/commit/ffa97f51ae6923058156a7b7ceca7ea543c6d7c3))
+* final broadcast when receiving new votes after termination ([0d502f9](https://github.com/maidsafe/sn_membership/commit/0d502f9b1b17f9c97131ec551033c5345708389f))
+* strict supersedes func ([e0f2265](https://github.com/maidsafe/sn_membership/commit/e0f2265d225ee654ba3b456ec47c14075aa5c53a))
+
+
+### Bug Fixes
+
+* adapt catch up broadcast to sig shares ([edb0aeb](https://github.com/maidsafe/sn_membership/commit/edb0aeb8ec59da44120de20e7651070891c03a74))
+* infinite loop issue, add one faulty node test ([ef9c24e](https://github.com/maidsafe/sn_membership/commit/ef9c24ec92772de9f9e0637792bdad192b29867b))
+* swich to new votes from voter instead of new props, fix conflicting votes issues ([7c33f45](https://github.com/maidsafe/sn_membership/commit/7c33f4586be7a2a52257c5761d0c1712d4a2be06))
+* upgrade test to keyshares ([a092f49](https://github.com/maidsafe/sn_membership/commit/a092f49861833e07f0406f6508977d843c6500de))
+
 ## [1.11.0](https://github.com/maidsafe/sn_membership/compare/v1.10.1...v1.11.0) (2022-02-10)
 
 
