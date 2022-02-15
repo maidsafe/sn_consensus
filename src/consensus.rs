@@ -123,6 +123,16 @@ impl<T: Proposition> Consensus<T> {
             self.log_signed_vote(&signed_vote);
         }
 
+        if let Some(proposals) =
+            self.get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
+        {
+            info!("[MBR] Detected super majority over super majorities: {proposals:?}");
+            return Ok(VoteResponse::Decided {
+                votes: self.votes.values().cloned().collect(),
+                proposals,
+            });
+        }
+
         if self.is_split_vote(&self.votes.values().cloned().collect()) {
             info!("[MBR] Detected split vote");
             let merge_vote = Vote {
@@ -143,16 +153,6 @@ impl<T: Proposition> Consensus<T> {
 
             info!("[MBR] Either we haven't voted or our previous vote didn't fully overlap, merge them.");
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)));
-        }
-
-        if let Some(proposals) =
-            self.get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
-        {
-            info!("[MBR] Detected super majority over super majorities: {proposals:?}");
-            return Ok(VoteResponse::Decided {
-                votes: self.votes.values().cloned().collect(),
-                proposals,
-            });
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect()) {
