@@ -115,15 +115,6 @@ impl<T: Proposition> Consensus<T> {
             info!("[MBR] Obtained new vote from {} after having already reached termination, sending out broadcast for others to catch up.", signed_vote.voter);
             let proof_sm_over_sm =
                 self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
-            assert!(self
-                .get_super_majority_over_super_majorities(
-                    &proof_sm_over_sm
-                        .unpack_votes()
-                        .into_iter()
-                        .map(|v| v.to_owned())
-                        .collect()
-                )?
-                .is_some());
             return Ok(VoteResponse::Broadcast(proof_sm_over_sm));
         }
 
