@@ -5,12 +5,11 @@ mod handover_net;
 use handover_net::{DummyProposal, Net, Packet};
 use sn_membership::{Ballot, Error, Handover, Result, SignedVote, Vote};
 
-#[ignore] // TODO enable after we did fault detection
 #[test]
 fn test_handover_one_faulty_node_and_many_packet_drops() {
     // make network of 5 elders with one segregated (his network is really bad)
     let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(4, 5, &mut rng);
+    let mut net = Net::with_procs(3, 5, &mut rng);
     let segregated_elder = net.procs.pop().unwrap();
 
     // p0 is a bad node and the network is really bad for the segregated elder so he's not connected yet
@@ -37,6 +36,10 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
         vote: bad_vote,
     }]);
     net.procs.push(segregated_elder);
+    net.drain_queued_packets().unwrap();
+
+    net.generate_msc("handover_one_faulty_node_and_many_packet_drops.msc")
+        .unwrap();
 
     // since everyone agreed already they can't change their votes
     // they have reached consensus
@@ -223,7 +226,7 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
         net.drain_queued_packets()?;
 
         // generate msc file
-        net.generate_msc(&format!("round_robin_split_vote_{}.msc", nprocs))?;
+        net.generate_msc(&format!("handover_round_robin_split_vote_{}.msc", nprocs))?;
 
         // make sure they all reach the same conclusion
         let max_proposed_value = nprocs - 1;
@@ -254,7 +257,7 @@ fn test_handover_simple_proposal() {
     net.drain_queued_packets().unwrap();
     assert!(net.packets.is_empty());
 
-    net.generate_msc("simple_join.msc").unwrap();
+    net.generate_msc("handover_simple_join.msc").unwrap();
 
     // make sure they all reach the same conclusion
     let first_voters_value = net.consensus_value(0);
