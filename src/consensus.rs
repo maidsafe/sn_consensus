@@ -181,7 +181,7 @@ impl<T: Proposition> Consensus<T> {
         if !self.votes.contains_key(&self.id()) {
             let signed_vote = self.sign_vote(Vote {
                 gen,
-                ballot: signed_vote.vote.ballot,
+                ballot: Ballot::Merge(BTreeSet::from_iter([signed_vote])),
                 faults: self.faults(),
             })?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
