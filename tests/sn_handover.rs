@@ -2,7 +2,7 @@ use blsttc::{SecretKeySet, SecretKeyShare};
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 mod handover_net;
-use handover_net::{DummyProposal, Net, Packet};
+use handover_net::{Net, Packet};
 use sn_membership::{Ballot, Error, Handover, Result, SignedVote, Vote};
 
 #[test]
@@ -17,7 +17,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     // - 1 for the elders to see
     // - 4 for the segregated elder
     let p0 = net.procs[0].id();
-    let vote = net.procs[0].propose(DummyProposal(1)).unwrap();
+    let vote = net.procs[0].propose(1).unwrap();
     net.broadcast(p0, vote);
     net.drain_queued_packets().unwrap();
     assert!(net.packets.is_empty());
@@ -26,7 +26,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     let bad_vote = net.procs[0]
         .sign_vote(Vote {
             gen: 0,
-            ballot: Ballot::Propose(DummyProposal(4)),
+            ballot: Ballot::Propose(4),
             faults: Default::default(),
         })
         .unwrap();
@@ -45,12 +45,9 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     // they have reached consensus
     let first_voters_value = net.consensus_value(0);
     for i in 0..4 {
-        println!(
-            "[TEST] checking voter {}'s consensus value: {:?}",
-            i,
-            net.consensus_value(i)
-        );
-        assert_eq!(net.consensus_value(i), first_voters_value);
+        let decision = net.consensus_value(i);
+        println!("[TEST] checking voter {i}'s consensus value: {decision:?}");
+        assert_eq!(decision, first_voters_value);
     }
 
     // segregated_elder could be stuck because he can't accept the SM because it's poisoned
@@ -114,7 +111,7 @@ fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
 
     // one elder votes with a different generation
     net.procs[1].gen = 401;
-    let vote = net.procs[1].propose(DummyProposal(rng.gen())).unwrap();
+    let vote = net.procs[1].propose(rng.gen()).unwrap();
 
     // make sure the other elder rejects that vote
     assert!(matches!(
@@ -158,7 +155,7 @@ fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
 fn test_handover_split_vote() -> eyre::Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
-        println!("[TEST] testing with {} elders", nprocs);
+        println!("[TEST] testing with {nprocs} elders");
 
         // make network of nprocs elders
         let mut net = Net::with_procs((nprocs * 2 + 2) / 3, nprocs, &mut rng);
@@ -166,7 +163,7 @@ fn test_handover_split_vote() -> eyre::Result<()> {
         // make each elder propose a different thing
         for i in 0..net.procs.len() {
             let a_i = net.procs[i].id();
-            let vote = net.procs[i].propose(DummyProposal(i as u64))?;
+            let vote = net.procs[i].propose(i as u8)?;
             net.broadcast(a_i, vote);
         }
         net.drain_queued_packets()?;
@@ -182,12 +179,9 @@ fn test_handover_split_vote() -> eyre::Result<()> {
         // make sure they all reach the same conclusion
         let first_voters_value = net.consensus_value(0);
         for i in 0..nprocs {
-            println!(
-                "[TEST] checking elder {}'s consensus value: {:?}",
-                i,
-                net.consensus_value(i)
-            );
-            assert_eq!(net.consensus_value(i), first_voters_value);
+            let decision = net.consensus_value(i);
+            println!("[TEST] checking elder {i}'s consensus value: {decision:?}");
+            assert_eq!(decision, first_voters_value);
         }
     }
 
@@ -198,7 +192,7 @@ fn test_handover_split_vote() -> eyre::Result<()> {
 fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
-        println!("[TEST] testing with {} elders", nprocs);
+        println!("[TEST] testing with {nprocs} elders");
 
         // make network of nprocs elders
         let mut net = Net::with_procs(((nprocs + 1) * 2 / 3).min(nprocs - 1), nprocs, &mut rng);
@@ -206,7 +200,7 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
         // make each elder propose a different thing
         for i in 0..net.procs.len() {
             let a_i = net.procs[i].id();
-            let vote = net.procs[i].propose(DummyProposal(i as u64))?;
+            let vote = net.procs[i].propose(i as u8)?;
             net.broadcast(a_i, vote);
         }
 
@@ -230,13 +224,10 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
 
         // make sure they all reach the same conclusion
         let max_proposed_value = nprocs - 1;
-        let expected_consensus_value = Some(DummyProposal(max_proposed_value as u64));
+        let expected_consensus_value = Some(max_proposed_value as u8);
         for i in 0..nprocs {
-            println!(
-                "[TEST] checking elder {}'s consensus value: {:?}",
-                i,
-                net.consensus_value(i)
-            );
+            let decision = net.consensus_value(i);
+            println!("[TEST] checking elder {i}'s consensus value: {decision:?}");
             assert_eq!(net.consensus_value(i), expected_consensus_value);
         }
     }
@@ -252,7 +243,7 @@ fn test_handover_simple_proposal() {
 
     // release a proposal
     let p0 = net.procs[0].id();
-    let vote = net.procs[0].propose(DummyProposal(42)).unwrap();
+    let vote = net.procs[0].propose(42).unwrap();
     net.broadcast(p0, vote);
     net.drain_queued_packets().unwrap();
     assert!(net.packets.is_empty());
@@ -262,11 +253,8 @@ fn test_handover_simple_proposal() {
     // make sure they all reach the same conclusion
     let first_voters_value = net.consensus_value(0);
     for i in 0..n {
-        println!(
-            "[TEST] checking voter {}'s consensus value: {:?}",
-            i,
-            net.consensus_value(i)
-        );
-        assert_eq!(net.consensus_value(i), first_voters_value);
+        let decision = net.consensus_value(i);
+        println!("[TEST] checking voter {i}'s consensus value: {decision:?}");
+        assert_eq!(decision, first_voters_value);
     }
 }
