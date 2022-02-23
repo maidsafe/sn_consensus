@@ -44,19 +44,13 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     // since everyone agreed already they can't change their votes
     // they have reached consensus
     let first_voters_value = net.consensus_value(0);
-    for i in 0..4 {
+    for i in 0..5 {
         let decision = net.consensus_value(i);
         println!("[TEST] checking voter {i}'s consensus value: {decision:?}");
         assert_eq!(decision, first_voters_value);
     }
 
-    // segregated_elder could be stuck because he can't accept the SM because it's poisoned
-    // check that segregated_elder was still able to reach consensus
-    println!(
-        "[TEST] checking voter 4's consensus value: {:?}",
-        net.consensus_value(4)
-    );
-    assert_eq!(net.consensus_value(4), first_voters_value);
+    assert_eq!(first_voters_value, Some(1));
 }
 
 #[test]
