@@ -51,6 +51,8 @@ pub enum Error {
     SuperMajorityProposalsDoesNotMatchVoteProposals,
     #[error("Blsttc Error {0}")]
     Blsttc(#[from] blsttc::error::Error),
+    #[error("Client attempted a faulty proposal")]
+    AttemptedFaultyProposal,
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]

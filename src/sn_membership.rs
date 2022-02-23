@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, NodeId, Result};
+use crate::{Decision, Error, Fault, NodeId, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
@@ -16,6 +16,7 @@ pub type Generation = u64;
 pub struct HistoryEntry<T: Proposition> {
     pub votes: BTreeSet<SignedVote<Reconfig<T>>>,
     pub proposals: BTreeMap<Reconfig<T>, Signature>,
+    pub faults: BTreeSet<Fault<Reconfig<T>>>,
 }
 
 #[derive(Debug)]
@@ -122,9 +123,13 @@ impl<T: Proposition> Membership<T> {
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
+            faults: self.consensus.faults(),
         };
         let signed_vote = self.sign_vote(vote)?;
         self.validate_signed_vote(&signed_vote)?;
+        self.consensus
+            .detect_byzantine_voters(&signed_vote)
+            .map_err(|_| Error::AttemptedFaultyProposal)?;
         Ok(self.cast_vote(signed_vote))
     }
 
@@ -166,12 +171,17 @@ impl<T: Proposition> Membership<T> {
             VoteResponse::Broadcast(vote) => {
                 self.pending_gen = vote.vote.gen;
             }
-            VoteResponse::Decided { votes, proposals } => {
+            VoteResponse::Decided(Decision {
+                votes,
+                proposals,
+                faults,
+            }) => {
                 self.history.insert(
                     self.pending_gen,
                     HistoryEntry {
                         votes: votes.clone(),
                         proposals: proposals.clone(),
+                        faults: faults.clone(),
                     },
                 );
                 self.gen = self.pending_gen;

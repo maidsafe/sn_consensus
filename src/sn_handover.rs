@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeySet, SecretKeyShare};
+use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use core::fmt::Debug;
 use log::info;
 
@@ -33,9 +33,13 @@ impl<T: Proposition> Handover<T> {
         let vote = Vote {
             gen: self.gen,
             ballot: Ballot::Propose(proposal),
+            faults: self.consensus.faults(),
         };
         let signed_vote = self.sign_vote(vote)?;
         self.validate_signed_vote(&signed_vote)?;
+        self.consensus
+            .detect_byzantine_voters(&signed_vote)
+            .map_err(|_| Error::AttemptedFaultyProposal)?;
         Ok(self.cast_vote(signed_vote))
     }
 
@@ -46,16 +50,10 @@ impl<T: Proposition> Handover<T> {
         self.consensus.votes.values().cloned().collect()
     }
 
-    pub fn resolve_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> Option<T> {
-        let (winning_proposals, _) = self
-            .count_votes(votes)
-            .into_iter()
-            .max_by_key(|(_, count)| *count)
-            .unwrap_or_default();
-
+    pub fn resolve_votes<'a>(&self, proposals: &'a BTreeMap<T, Signature>) -> Option<&'a T> {
         // we need to choose one deterministically
         // proposals are comparable because they impl Ord so we arbitrarily pick the max
-        winning_proposals.into_iter().max()
+        proposals.keys().max()
     }
 
     pub fn id(&self) -> NodeId {

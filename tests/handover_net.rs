@@ -6,25 +6,20 @@ use std::iter;
 use blsttc::{SecretKeySet, SignatureShare};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 
 use sn_membership::{Ballot, Error, Handover, NodeId, Result, SignedVote, Vote};
-
-// dummy proposal for tests
-#[derive(Clone, Debug, Eq, PartialOrd, Ord, PartialEq, Serialize, Deserialize)]
-pub struct DummyProposal(pub u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
     pub source: NodeId,
     pub dest: NodeId,
-    pub vote: SignedVote<DummyProposal>,
+    pub vote: SignedVote<u8>,
 }
 
 #[derive(Default, Debug)]
 pub struct Net {
-    pub procs: Vec<Handover<DummyProposal>>,
-    pub proposals: BTreeSet<DummyProposal>,
+    pub procs: Vec<Handover<u8>>,
+    pub proposals: BTreeSet<u8>,
     pub packets: BTreeMap<NodeId, VecDeque<Packet>>,
     pub delivered_packets: Vec<Packet>,
 }
@@ -48,19 +43,16 @@ impl Net {
     }
 
     #[allow(dead_code)]
-    pub fn proc(&self, id: NodeId) -> Option<&Handover<DummyProposal>> {
+    pub fn proc(&self, id: NodeId) -> Option<&Handover<u8>> {
         self.procs.iter().find(|p| p.id() == id)
     }
 
-    pub fn consensus_value(&self, proc: usize) -> Option<DummyProposal> {
-        let all_votes = self.procs[proc]
+    pub fn consensus_value(&self, proc: usize) -> Option<u8> {
+        self.procs[proc]
             .consensus
-            .votes
-            .iter()
-            .map(|(_voter, vote)| vote)
-            .cloned()
-            .collect();
-        self.procs[proc].resolve_votes(&all_votes)
+            .decision
+            .as_ref()
+            .and_then(|decision| self.procs[proc].resolve_votes(&decision.proposals).cloned())
     }
 
     /// Pick a random public key from the set of procs
@@ -76,12 +68,9 @@ impl Net {
         recursion: u8,
         faulty: &BTreeSet<NodeId>,
         rng: &mut StdRng,
-    ) -> Ballot<DummyProposal> {
+    ) -> Ballot<u8> {
         match rng.gen() || recursion == 0 {
-            true => Ballot::Propose(match rng.gen() {
-                true => DummyProposal(1),
-                false => DummyProposal(0),
-            }),
+            true => Ballot::Propose(rng.gen()),
             false => {
                 let n_votes = rng.gen::<usize>() % self.procs.len().pow(2);
                 let votes = BTreeSet::from_iter(
@@ -92,9 +81,9 @@ impl Net {
                     true => Ballot::Merge(votes),
                     false => {
                         let n_proposals = rng.gen::<usize>() % (self.procs.len() + 1);
-                        let proposals: BTreeMap<DummyProposal, (NodeId, SignatureShare)> =
+                        let proposals: BTreeMap<u8, (NodeId, SignatureShare)> =
                             std::iter::repeat_with(|| {
-                                let prop = DummyProposal(rng.gen());
+                                let prop = rng.gen();
                                 let sig = self
                                     .procs
                                     .iter()
@@ -121,7 +110,7 @@ impl Net {
         recursion: u8,
         faulty_nodes: &BTreeSet<NodeId>,
         rng: &mut StdRng,
-    ) -> SignedVote<DummyProposal> {
+    ) -> SignedVote<u8> {
         let faulty_node = faulty_nodes
             .iter()
             .choose(rng)
@@ -131,6 +120,7 @@ impl Net {
         let vote = Vote {
             gen: rng.gen::<u64>() % 7,
             ballot: self.gen_ballot(recursion, faulty_nodes, rng),
+            faults: Default::default(),
         };
 
         SignedVote {
@@ -207,7 +197,7 @@ impl Net {
         }
     }
 
-    pub fn broadcast(&mut self, source: NodeId, vote: SignedVote<DummyProposal>) {
+    pub fn broadcast(&mut self, source: NodeId, vote: SignedVote<u8>) {
         let packets = Vec::from_iter(self.procs.iter().map(Handover::id).map(|dest| Packet {
             source,
             dest,
