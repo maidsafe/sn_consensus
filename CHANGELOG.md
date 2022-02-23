@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.13.0](https://github.com/maidsafe/sn_membership/compare/v1.12.0...v1.13.0) (2022-02-23)
+
+
+### Features
+
+* **fault-detection:** introduce fault detection ([4b8108c](https://github.com/maidsafe/sn_membership/commit/4b8108c2a1ef0bb44a722fcac15ec4c2a7f336fa))
+
+
+### Bug Fixes
+
+* **fault_detection:** accept network decisions even when faulty ([ec0ffb4](https://github.com/maidsafe/sn_membership/commit/ec0ffb4b0d4ad2ef32feaf13d719312281ee856f))
+* **tests:** drain_queued_packets after segregated elder comes online ([bbc9670](https://github.com/maidsafe/sn_membership/commit/bbc967071a691058b3def32c9b17c2a5a7c5fc28))
+* **tests:** ensure that one_faulty_node test is deciding on `1` ([660eff9](https://github.com/maidsafe/sn_membership/commit/660eff96a1608b2814bcc9dac233073d4f32e232))
+* when adopting a vote, use merge rather than copy proposal ([02cea8e](https://github.com/maidsafe/sn_membership/commit/02cea8ed3d683236d91a9875a0fb329f80ab295d))
+
 ## [1.12.0](https://github.com/maidsafe/sn_membership/compare/v1.11.0...v1.12.0) (2022-02-15)
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "sn_membership"
-version = "1.12.0"
+version = "1.13.0"
 description = "Safe Network Membership: Enables nodes to dynamically join and leave a section"
 authors = [ "David Rusu <davidrusu.me@gmail.com>" ]
 license = "MIT OR BSD-3-Clause"
