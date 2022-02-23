@@ -35,7 +35,7 @@ impl<T: Proposition> Debug for Ballot<T> {
     }
 }
 
-fn simplify_votes<T: Proposition>(
+pub fn simplify_votes<T: Proposition>(
     signed_votes: &BTreeSet<SignedVote<T>>,
 ) -> BTreeSet<SignedVote<T>> {
     let mut simpler_votes = BTreeSet::new();

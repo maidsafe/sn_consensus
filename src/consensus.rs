@@ -15,16 +15,20 @@ pub struct Consensus<T: Proposition> {
     pub secret_key: (NodeId, SecretKeyShare),
     pub votes: BTreeMap<NodeId, SignedVote<T>>,
     pub faults: BTreeMap<NodeId, Fault<T>>,
+    pub decision: Option<Decision<T>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Decision<T: Proposition> {
+    pub votes: BTreeSet<SignedVote<T>>,
+    pub proposals: BTreeMap<T, Signature>,
+    pub faults: BTreeSet<Fault<T>>,
 }
 
 pub enum VoteResponse<T: Proposition> {
     WaitingForMoreVotes,
     Broadcast(SignedVote<T>),
-    Decided {
-        votes: BTreeSet<SignedVote<T>>,
-        proposals: BTreeMap<T, Signature>,
-        faults: BTreeSet<Fault<T>>,
-    },
+    Decided(Decision<T>),
 }
 
 impl<T: Proposition> Consensus<T> {
@@ -39,6 +43,7 @@ impl<T: Proposition> Consensus<T> {
             secret_key,
             votes: Default::default(),
             faults: Default::default(),
+            decision: None,
         }
     }
 
@@ -93,48 +98,72 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: SignedVote<T>,
         gen: Generation,
     ) -> Result<VoteResponse<T>> {
-        let they_terminated = self
-            .get_super_majority_over_super_majorities(
-                &signed_vote
-                    .unpack_votes()
-                    .into_iter()
-                    .map(|v| v.to_owned())
-                    .collect(),
-            )?
-            .is_some();
-        let we_terminated = self
-            .get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
-            .is_some();
-
-        if we_terminated && !they_terminated && self.is_new_vote_from_voter(&signed_vote) {
-            info!("[MBR] Obtained new vote from {} after having already reached termination, sending out broadcast for others to catch up.", signed_vote.voter);
-            let proof_sm_over_sm =
-                self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
-            return Ok(VoteResponse::Broadcast(proof_sm_over_sm));
-        }
-
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
+            println!("[MBR-{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
 
-        // don't log new votes anymore if we terminated
-        if !we_terminated {
-            self.log_signed_vote(&signed_vote);
+        let their_decision = self.get_super_majority_over_super_majorities(
+            &signed_vote.unpack_votes().into_iter().cloned().collect(),
+        )?;
+
+        if let Some(decision) = self.decision.clone() {
+            if their_decision.is_none() && self.is_new_vote_from_voter(&signed_vote) {
+                println!(
+                    "[MBR-{}] We've already terminated, responding with decision",
+                    self.id()
+                );
+                return Ok(VoteResponse::Broadcast(
+                    self.build_super_majority_vote(decision.votes, gen)?,
+                ));
+            }
         }
+
+        if let Some(proposals) = their_decision {
+            // This case is here to handle situations where this node has recieved
+            // a faulty vote previously that is preventing it from accepting a network
+            // decision using the sm_over_sm logic below.
+            println!(
+                "[MBR-{}] They terminated but we haven't yet, accepting decision",
+                self.id()
+            );
+            let votes = crate::vote::simplify_votes(
+                &self
+                    .votes
+                    .values()
+                    .chain(signed_vote.unpack_votes())
+                    .cloned()
+                    .collect(),
+            );
+            let decision = Decision {
+                votes,
+                proposals,
+                faults: self.faults(),
+            };
+            self.decision = Some(decision.clone());
+            return Ok(VoteResponse::Decided(decision));
+        }
+
+        self.log_signed_vote(&signed_vote);
 
         if let Some(proposals) =
             self.get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
         {
-            info!("[MBR] Detected super majority over super majorities: {proposals:?}");
-            return Ok(VoteResponse::Decided {
+            info!(
+                "[MBR-{}] Detected super majority over super majorities: {proposals:?}",
+                self.id()
+            );
+            let decision = Decision {
                 votes: self.votes.values().cloned().collect(),
                 proposals,
                 faults: self.faults(),
-            });
+            };
+            self.decision = Some(decision.clone());
+            return Ok(VoteResponse::Decided(decision));
         }
 
         if self.is_split_vote(&self.votes.values().cloned().collect()) {
-            info!("[MBR] Detected split vote");
+            info!("[MBR-{}] Detected split vote", self.id());
             let merge_vote = Vote {
                 gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
@@ -149,28 +178,31 @@ impl<T: Proposition> Consensus<T> {
                 if proposals_we_voted_for == proposals_we_would_vote_for
                     && our_vote.vote.faults.len() == signed_merge_vote.vote.faults.len()
                 {
-                    info!("[MBR] This vote didn't add new information, waiting for more votes...");
+                    info!(
+                        "[MBR-{}] This vote didn't add new information, waiting for more votes...",
+                        self.id()
+                    );
                     return Ok(VoteResponse::WaitingForMoreVotes);
                 }
             }
 
-            info!("[MBR] Either we haven't voted or our previous vote didn't fully overlap, merge them.");
+            info!("[MBR-{}] Either we haven't voted or our previous vote didn't fully overlap, merge them.", self.id());
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)));
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect()) {
-            info!("[MBR] Detected super majority");
+            info!("[MBR-{}] Detected super majority", self.id());
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
                 // We voted during this generation.
 
                 if our_vote.vote.is_super_majority_ballot() {
-                    info!("[MBR] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
+                    info!("[MBR-{}] We've already sent a super majority, waiting till we either have a split vote or SM / SM", self.id());
                     return Ok(VoteResponse::WaitingForMoreVotes);
                 }
             }
 
-            info!("[MBR] broadcasting super majority");
+            info!("[MBR-{}] broadcasting super majority", self.id());
             let signed_vote =
                 self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
@@ -184,6 +216,11 @@ impl<T: Proposition> Consensus<T> {
                 ballot: Ballot::Merge(BTreeSet::from_iter([signed_vote])),
                 faults: self.faults(),
             })?;
+            info!(
+                "[MBR-{}] adopting ballot {:?}",
+                self.id(),
+                signed_vote.vote.ballot
+            );
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
@@ -430,8 +467,6 @@ mod tests {
                 faults: Default::default(),
             })
             .unwrap();
-        // println!("new_vote: {:#?}", new_vote);
-        // println!("our_vote: {:#?}", consensus.votes);
         assert!(!consensus.is_new_vote_from_voter(&new_vote));
 
         // try merge vote superseding existing vote
@@ -444,8 +479,6 @@ mod tests {
                 faults: Default::default(),
             })
             .unwrap();
-        // println!("new_vote: {:#?}", new_vote);
-        // println!("our_vote: {:#?}", consensus.votes);
         assert!(consensus.is_new_vote_from_voter(&new_vote));
 
         // try bad vote not superseding existing
@@ -456,8 +489,6 @@ mod tests {
                 faults: Default::default(),
             })
             .unwrap();
-        // println!("new_vote: {:#?}", new_vote);
-        // println!("our_vote: {:#?}", consensus.votes);
         assert!(!consensus.is_new_vote_from_voter(&new_vote));
     }
 }

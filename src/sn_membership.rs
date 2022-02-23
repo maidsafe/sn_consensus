@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, Fault, NodeId, Result};
+use crate::{Decision, Error, Fault, NodeId, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
@@ -171,11 +171,11 @@ impl<T: Proposition> Membership<T> {
             VoteResponse::Broadcast(vote) => {
                 self.pending_gen = vote.vote.gen;
             }
-            VoteResponse::Decided {
+            VoteResponse::Decided(Decision {
                 votes,
                 proposals,
                 faults,
-            } => {
+            }) => {
                 self.history.insert(
                     self.pending_gen,
                     HistoryEntry {

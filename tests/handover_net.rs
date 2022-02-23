@@ -48,14 +48,11 @@ impl Net {
     }
 
     pub fn consensus_value(&self, proc: usize) -> Option<u8> {
-        let all_votes = self.procs[proc]
+        self.procs[proc]
             .consensus
-            .votes
-            .iter()
-            .map(|(_voter, vote)| vote)
-            .cloned()
-            .collect();
-        self.procs[proc].resolve_votes(&all_votes)
+            .decision
+            .as_ref()
+            .and_then(|decision| self.procs[proc].resolve_votes(&decision.proposals).cloned())
     }
 
     /// Pick a random public key from the set of procs
