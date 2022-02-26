@@ -18,13 +18,14 @@ pub struct Consensus<T: Proposition> {
     pub decision: Option<Decision<T>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision<T: Proposition> {
     pub votes: BTreeSet<SignedVote<T>>,
     pub proposals: BTreeMap<T, Signature>,
     pub faults: BTreeSet<Fault<T>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoteResponse<T: Proposition> {
     WaitingForMoreVotes,
     Broadcast(SignedVote<T>),
@@ -271,7 +272,7 @@ impl<T: Proposition> Consensus<T> {
         let voters = BTreeSet::from_iter(votes.iter().map(|v| v.voter));
         let remaining_voters = self.n_elders - voters.len();
 
-        // give the remaining votes to the proposals with the most votes.
+        // suppose the remaining votes go to the proposals with the most votes.
         let predicted_votes = most_votes + remaining_voters;
 
         voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
