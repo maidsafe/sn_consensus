@@ -251,9 +251,23 @@ impl<T: Proposition> Consensus<T> {
     }
 
     pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {
-        let mut count: BTreeMap<BTreeSet<T>, usize> = Default::default();
+        let mut votes_by_voter: BTreeMap<NodeId, &SignedVote<T>> = BTreeMap::new();
 
         for vote in votes.iter() {
+            let replace = if let Some(curr_vote) = votes_by_voter.get(&vote.voter) {
+                vote.supersedes(curr_vote)
+            } else {
+                true
+            };
+
+            if replace {
+                votes_by_voter.insert(vote.voter, vote);
+            }
+        }
+
+        let mut count: BTreeMap<BTreeSet<T>, usize> = Default::default();
+
+        for (_voter, vote) in votes_by_voter.iter() {
             let proposals = vote.proposals();
             let c = count.entry(proposals).or_default();
             *c += 1;
