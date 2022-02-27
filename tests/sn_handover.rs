@@ -186,10 +186,10 @@ fn test_handover_split_vote() -> eyre::Result<()> {
 fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
-        println!("[TEST] testing with {nprocs} elders");
+        println!("[TEST] testing with {nprocs} elder(s)");
 
         // make network of nprocs elders
-        let mut net = Net::with_procs(((nprocs + 1) * 2 / 3).min(nprocs - 1), nprocs, &mut rng);
+        let mut net = Net::with_procs((2 * nprocs) / 3, nprocs, &mut rng);
 
         // make each elder propose a different thing
         for i in 0..net.procs.len() {
@@ -220,9 +220,10 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
         let max_proposed_value = nprocs - 1;
         let expected_consensus_value = Some(max_proposed_value as u8);
         for i in 0..nprocs {
+            println!("proc {i}");
             let decision = net.consensus_value(i);
             println!("[TEST] checking elder {i}'s consensus value: {decision:?}");
-            assert_eq!(net.consensus_value(i), expected_consensus_value);
+            assert_eq!(decision, expected_consensus_value);
         }
     }
     Ok(())

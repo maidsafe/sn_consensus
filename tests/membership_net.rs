@@ -4,6 +4,7 @@ use std::io::Write;
 use std::iter;
 
 use blsttc::{SecretKeySet, SignatureShare};
+use log::info;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
 use sn_membership::{
@@ -167,15 +168,17 @@ impl Net {
             }
         };
 
+        info!("[NET] {} handling: {:?}", packet.dest, packet.vote);
+        let packet_gen = packet.vote.vote.gen;
         let resp = dest_proc.handle_signed_vote(packet.vote);
-        // println!("[NET] resp: {:?}", resp);
+        info!("[NET] resp from {}: {:?}", packet.dest, resp);
         match resp {
             Ok(VoteResponse::Broadcast(vote)) => {
                 self.broadcast(packet.dest, vote);
             }
-            Ok(VoteResponse::Decided { .. } | VoteResponse::WaitingForMoreVotes) => {}
+            Ok(VoteResponse::WaitingForMoreVotes) => {}
             Err(Error::NotElder) => {
-                assert_ne!(dest_proc.consensus.elders, source_elders);
+                assert_ne!(dest_proc.consensus().elders, source_elders);
             }
             Err(Error::VoteForBadGeneration {
                 vote_gen,
@@ -189,16 +192,24 @@ impl Net {
             Err(err) => return Err(err),
         }
 
-        match self.procs.iter().find(|p| p.id() == packet.dest) {
+        match self.proc(packet.dest) {
             Some(proc) => {
-                let (mut proc_members, gen) = (proc.members(proc.gen)?, proc.gen);
+                let network_decision = self.decisions.get(&packet_gen);
 
-                let expected_members_at_gen = self
-                    .members_at_gen
-                    .entry(gen)
-                    .or_insert_with(|| proc_members.clone());
+                let proc_decision = proc
+                    .consensus_at_gen(packet_gen)
+                    .and_then(|c| c.decision.clone());
 
-                assert_eq!(expected_members_at_gen, &mut proc_members);
+                match (network_decision, proc_decision) {
+                    (Some(net_d), Some(proc_d)) => {
+                        assert_eq!(net_d.proposals, proc_d.proposals);
+                    }
+                    (None, Some(proc_d)) => {
+                        self.decisions.insert(packet_gen, proc_d);
+                    }
+                    (None | Some(_), None) => (),
+                }
+
                 Ok(())
             }
             _ => Ok(()),
