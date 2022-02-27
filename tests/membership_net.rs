@@ -7,8 +7,8 @@ use blsttc::{SecretKeySet, SignatureShare};
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
 use sn_membership::{
-    consensus::VoteResponse, Ballot, Error, Generation, Membership, NodeId, Reconfig, Result,
-    SignedVote, Vote,
+    consensus::VoteResponse, Ballot, Decision, Error, Generation, Membership, NodeId, Reconfig,
+    Result, SignedVote, Vote,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +25,7 @@ pub struct Net {
     pub members_at_gen: BTreeMap<Generation, BTreeSet<u8>>,
     pub packets: BTreeMap<NodeId, VecDeque<Packet>>,
     pub delivered_packets: Vec<Packet>,
+    pub decisions: BTreeMap<Generation, Decision<Reconfig<u8>>>,
 }
 
 impl Net {
@@ -45,6 +46,10 @@ impl Net {
 
     pub fn proc(&self, id: NodeId) -> Option<&Membership<u8>> {
         self.procs.iter().find(|p| p.id() == id)
+    }
+
+    pub fn proc_mut(&mut self, id: NodeId) -> Option<&mut Membership<u8>> {
+        self.procs.iter_mut().find(|p| p.id() == id)
     }
 
     /// Pick a random public key from the set of procs
@@ -85,7 +90,7 @@ impl Net {
                                     .iter()
                                     .choose(rng)
                                     .unwrap()
-                                    .consensus
+                                    .consensus()
                                     .sign(&prop)?;
                                 Ok((prop, (self.pick_id(rng), sig)))
                             })
@@ -153,7 +158,7 @@ impl Net {
 
         self.delivered_packets.push(packet.clone());
 
-        let source_elders = self.proc(source).unwrap().consensus.elders.clone();
+        let source_elders = self.proc(source).unwrap().consensus().elders.clone();
         let dest_proc = match self.procs.iter_mut().find(|p| p.id() == packet.dest) {
             Some(proc) => proc,
             None => {
@@ -209,12 +214,20 @@ impl Net {
         }
     }
 
-    pub fn broadcast(&mut self, source: NodeId, vote: SignedVote<Reconfig<u8>>) {
-        let packets = Vec::from_iter(self.procs.iter().map(Membership::id).map(|dest| Packet {
+    pub fn broadcast_packets(
+        &self,
+        source: NodeId,
+        vote: &SignedVote<Reconfig<u8>>,
+    ) -> Vec<Packet> {
+        Vec::from_iter(self.procs.iter().map(Membership::id).map(|dest| Packet {
             source,
             dest,
             vote: vote.clone(),
-        }));
+        }))
+    }
+
+    pub fn broadcast(&mut self, source: NodeId, vote: SignedVote<Reconfig<u8>>) {
+        let packets = self.broadcast_packets(source, &vote);
         self.enqueue_packets(packets);
     }
 

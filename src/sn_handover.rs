@@ -70,7 +70,6 @@ impl<T: Proposition> Handover<T> {
 
         match vote_response {
             VoteResponse::Broadcast(vote) => Ok(Some(vote)),
-            VoteResponse::Decided { .. } => Ok(None),
             VoteResponse::WaitingForMoreVotes => Ok(None),
         }
     }

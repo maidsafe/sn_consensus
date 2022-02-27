@@ -29,7 +29,6 @@ pub struct Decision<T: Proposition> {
 pub enum VoteResponse<T: Proposition> {
     WaitingForMoreVotes,
     Broadcast(SignedVote<T>),
-    Decided(Decision<T>),
 }
 
 impl<T: Proposition> Consensus<T> {
@@ -155,8 +154,8 @@ impl<T: Proposition> Consensus<T> {
                 proposals,
                 faults: signed_vote.vote.faults.clone(),
             };
-            self.decision = Some(decision.clone());
-            return Ok(VoteResponse::Decided(decision));
+            self.decision = Some(decision);
+            return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
         self.log_signed_vote(&signed_vote);
@@ -174,8 +173,8 @@ impl<T: Proposition> Consensus<T> {
                 proposals,
                 faults: self.faults(),
             };
-            self.decision = Some(decision.clone());
-            return Ok(VoteResponse::Decided(decision));
+            self.decision = Some(decision);
+            return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
         if self.is_split_vote(&self.votes.values().cloned().collect()) {

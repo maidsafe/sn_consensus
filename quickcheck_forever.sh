@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export QUICKCHECK_TESTS=10000000
+export QUICKCHECK_TESTS=100
 
 while true
 do
