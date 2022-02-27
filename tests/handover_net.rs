@@ -221,17 +221,6 @@ impl Net {
             .collect();
     }
 
-    pub fn enqueue_anti_entropy(&mut self, i: usize, j: usize) {
-        let dest = self.procs[i].id();
-        let source = self.procs[j].id();
-
-        self.enqueue_packets(self.procs[j].anti_entropy().into_iter().map(|vote| Packet {
-            source,
-            dest,
-            vote,
-        }));
-    }
-
     pub fn generate_msc(&self, name: &str) -> Result<()> {
         // See: http://www.mcternan.me.uk/mscgen/
         let mut msc = String::from(

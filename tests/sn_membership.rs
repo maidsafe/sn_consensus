@@ -224,13 +224,6 @@ fn test_membership_round_robin_split_vote() -> Result<()> {
             }
         }
 
-        for i in 0..net.procs.len() {
-            for j in 0..net.procs.len() {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-        net.drain_queued_packets()?;
-
         net.generate_msc(&format!("round_robin_split_vote_{}.msc", nprocs))?;
 
         let proc_0_gen = net.procs[0].gen;
@@ -401,14 +394,7 @@ fn test_membership_interpreter_qc1() -> Result<()> {
     net.enqueue_anti_entropy(1, 0);
     net.enqueue_anti_entropy(1, 0);
 
-    for _ in 0..3 {
-        net.drain_queued_packets().unwrap();
-        for i in 0..net.procs.len() {
-            for j in 0..net.procs.len() {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-    }
+    net.drain_queued_packets().unwrap();
     assert!(net.packets.is_empty());
 
     for p in net.procs.iter() {
@@ -484,20 +470,11 @@ fn test_membership_interpreter_qc3() {
         });
 
     net.enqueue_packets(anti_entropy_packets);
-    net.drain_queued_packets().unwrap();
 
-    for i in 0..net.procs.len() {
-        for j in 0..net.procs.len() {
-            net.enqueue_anti_entropy(i, j);
-        }
-    }
-
-    let res = net.drain_queued_packets();
+    assert!(net.drain_queued_packets().is_ok());
 
     net.generate_msc("test_membership_interpreter_qc3.msc")
         .unwrap();
-
-    assert!(res.is_ok());
 }
 
 #[test]
@@ -919,19 +896,8 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
         }
     }
 
-    // 3 rounds of anti-entropy will get everyone in sync
-    for _ in 0..3 {
-        net.drain_queued_packets()?;
-        for i in 0..net.procs.len() {
-            for j in 0..net.procs.len() {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-    }
-    assert!(
-        net.packets.is_empty(),
-        "We should have no more pending packets"
-    );
+    net.drain_queued_packets()?;
+    assert!(net.packets.is_empty());
 
     // We should have no more pending votes.
     for p in net.procs.iter() {

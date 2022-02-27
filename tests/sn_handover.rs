@@ -162,14 +162,6 @@ fn test_handover_split_vote() -> eyre::Result<()> {
         }
         net.drain_queued_packets()?;
 
-        // make elders notice split and vote for merge votes
-        for i in 0..nprocs {
-            for j in 0..nprocs {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-        net.drain_queued_packets()?;
-
         // make sure they all reach the same conclusion
         let first_voters_value = net.consensus_value(0);
         for i in 0..nprocs {
@@ -204,14 +196,6 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
                 net.deliver_packet_from_source(net.procs[i].id())?;
             }
         }
-
-        // make elders notice split and vote for merge
-        for i in 0..nprocs {
-            for j in 0..nprocs {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-        net.drain_queued_packets()?;
 
         // generate msc file
         net.generate_msc(&format!("handover_round_robin_split_vote_{}.msc", nprocs))?;
