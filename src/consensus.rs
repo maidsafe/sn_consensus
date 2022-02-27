@@ -101,6 +101,10 @@ impl<T: Proposition> Consensus<T> {
             info!("[MBR-{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
+        if self.faults.contains_key(&signed_vote.voter) {
+            info!("[MBR-{}] dropping vote from faulty voter", self.id());
+            return Ok(VoteResponse::WaitingForMoreVotes);
+        }
 
         let their_decision = self.get_super_majority_over_super_majorities(
             &signed_vote.unpack_votes().into_iter().cloned().collect(),
