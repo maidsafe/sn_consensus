@@ -91,7 +91,7 @@ impl Net {
                                     .iter()
                                     .choose(rng)
                                     .unwrap()
-                                    .consensus()
+                                    .consensus
                                     .sign(&prop)?;
                                 Ok((prop, (self.pick_id(rng), sig)))
                             })
@@ -159,7 +159,7 @@ impl Net {
 
         self.delivered_packets.push(packet.clone());
 
-        let source_elders = self.proc(source).unwrap().consensus().elders.clone();
+        let source_elders = self.proc(source).unwrap().consensus.elders.clone();
         let dest_proc = match self.procs.iter_mut().find(|p| p.id() == packet.dest) {
             Some(proc) => proc,
             None => {
@@ -178,7 +178,7 @@ impl Net {
             }
             Ok(VoteResponse::WaitingForMoreVotes) => {}
             Err(Error::NotElder) => {
-                assert_ne!(dest_proc.consensus().elders, source_elders);
+                assert_ne!(dest_proc.consensus.elders, source_elders);
             }
             Err(Error::VoteForBadGeneration {
                 vote_gen,

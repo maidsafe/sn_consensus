@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use core::fmt::Debug;
@@ -80,10 +80,6 @@ impl<T: Proposition> Handover<T> {
 
     pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
         self.consensus.cast_vote(signed_vote)
-    }
-
-    pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {
-        self.consensus.count_votes(votes)
     }
 
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {

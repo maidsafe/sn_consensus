@@ -424,7 +424,7 @@ fn test_membership_interpreter_qc2() -> Result<()> {
     let expected_members = net.procs[0].members(net.procs[0].pending_gen)?;
     for p in net.procs.iter() {
         assert_eq!(p.gen, p.pending_gen);
-        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.consensus.votes, Default::default());
         assert_eq!(p.members(p.gen)?, expected_members);
     }
 
@@ -529,7 +529,7 @@ fn test_membership_interpreter_qc4() -> Result<()> {
 
     // We should have no more pending votes.
     for p in net.procs.iter() {
-        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.consensus.votes, Default::default());
     }
 
     let mut procs_by_gen: BTreeMap<Generation, Vec<Membership<u8>>> = Default::default();
@@ -557,7 +557,7 @@ fn test_membership_interpreter_qc4() -> Result<()> {
     let proc_at_max_gen = procs_by_gen[max_gen].get(0).ok_or(Error::NoMembers)?;
     assert!(super_majority(
         procs_by_gen[max_gen].len(),
-        proc_at_max_gen.consensus().n_elders
+        proc_at_max_gen.consensus.n_elders
     ));
 
     Ok(())
@@ -582,14 +582,14 @@ fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
         Err(Error::AttemptedFaultyProposal)
     ));
     assert!(!proc
-        .consensus()
+        .consensus
         .votes
         .get(&proc.id())
         .unwrap()
         .supersedes(&proc.sign_vote(Vote {
             ballot: Ballot::Propose(reconfig),
             gen: proc.gen,
-            faults: proc.consensus().faults(),
+            faults: proc.consensus.faults(),
         })?));
 
     Ok(())
@@ -658,7 +658,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
         assert_eq!(p.gen, p.pending_gen);
-        assert_eq!(p.consensus().votes, BTreeMap::default());
+        assert_eq!(p.consensus.votes, BTreeMap::default());
     }
 
     // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
@@ -705,7 +705,7 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.consensus.votes, Default::default());
         assert_eq!(p.gen, p.pending_gen);
     }
 
@@ -776,7 +776,7 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.consensus.votes, Default::default());
         assert_eq!(p.gen, p.pending_gen);
     }
 
@@ -831,11 +831,11 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                         // This proc has already committed to a vote this round
 
                         // This proc has already committed to a vote
-                        assert!(!q.consensus().votes.get(&q.id()).unwrap().supersedes(
+                        assert!(!q.consensus.votes.get(&q.id()).unwrap().supersedes(
                             &q.sign_vote(Vote {
                                 ballot: Ballot::Propose(reconfig),
                                 gen: q.gen,
-                                faults: q.consensus().faults(),
+                                faults: q.consensus.faults(),
                             })?
                         ));
                     }
@@ -863,11 +863,11 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                     }
                     Err(Error::AttemptedFaultyProposal) => {
                         // This proc has already committed to a vote
-                        assert!(!q.consensus().votes.get(&q.id()).unwrap().supersedes(
+                        assert!(!q.consensus.votes.get(&q.id()).unwrap().supersedes(
                             &q.sign_vote(Vote {
                                 ballot: Ballot::Propose(reconfig),
                                 gen: q.gen,
-                                faults: q.consensus().faults(),
+                                faults: q.consensus.faults(),
                             })
                             .unwrap()
                         ))
@@ -901,7 +901,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
 
     // We should have no more pending votes.
     for p in net.procs.iter() {
-        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.consensus.votes, Default::default());
     }
 
     let mut procs_by_gen: BTreeMap<Generation, Vec<Membership<u8>>> = Default::default();
@@ -932,7 +932,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
     let proc_at_max_gen = procs_by_gen[max_gen].get(0).ok_or(Error::NoMembers)?;
     assert!(super_majority(
         procs_by_gen[max_gen].len(),
-        proc_at_max_gen.consensus().n_elders
+        proc_at_max_gen.consensus.n_elders
     ));
 
     Ok(TestResult::passed())
@@ -1090,7 +1090,7 @@ fn prop_bft_consensus(
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.consensus.votes, Default::default());
         assert_eq!(p.gen, p.pending_gen);
     }
 

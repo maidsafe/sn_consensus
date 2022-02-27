@@ -7,19 +7,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Decision, Error, Fault, NodeId, Result};
+use crate::{Error, Fault, NodeId, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
 
 #[derive(Debug)]
 pub struct Membership<T: Proposition> {
-    pub consensus: BTreeMap<Generation, Consensus<Reconfig<T>>>,
-    // TODO: we need faulty elder detection
-    // pub faulty_elders: BTreeMap<PublicKeyShare, BTreeSet<SignedVote<Reconfig<T>>>>,
+    pub consensus: Consensus<Reconfig<T>>,
     pub gen: Generation,
     pub pending_gen: Generation,
-    pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>, // TODO: change to bootstrap members
+    pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>,
+    pub history: BTreeMap<Generation, Consensus<Reconfig<T>>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -52,28 +51,29 @@ impl<T: Proposition> Membership<T> {
         elders: PublicKeySet,
         n_elders: usize,
     ) -> Self {
-        Membership::<T> {
-            consensus: BTreeMap::from_iter([(1, Consensus::from(secret_key, elders, n_elders))]),
+        Membership {
+            consensus: Consensus::from(secret_key, elders, n_elders),
             gen: 0,
             pending_gen: 0,
             forced_reconfigs: Default::default(),
+            history: BTreeMap::default(),
         }
     }
 
     pub fn consensus_at_gen(&self, gen: Generation) -> Option<&Consensus<Reconfig<T>>> {
-        self.consensus.get(&gen)
+        if gen == self.gen + 1 {
+            Some(&self.consensus)
+        } else {
+            self.history.get(&gen)
+        }
     }
 
     pub fn consensus_at_gen_mut(&mut self, gen: Generation) -> Option<&mut Consensus<Reconfig<T>>> {
-        self.consensus.get_mut(&gen)
-    }
-
-    pub fn consensus(&self) -> &Consensus<Reconfig<T>> {
-        self.consensus_at_gen(self.gen + 1).unwrap()
-    }
-
-    pub fn consensus_mut(&mut self) -> &mut Consensus<Reconfig<T>> {
-        self.consensus_at_gen_mut(self.gen + 1).unwrap()
+        if gen == self.gen + 1 {
+            Some(&mut self.consensus)
+        } else {
+            self.history.get_mut(&gen)
+        }
     }
 
     pub fn force_join(&mut self, actor: T) {
@@ -106,7 +106,7 @@ impl<T: Proposition> Membership<T> {
             return Ok(members);
         }
 
-        for (history_gen, consensus) in self.consensus.iter() {
+        for (history_gen, consensus) in self.history.iter() {
             self.forced_reconfigs
                 .get(history_gen)
                 .cloned()
@@ -117,7 +117,10 @@ impl<T: Proposition> Membership<T> {
             let decision = if let Some(decision) = consensus.decision.as_ref() {
                 decision
             } else {
-                break;
+                panic!(
+                    "historical consensus entry without decision {}: {:?}",
+                    history_gen, consensus
+                );
             };
 
             for (reconfig, _sig) in decision.proposals.iter() {
@@ -133,15 +136,14 @@ impl<T: Proposition> Membership<T> {
     }
 
     pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<SignedVote<Reconfig<T>>> {
-        let consensus = self.consensus();
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
-            faults: consensus.faults(),
+            faults: self.consensus.faults(),
         };
         let signed_vote = self.sign_vote(vote)?;
         self.validate_signed_vote(&signed_vote)?;
-        consensus
+        self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
         self.cast_vote(signed_vote)
@@ -151,7 +153,7 @@ impl<T: Proposition> Membership<T> {
         info!("[MBR] anti-entropy from gen {}", from_gen);
 
         let mut msgs = self
-            .consensus
+            .history
             .iter() // history is a BTreeSet, .iter() is ordered by generation
             .filter(|(gen, _)| **gen > from_gen)
             .filter_map(|(gen, c)| c.decision.clone().map(|d| (gen, c, d)))
@@ -165,13 +167,13 @@ impl<T: Proposition> Membership<T> {
             .collect::<Result<Vec<_>>>()?;
 
         // include the current in-progres votes as well.
-        msgs.extend(self.consensus().votes.values().cloned());
+        msgs.extend(self.consensus.votes.values().cloned());
 
         Ok(msgs)
     }
 
     pub fn id(&self) -> NodeId {
-        self.consensus().id()
+        self.consensus.id()
     }
 
     pub fn handle_signed_vote(
@@ -186,41 +188,36 @@ impl<T: Proposition> Membership<T> {
         let consensus = self.consensus_at_gen_mut(vote_gen).unwrap();
         let vote_response = consensus.handle_signed_vote(signed_vote)?;
 
-        if consensus.decision.is_some() {
+        if consensus.decision.is_some() && vote_gen == self.gen + 1 {
             let next_consensus = Consensus::from(
-                consensus.secret_key.clone(),
-                consensus.elders.clone(),
-                consensus.n_elders,
+                self.consensus.secret_key.clone(),
+                self.consensus.elders.clone(),
+                self.consensus.n_elders,
             );
-            self.consensus.entry(vote_gen + 1).or_insert(next_consensus);
-            self.gen = self.gen.max(vote_gen);
+
+            let decided_consensus = std::mem::replace(&mut self.consensus, next_consensus);
+            self.history.insert(vote_gen, decided_consensus);
+            self.gen = vote_gen
         }
 
         Ok(vote_response)
     }
 
     pub fn sign_vote(&self, vote: Vote<Reconfig<T>>) -> Result<SignedVote<Reconfig<T>>> {
-        self.consensus().sign_vote(vote)
+        self.consensus.sign_vote(vote)
     }
 
     pub fn cast_vote(
         &mut self,
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<SignedVote<Reconfig<T>>> {
-        self.consensus_mut().cast_vote(&signed_vote)?;
+        self.consensus.cast_vote(&signed_vote)?;
         self.pending_gen = signed_vote.vote.gen;
         Ok(signed_vote)
     }
 
-    pub fn count_votes(
-        &self,
-        votes: &BTreeSet<SignedVote<Reconfig<T>>>,
-    ) -> BTreeMap<BTreeSet<Reconfig<T>>, usize> {
-        self.consensus().count_votes(votes)
-    }
-
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {
-        if let Some(c) = self.consensus.get(&signed_vote.vote.gen) {
+        if let Some(c) = self.consensus_at_gen(signed_vote.vote.gen) {
             c.validate_signed_vote(signed_vote)?;
         } else {
             return Err(Error::VoteForBadGeneration {
