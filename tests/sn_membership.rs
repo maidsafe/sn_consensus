@@ -501,6 +501,92 @@ fn test_membership_interpreter_qc3() {
 }
 
 #[test]
+fn test_membership_interpreter_qc4() -> Result<()> {
+    let mut rng = StdRng::from_seed([0u8; 32]);
+
+    fn super_majority(m: usize, n: usize) -> bool {
+        3 * m > 2 * n
+    }
+
+    let mut net = Net::with_procs(0, 1, &mut rng);
+    {
+        let reconfig = Reconfig::Join(0);
+        let vote = net.procs[0].propose(reconfig).unwrap();
+        net.reconfigs_by_gen.entry(1).or_default().insert(reconfig);
+        net.broadcast(1, vote);
+    }
+
+    {
+        net.deliver_packet_from_source(1).unwrap();
+    }
+
+    {
+        let anti_entropy_packets = net.procs[0]
+            .anti_entropy(0)?
+            .into_iter()
+            .map(|vote| Packet {
+                source: 1,
+                dest: 1,
+                vote,
+            });
+        net.enqueue_packets(anti_entropy_packets);
+    }
+
+    {
+        let reconfig = Reconfig::Join(1);
+        let vote = net.procs[0].propose(reconfig).unwrap();
+        net.reconfigs_by_gen.entry(2).or_default().insert(reconfig);
+        net.broadcast(1, vote);
+    }
+
+    assert_eq!(net.procs[0].members(1).unwrap(), BTreeSet::from_iter([0]));
+    net.deliver_packet_from_source(1).unwrap();
+    assert_eq!(net.procs[0].members(1).unwrap(), BTreeSet::from_iter([0]));
+
+    net.drain_queued_packets().unwrap();
+
+    assert!(
+        net.packets.is_empty(),
+        "We should have no more pending packets"
+    );
+
+    // We should have no more pending votes.
+    for p in net.procs.iter() {
+        assert_eq!(p.consensus().votes, Default::default());
+    }
+
+    let mut procs_by_gen: BTreeMap<Generation, Vec<Membership<u8>>> = Default::default();
+
+    for proc in net.procs {
+        procs_by_gen.entry(proc.gen).or_default().push(proc);
+    }
+
+    let max_gen = procs_by_gen.keys().last().unwrap();
+
+    // And procs at each generation should have agreement on members
+    for (gen, procs) in procs_by_gen.iter() {
+        let mut proc_iter = procs.iter();
+        let first = proc_iter.next().ok_or(Error::NoMembers)?;
+        for proc in proc_iter {
+            assert_eq!(
+                first.members(first.gen)?,
+                proc.members(proc.gen)?,
+                "gen: {}",
+                gen
+            );
+        }
+    }
+
+    let proc_at_max_gen = procs_by_gen[max_gen].get(0).ok_or(Error::NoMembers)?;
+    assert!(super_majority(
+        procs_by_gen[max_gen].len(),
+        proc_at_max_gen.consensus().n_elders
+    ));
+
+    Ok(())
+}
+
+#[test]
 fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
