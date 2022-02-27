@@ -96,8 +96,9 @@ impl<T: Proposition> Consensus<T> {
     /// Handles a signed vote
     /// Returns the vote we cast and the reached consensus vote in case consensus was reached
     pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
+        info!("[MBR-{}] handling vote {:?}", self.id(), signed_vote);
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
-            println!("[MBR-{}] Found faults {:?}", self.id(), faults);
+            info!("[MBR-{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
 
@@ -107,7 +108,7 @@ impl<T: Proposition> Consensus<T> {
 
         if let Some(decision) = self.decision.clone() {
             if their_decision.is_none() && self.is_new_vote_from_voter(&signed_vote) {
-                println!(
+                info!(
                     "[MBR-{}] We've already terminated, responding with decision",
                     self.id()
                 );
@@ -124,7 +125,7 @@ impl<T: Proposition> Consensus<T> {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
             // decision using the sm_over_sm logic below.
-            println!(
+            info!(
                 "[MBR-{}] They terminated but we haven't yet, accepting decision",
                 self.id()
             );
@@ -228,6 +229,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
+        info!("[MBR-{}] waiting for more votes", self.id());
         Ok(VoteResponse::WaitingForMoreVotes)
     }
 
