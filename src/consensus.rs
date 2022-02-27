@@ -105,13 +105,17 @@ impl<T: Proposition> Consensus<T> {
             info!("[MBR-{}] dropping vote from faulty voter", self.id());
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
+        if !self.is_new_vote_from_voter(&signed_vote) {
+            info!("[MBR-{}] dropping old vote {:?}", self.id(), signed_vote);
+            return Ok(VoteResponse::WaitingForMoreVotes);
+        }
 
         let their_decision = self.get_super_majority_over_super_majorities(
             &signed_vote.unpack_votes().into_iter().cloned().collect(),
         )?;
 
         if let Some(decision) = self.decision.clone() {
-            if their_decision.is_none() && self.is_new_vote_from_voter(&signed_vote) {
+            let resp = if their_decision.is_none() {
                 info!(
                     "[MBR-{}] We've already terminated, responding with decision",
                     self.id()
@@ -122,7 +126,12 @@ impl<T: Proposition> Consensus<T> {
                     &BTreeSet::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
                 )?;
                 VoteResponse::Broadcast(vote)
-            }
+            } else {
+                info!("[MBR-{}] We've both terminated, no-op", self.id());
+                VoteResponse::WaitingForMoreVotes
+            };
+
+            return Ok(resp);
         }
 
         if let Some(proposals) = their_decision {
