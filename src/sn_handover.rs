@@ -40,7 +40,7 @@ impl<T: Proposition> Handover<T> {
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
-        Ok(self.cast_vote(signed_vote))
+        self.cast_vote(&signed_vote)
     }
 
     // Get someone up to speed on our view of the current votes
@@ -79,13 +79,8 @@ impl<T: Proposition> Handover<T> {
         self.consensus.sign_vote(vote)
     }
 
-    pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> SignedVote<T> {
-        self.log_signed_vote(&signed_vote);
-        signed_vote
-    }
-
-    fn log_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
-        self.consensus.log_signed_vote(signed_vote);
+    pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
+        self.consensus.cast_vote(signed_vote)
     }
 
     pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {

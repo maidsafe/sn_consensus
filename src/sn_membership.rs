@@ -130,7 +130,7 @@ impl<T: Proposition> Membership<T> {
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
-        Ok(self.cast_vote(signed_vote))
+        self.cast_vote(signed_vote)
     }
 
     pub fn anti_entropy(&self, from_gen: Generation) -> Result<Vec<SignedVote<Reconfig<T>>>> {
@@ -198,14 +198,13 @@ impl<T: Proposition> Membership<T> {
         self.consensus.sign_vote(vote)
     }
 
-    pub fn cast_vote(&mut self, signed_vote: SignedVote<Reconfig<T>>) -> SignedVote<Reconfig<T>> {
-        self.log_signed_vote(&signed_vote);
-        signed_vote
-    }
-
-    fn log_signed_vote(&mut self, signed_vote: &SignedVote<Reconfig<T>>) {
+    pub fn cast_vote(
+        &mut self,
+        signed_vote: SignedVote<Reconfig<T>>,
+    ) -> Result<SignedVote<Reconfig<T>>> {
+        self.consensus_mut().cast_vote(&signed_vote)?;
         self.pending_gen = signed_vote.vote.gen;
-        self.consensus.log_signed_vote(signed_vote);
+        Ok(signed_vote)
     }
 
     pub fn count_votes(

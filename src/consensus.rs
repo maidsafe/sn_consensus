@@ -186,24 +186,30 @@ impl<T: Proposition> Consensus<T> {
                 faults: self.faults(),
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
+            let current_count = self.count_votes(&self.votes.values().cloned().collect());
+            let merge_count = self.count_votes(
+                &signed_merge_vote
+                    .unpack_votes()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+            );
 
-            if let Some(our_vote) = self.votes.get(&self.id()) {
-                let proposals_we_voted_for = our_vote.proposals();
-                let proposals_we_would_vote_for = signed_merge_vote.proposals();
-
-                if proposals_we_voted_for == proposals_we_would_vote_for
-                    && our_vote.vote.faults.len() == signed_merge_vote.vote.faults.len()
-                {
-                    info!(
-                        "[MBR-{}] This vote didn't add new information, waiting for more votes...",
-                        self.id()
-                    );
-                    return Ok(VoteResponse::WaitingForMoreVotes);
+            let resp = if current_count != merge_count {
+                info!("[MBR-{}] broadcasting merge.", self.id());
+                match self.handle_signed_vote(signed_merge_vote.clone())? {
+                    VoteResponse::WaitingForMoreVotes => VoteResponse::Broadcast(signed_merge_vote),
+                    VoteResponse::Broadcast(vote) => VoteResponse::Broadcast(vote),
                 }
-            }
+            } else {
+                info!(
+                    "[MBR-{}] merge does not improve things, waiting for more votes.",
+                    self.id()
+                );
+                VoteResponse::WaitingForMoreVotes
+            };
 
-            info!("[MBR-{}] Either we haven't voted or our previous vote didn't fully overlap, merge them.", self.id());
-            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)));
+            return Ok(resp);
         }
 
         if self.is_super_majority(&self.votes.values().cloned().collect()) {
@@ -224,7 +230,14 @@ impl<T: Proposition> Consensus<T> {
                 signed_vote.vote.gen,
                 &BTreeSet::from_iter(self.faults.keys().copied()),
             )?;
-            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
+
+            // We recurse here to handle the case where our SM vote puts us in a SM / SM
+            let resp = match self.handle_signed_vote(signed_vote.clone())? {
+                VoteResponse::WaitingForMoreVotes => VoteResponse::Broadcast(signed_vote),
+                VoteResponse::Broadcast(vote) => VoteResponse::Broadcast(vote),
+            };
+
+            return Ok(resp);
         }
 
         // We have determined that we don't yet have enough votes to take action.
@@ -240,7 +253,13 @@ impl<T: Proposition> Consensus<T> {
                 self.id(),
                 signed_vote.vote.ballot
             );
-            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
+
+            let resp = match self.handle_signed_vote(signed_vote.clone())? {
+                VoteResponse::WaitingForMoreVotes => VoteResponse::Broadcast(signed_vote),
+                VoteResponse::Broadcast(vote) => VoteResponse::Broadcast(vote),
+            };
+
+            return Ok(resp);
         }
 
         info!("[MBR-{}] waiting for more votes", self.id());
@@ -255,9 +274,11 @@ impl<T: Proposition> Consensus<T> {
         })
     }
 
-    pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> SignedVote<T> {
-        self.log_signed_vote(&signed_vote);
-        signed_vote
+    pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
+        match self.handle_signed_vote(signed_vote.clone())? {
+            VoteResponse::WaitingForMoreVotes => Ok(signed_vote.clone()),
+            VoteResponse::Broadcast(vote) => Ok(vote),
+        }
     }
 
     pub fn log_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
