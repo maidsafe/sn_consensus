@@ -168,8 +168,9 @@ impl<T: Proposition> Consensus<T> {
                 "[MBR-{}] Detected super majority over super majorities: {proposals:?}",
                 self.id()
             );
+            let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
             let decision = Decision {
-                votes: self.votes.values().cloned().collect(),
+                votes,
                 proposals,
                 faults: self.faults(),
             };
