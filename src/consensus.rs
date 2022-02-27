@@ -153,7 +153,7 @@ impl<T: Proposition> Consensus<T> {
             let decision = Decision {
                 votes,
                 proposals,
-                faults: self.faults(),
+                faults: signed_vote.vote.faults.clone(),
             };
             self.decision = Some(decision.clone());
             return Ok(VoteResponse::Decided(decision));
