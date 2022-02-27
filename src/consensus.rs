@@ -64,15 +64,16 @@ impl<T: Proposition> Consensus<T> {
         &self,
         votes: BTreeSet<SignedVote<T>>,
         gen: Generation,
+        faulty: &BTreeSet<NodeId>,
     ) -> Result<SignedVote<T>> {
-        let proposals: BTreeMap<T, (NodeId, SignatureShare)> = self
-            .proposals(&votes)
-            .into_iter()
-            .map(|p| {
-                let sig = self.sign(&p)?;
-                Ok((p, (self.secret_key.0, sig)))
-            })
-            .collect::<Result<_>>()?;
+        let proposals: BTreeMap<T, (NodeId, SignatureShare)> =
+            crate::vote::proposals(&votes, faulty)
+                .into_iter()
+                .map(|p| {
+                    let sig = self.sign(&p)?;
+                    Ok((p, (self.secret_key.0, sig)))
+                })
+                .collect::<Result<_>>()?;
         let vote = Vote {
             gen,
             ballot: Ballot::SuperMajority { votes, proposals }.simplify(),
@@ -94,11 +95,7 @@ impl<T: Proposition> Consensus<T> {
     // membership: gen = pending_gen
     /// Handles a signed vote
     /// Returns the vote we cast and the reached consensus vote in case consensus was reached
-    pub fn handle_signed_vote(
-        &mut self,
-        signed_vote: SignedVote<T>,
-        gen: Generation,
-    ) -> Result<VoteResponse<T>> {
+    pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
             println!("[MBR-{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
@@ -114,9 +111,12 @@ impl<T: Proposition> Consensus<T> {
                     "[MBR-{}] We've already terminated, responding with decision",
                     self.id()
                 );
-                return Ok(VoteResponse::Broadcast(
-                    self.build_super_majority_vote(decision.votes, gen)?,
-                ));
+                let vote = self.build_super_majority_vote(
+                    decision.votes,
+                    signed_vote.vote.gen,
+                    &BTreeSet::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
+                )?;
+                VoteResponse::Broadcast(vote)
             }
         }
 
@@ -166,7 +166,7 @@ impl<T: Proposition> Consensus<T> {
         if self.is_split_vote(&self.votes.values().cloned().collect()) {
             info!("[MBR-{}] Detected split vote", self.id());
             let merge_vote = Vote {
-                gen,
+                gen: signed_vote.vote.gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
                 faults: self.faults(),
             };
@@ -204,8 +204,11 @@ impl<T: Proposition> Consensus<T> {
             }
 
             info!("[MBR-{}] broadcasting super majority", self.id());
-            let signed_vote =
-                self.build_super_majority_vote(self.votes.values().cloned().collect(), gen)?;
+            let signed_vote = self.build_super_majority_vote(
+                self.votes.values().cloned().collect(),
+                signed_vote.vote.gen,
+                &BTreeSet::from_iter(self.faults.keys().copied()),
+            )?;
             return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)));
         }
 
@@ -213,7 +216,7 @@ impl<T: Proposition> Consensus<T> {
         // If we have not yet voted, this is where we would contribute our vote
         if !self.votes.contains_key(&self.id()) {
             let signed_vote = self.sign_vote(Vote {
-                gen,
+                gen: signed_vote.vote.gen,
                 ballot: Ballot::Merge(BTreeSet::from_iter([signed_vote])),
                 faults: self.faults(),
             })?;
@@ -274,10 +277,6 @@ impl<T: Proposition> Consensus<T> {
         }
 
         count
-    }
-
-    pub fn proposals(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeSet<T> {
-        crate::vote::proposals(votes, &BTreeSet::from_iter(self.faults.keys().copied()))
     }
 
     fn is_split_vote(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {

@@ -141,8 +141,11 @@ impl<T: Proposition> Membership<T> {
             .iter() // history is a BTreeSet, .iter() is ordered by generation
             .filter(|(gen, _)| **gen > from_gen)
             .map(|(gen, history_entry)| {
-                self.consensus
-                    .build_super_majority_vote(history_entry.votes.clone(), *gen)
+                self.consensus.build_super_majority_vote(
+                    history_entry.votes.clone(),
+                    *gen,
+                    &BTreeSet::from_iter(history_entry.faults.iter().map(Fault::voter_at_fault)),
+                )
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -163,9 +166,7 @@ impl<T: Proposition> Membership<T> {
         self.validate_signed_vote(&signed_vote)?;
         self.log_signed_vote(&signed_vote);
 
-        let vote_response = self
-            .consensus
-            .handle_signed_vote(signed_vote, self.pending_gen)?;
+        let vote_response = self.consensus.handle_signed_vote(signed_vote)?;
 
         match &vote_response {
             VoteResponse::Broadcast(vote) => {

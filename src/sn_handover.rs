@@ -66,7 +66,7 @@ impl<T: Proposition> Handover<T> {
     ) -> Result<Option<SignedVote<T>>> {
         self.validate_signed_vote(&signed_vote)?;
 
-        let vote_response = self.consensus.handle_signed_vote(signed_vote, self.gen)?;
+        let vote_response = self.consensus.handle_signed_vote(signed_vote)?;
 
         match vote_response {
             VoteResponse::Broadcast(vote) => Ok(Some(vote)),
