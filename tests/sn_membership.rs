@@ -660,6 +660,75 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_membership_bft_consensus_qc3() -> Result<()> {
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let n = 4;
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+    let faulty = 1;
+    let proposer_a = 2;
+    let proposer_b = n;
+    {
+        let vote = net
+            .proc_mut(proposer_a)
+            .unwrap()
+            .propose(Reconfig::Join(11))
+            .unwrap();
+        net.broadcast(proposer_a, vote);
+    }
+
+    {
+        let packet = Packet {
+            source: faulty,
+            dest: proposer_b,
+            vote: net
+                .proc(faulty)
+                .unwrap()
+                .sign_vote(Vote {
+                    gen: 1,
+                    ballot: Ballot::Propose(Reconfig::Join(22)),
+                    faults: Default::default(),
+                })
+                .unwrap(),
+        };
+        net.enqueue_packets(vec![dbg!(packet)]);
+    }
+
+    {
+        let vote = net
+            .proc_mut(proposer_b)
+            .unwrap()
+            .propose(Reconfig::Join(33))
+            .unwrap();
+        net.broadcast(proposer_b, vote);
+    }
+
+    while let Err(e) = net.drain_queued_packets() {
+        println!("Error while draining: {e:?}");
+    }
+
+    net.generate_msc("test_membership_bft_consensus_qc3.msc")
+        .unwrap();
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        assert_eq!(p.consensus().votes, Default::default());
+        assert_eq!(p.gen, p.pending_gen);
+    }
+
+    // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
+    let reference_proc = &honest_procs[0];
+    for p in honest_procs.iter() {
+        assert_eq!(reference_proc.gen, p.gen);
+        for g in 0..=reference_proc.gen {
+            assert_eq!(reference_proc.members(g).unwrap(), p.members(g).unwrap())
+        }
+    }
+
+    Ok(())
+}
+
 #[quickcheck]
 fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::Result<TestResult> {
     let mut seed_buf = [0u8; 32];
