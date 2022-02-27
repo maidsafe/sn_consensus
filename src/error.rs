@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use thiserror::Error;
 
-use crate::{Generation, UniqueSectionId};
+use crate::Generation;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -24,12 +24,6 @@ pub enum Error {
     VoteForBadGeneration {
         vote_gen: Generation,
         gen: Generation,
-        pending_gen: Generation,
-    },
-    #[error("Vote received has a different unique section id: vote gen {vote_gen} != {gen}")]
-    VoteWithInvalidUniqueSectionId {
-        vote_gen: UniqueSectionId,
-        gen: UniqueSectionId,
     },
     #[error("The voter is not an elder")]
     NotElder,

@@ -16,7 +16,6 @@ pub type Generation = u64;
 pub struct Membership<T: Proposition> {
     pub consensus: Consensus<Reconfig<T>>,
     pub gen: Generation,
-    pub pending_gen: Generation,
     pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>,
     pub history: BTreeMap<Generation, Consensus<Reconfig<T>>>,
 }
@@ -54,7 +53,6 @@ impl<T: Proposition> Membership<T> {
         Membership {
             consensus: Consensus::from(secret_key, elders, n_elders),
             gen: 0,
-            pending_gen: 0,
             forced_reconfigs: Default::default(),
             history: BTreeMap::default(),
         }
@@ -183,7 +181,6 @@ impl<T: Proposition> Membership<T> {
         self.validate_signed_vote(&signed_vote)?;
 
         let vote_gen = signed_vote.vote.gen;
-        self.pending_gen = self.pending_gen.max(vote_gen); // TODO: remove pending_gen
 
         let consensus = self.consensus_at_gen_mut(vote_gen).unwrap();
         let vote_response = consensus.handle_signed_vote(signed_vote)?;
@@ -212,7 +209,6 @@ impl<T: Proposition> Membership<T> {
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<SignedVote<Reconfig<T>>> {
         self.consensus.cast_vote(&signed_vote)?;
-        self.pending_gen = signed_vote.vote.gen;
         Ok(signed_vote)
     }
 
@@ -223,7 +219,6 @@ impl<T: Proposition> Membership<T> {
             return Err(Error::VoteForBadGeneration {
                 vote_gen: signed_vote.vote.gen,
                 gen: self.gen,
-                pending_gen: self.pending_gen,
             });
         }
 

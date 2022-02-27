@@ -198,7 +198,6 @@ fn test_membership_split_vote() -> Result<()> {
             println!("proc {i:?}");
             let proc = &net.procs[i as usize];
             assert_eq!(proc.gen, 1);
-            assert_eq!(proc.pending_gen, 1);
             assert_eq!(proc.members(1)?, expected_members);
         }
     }
@@ -382,13 +381,8 @@ fn test_membership_interpreter_qc1() -> Result<()> {
     let mut net = Net::with_procs(1, 2, &mut rng);
     let p0 = net.procs[0].id();
 
-    let reconfig = Reconfig::Join(1);
     let q = &mut net.procs[0];
-    net.reconfigs_by_gen
-        .entry(q.pending_gen)
-        .or_default()
-        .insert(reconfig);
-    let vote = q.propose(reconfig).unwrap();
+    let vote = q.propose(Reconfig::Join(1)).unwrap();
     net.broadcast(p0, vote);
 
     net.enqueue_anti_entropy(1, 0);
@@ -421,10 +415,10 @@ fn test_membership_interpreter_qc2() -> Result<()> {
     assert!(net.packets.is_empty());
 
     // We should have no more pending votes.
-    let expected_members = net.procs[0].members(net.procs[0].pending_gen)?;
+    let expected_members = net.procs[0].members(net.procs[0].gen)?;
     for p in net.procs.iter() {
-        assert_eq!(p.gen, p.pending_gen);
         assert_eq!(p.consensus.votes, Default::default());
+        assert_eq!(p.consensus.decision, None);
         assert_eq!(p.members(p.gen)?, expected_members);
     }
 
@@ -657,8 +651,11 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.gen, p.pending_gen);
+        for g in 1..p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
         assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
     }
 
     // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
@@ -705,8 +702,11 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.consensus.votes, Default::default());
-        assert_eq!(p.gen, p.pending_gen);
+        for g in 1..p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
     }
 
     // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
@@ -776,8 +776,11 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.consensus.votes, Default::default());
-        assert_eq!(p.gen, p.pending_gen);
+        for g in 1..p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
     }
 
     // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
@@ -819,7 +822,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 match q.propose(reconfig) {
                     Ok(vote) => {
                         net.reconfigs_by_gen
-                            .entry(q.pending_gen)
+                            .entry(vote.vote.gen)
                             .or_default()
                             .insert(reconfig);
                         net.broadcast(q_id, vote);
@@ -853,7 +856,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                 match q.propose(reconfig) {
                     Ok(vote) => {
                         net.reconfigs_by_gen
-                            .entry(q.pending_gen)
+                            .entry(vote.vote.gen)
                             .or_default()
                             .insert(reconfig);
                         net.broadcast(q_id, vote);
@@ -1049,8 +1052,8 @@ fn prop_bft_consensus(
                 let proc = if let Some(proc) = net
                     .procs
                     .iter_mut()
-                    .filter(|p| !faulty.contains(&p.id())) // filter out faulty nodes
-                    .filter(|p| p.gen == p.pending_gen) // filter out nodes who have already voted this round
+                    .filter(|p| !faulty.contains(&p.id())) // honest nodes
+                    .filter(|p| p.consensus.votes.is_empty()) // who haven't voted yet
                     .choose(&mut rng)
                 {
                     proc
@@ -1090,8 +1093,11 @@ fn prop_bft_consensus(
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        assert_eq!(p.consensus.votes, Default::default());
-        assert_eq!(p.gen, p.pending_gen);
+        for g in 1..p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
     }
 
     // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values

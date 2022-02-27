@@ -84,7 +84,7 @@ impl<T: Proposition> Handover<T> {
 
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         if signed_vote.vote.gen != self.gen {
-            return Err(Error::VoteWithInvalidUniqueSectionId {
+            return Err(Error::VoteForBadGeneration {
                 vote_gen: signed_vote.vote.gen,
                 gen: self.gen,
             });

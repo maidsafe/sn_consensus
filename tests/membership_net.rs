@@ -180,14 +180,9 @@ impl Net {
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
-            Err(Error::VoteForBadGeneration {
-                vote_gen,
-                gen,
-                pending_gen,
-            }) => {
-                assert!(vote_gen <= gen || vote_gen > pending_gen);
+            Err(Error::VoteForBadGeneration { vote_gen, gen }) => {
+                assert!(vote_gen == 0 || vote_gen > gen + 1);
                 assert_eq!(dest_proc.gen, gen);
-                assert_eq!(dest_proc.pending_gen, pending_gen);
             }
             Err(err) => return Err(err),
         }
