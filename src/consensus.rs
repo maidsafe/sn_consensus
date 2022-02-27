@@ -70,7 +70,7 @@ impl<T: Proposition> Consensus<T> {
                 .into_iter()
                 .map(|p| {
                     let sig = self.sign(&p)?;
-                    Ok((p, (self.secret_key.0, sig)))
+                    Ok((p, (self.id(), sig)))
                 })
                 .collect::<Result<_>>()?;
         let vote = Vote {
@@ -267,7 +267,7 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
         Ok(SignedVote {
-            voter: self.secret_key.0,
+            voter: self.id(),
             sig: self.sign(&vote)?,
             vote,
         })
