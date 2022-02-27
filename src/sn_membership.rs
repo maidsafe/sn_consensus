@@ -20,7 +20,6 @@ pub struct Membership<T: Proposition> {
     pub gen: Generation,
     pub pending_gen: Generation,
     pub forced_reconfigs: BTreeMap<Generation, BTreeSet<Reconfig<T>>>, // TODO: change to bootstrap members
-    pub history: BTreeMap<Generation, Decision<Reconfig<T>>>, // for onboarding new procs, the vote proving super majority
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -58,7 +57,6 @@ impl<T: Proposition> Membership<T> {
             gen: 0,
             pending_gen: 0,
             forced_reconfigs: Default::default(),
-            history: BTreeMap::new(),
         }
     }
 
@@ -108,7 +106,7 @@ impl<T: Proposition> Membership<T> {
             return Ok(members);
         }
 
-        for (history_gen, history_entry) in self.history.iter() {
+        for (history_gen, consensus) in self.consensus.iter() {
             self.forced_reconfigs
                 .get(history_gen)
                 .cloned()
@@ -116,7 +114,13 @@ impl<T: Proposition> Membership<T> {
                 .into_iter()
                 .for_each(|r| r.apply(&mut members));
 
-            for (reconfig, _sig) in history_entry.proposals.iter() {
+            let decision = if let Some(decision) = consensus.decision.as_ref() {
+                decision
+            } else {
+                break;
+            };
+
+            for (reconfig, _sig) in decision.proposals.iter() {
                 reconfig.apply(&mut members);
             }
 
@@ -182,7 +186,7 @@ impl<T: Proposition> Membership<T> {
         let consensus = self.consensus_at_gen_mut(vote_gen).unwrap();
         let vote_response = consensus.handle_signed_vote(signed_vote)?;
 
-        if let Some(decision) = consensus.decision.clone() {
+        if consensus.decision.is_some() {
             let next_consensus = Consensus::from(
                 consensus.secret_key.clone(),
                 consensus.elders.clone(),
@@ -190,9 +194,6 @@ impl<T: Proposition> Membership<T> {
             );
             self.consensus.entry(vote_gen + 1).or_insert(next_consensus);
             self.gen = self.gen.max(vote_gen);
-
-            // TODO: replace history with the histor of consensus ^^
-            self.history.insert(vote_gen, decision);
         }
 
         Ok(vote_response)
