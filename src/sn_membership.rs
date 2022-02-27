@@ -164,7 +164,6 @@ impl<T: Proposition> Membership<T> {
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<VoteResponse<Reconfig<T>>> {
         self.validate_signed_vote(&signed_vote)?;
-        self.log_signed_vote(&signed_vote);
 
         let vote_response = self.consensus.handle_signed_vote(signed_vote)?;
 
