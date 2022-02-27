@@ -20,8 +20,8 @@ pub enum Error {
         child_gen: Generation,
         merge_gen: Generation,
     },
-    #[error("A vote is always for the next generation: vote gen {vote_gen} != {gen} + 1, pending gen: {pending_gen}")]
-    VoteNotForNextGeneration {
+    #[error("A vote must be tagged with a generation between 1..=(gen={gen} + 1): vote gen = {vote_gen}, gen: {gen}")]
+    VoteForBadGeneration {
         vote_gen: Generation,
         gen: Generation,
         pending_gen: Generation,

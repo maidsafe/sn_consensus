@@ -217,7 +217,7 @@ impl<T: Proposition> Membership<T> {
 
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {
         if signed_vote.vote.gen != self.gen + 1 {
-            return Err(Error::VoteNotForNextGeneration {
+            return Err(Error::VoteForBadGeneration {
                 vote_gen: signed_vote.vote.gen,
                 gen: self.gen,
                 pending_gen: self.pending_gen,

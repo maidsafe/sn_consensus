@@ -172,7 +172,7 @@ impl Net {
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
-            Err(Error::VoteNotForNextGeneration {
+            Err(Error::VoteForBadGeneration {
                 vote_gen,
                 gen,
                 pending_gen,
