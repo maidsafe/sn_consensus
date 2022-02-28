@@ -133,6 +133,8 @@ impl<T: Proposition> Consensus<T> {
             return Ok(resp);
         }
 
+        self.log_signed_vote(&signed_vote);
+
         if let Some(proposals) = their_decision {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
@@ -141,14 +143,7 @@ impl<T: Proposition> Consensus<T> {
                 "[MBR-{}] They terminated but we haven't yet, accepting decision",
                 self.id()
             );
-            let votes = crate::vote::simplify_votes(
-                &self
-                    .votes
-                    .values()
-                    .chain(signed_vote.unpack_votes())
-                    .cloned()
-                    .collect(),
-            );
+            let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
             let decision = Decision {
                 votes,
                 proposals,
@@ -157,8 +152,6 @@ impl<T: Proposition> Consensus<T> {
             self.decision = Some(decision);
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
-
-        self.log_signed_vote(&signed_vote);
 
         if let Some(proposals) =
             self.get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
@@ -196,15 +189,9 @@ impl<T: Proposition> Consensus<T> {
 
             let resp = if current_count != merge_count {
                 info!("[MBR-{}] broadcasting merge.", self.id());
-                match self.handle_signed_vote(signed_merge_vote.clone())? {
-                    VoteResponse::WaitingForMoreVotes => VoteResponse::Broadcast(signed_merge_vote),
-                    VoteResponse::Broadcast(vote) => VoteResponse::Broadcast(vote),
-                }
+                VoteResponse::Broadcast(self.cast_vote(&signed_merge_vote)?)
             } else {
-                info!(
-                    "[MBR-{}] merge does not improve things, waiting for more votes.",
-                    self.id()
-                );
+                info!("[MBR-{}] merge does not change counts, waiting.", self.id());
                 VoteResponse::WaitingForMoreVotes
             };
 
@@ -230,13 +217,7 @@ impl<T: Proposition> Consensus<T> {
                 &BTreeSet::from_iter(self.faults.keys().copied()),
             )?;
 
-            // We recurse here to handle the case where our SM vote puts us in a SM / SM
-            let resp = match self.handle_signed_vote(signed_vote.clone())? {
-                VoteResponse::WaitingForMoreVotes => VoteResponse::Broadcast(signed_vote),
-                VoteResponse::Broadcast(vote) => VoteResponse::Broadcast(vote),
-            };
-
-            return Ok(resp);
+            return Ok(VoteResponse::Broadcast(self.cast_vote(&signed_vote)?));
         }
 
         // We have determined that we don't yet have enough votes to take action.
@@ -253,16 +234,11 @@ impl<T: Proposition> Consensus<T> {
                 signed_vote.vote.ballot
             );
 
-            let resp = match self.handle_signed_vote(signed_vote.clone())? {
-                VoteResponse::WaitingForMoreVotes => VoteResponse::Broadcast(signed_vote),
-                VoteResponse::Broadcast(vote) => VoteResponse::Broadcast(vote),
-            };
-
-            return Ok(resp);
+            Ok(VoteResponse::Broadcast(self.cast_vote(&signed_vote)?))
+        } else {
+            info!("[MBR-{}] waiting for more votes", self.id());
+            Ok(VoteResponse::WaitingForMoreVotes)
         }
-
-        info!("[MBR-{}] waiting for more votes", self.id());
-        Ok(VoteResponse::WaitingForMoreVotes)
     }
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
