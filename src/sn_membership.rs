@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::consensus::{Consensus, VoteResponse};
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Error, Fault, NodeId, Result};
+use crate::{Error, NodeId, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
 pub type Generation = u64;
@@ -156,11 +156,7 @@ impl<T: Proposition> Membership<T> {
             .filter(|(gen, _)| **gen > from_gen)
             .filter_map(|(gen, c)| c.decision.clone().map(|d| (gen, c, d)))
             .map(|(gen, c, decision)| {
-                c.build_super_majority_vote(
-                    decision.votes.clone(),
-                    *gen,
-                    &BTreeSet::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
-                )
+                c.build_super_majority_vote(decision.votes, decision.faults, *gen)
             })
             .collect::<Result<Vec<_>>>()?;
 

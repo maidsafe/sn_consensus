@@ -62,21 +62,23 @@ impl<T: Proposition> Consensus<T> {
     pub fn build_super_majority_vote(
         &self,
         votes: BTreeSet<SignedVote<T>>,
+        faults: BTreeSet<Fault<T>>,
         gen: Generation,
-        faulty: &BTreeSet<NodeId>,
     ) -> Result<SignedVote<T>> {
+        let faulty = BTreeSet::from_iter(faults.iter().map(Fault::voter_at_fault));
         let proposals: BTreeMap<T, (NodeId, SignatureShare)> =
-            crate::vote::proposals(&votes, faulty)
+            crate::vote::proposals(&votes, &faulty)
                 .into_iter()
                 .map(|p| {
                     let sig = self.sign(&p)?;
                     Ok((p, (self.id(), sig)))
                 })
                 .collect::<Result<_>>()?;
+        let ballot = Ballot::SuperMajority { votes, proposals }.simplify();
         let vote = Vote {
             gen,
-            ballot: Ballot::SuperMajority { votes, proposals }.simplify(),
-            faults: self.faults(),
+            ballot,
+            faults,
         };
         self.sign_vote(vote)
     }
@@ -121,8 +123,8 @@ impl<T: Proposition> Consensus<T> {
                 );
                 let vote = self.build_super_majority_vote(
                     decision.votes,
+                    decision.faults,
                     signed_vote.vote.gen,
-                    &BTreeSet::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
                 )?;
                 VoteResponse::Broadcast(vote)
             } else {
@@ -213,8 +215,8 @@ impl<T: Proposition> Consensus<T> {
             info!("[MBR-{}] broadcasting super majority", self.id());
             let signed_vote = self.build_super_majority_vote(
                 self.votes.values().cloned().collect(),
+                BTreeSet::from_iter(self.faults.values().cloned()),
                 signed_vote.vote.gen,
-                &BTreeSet::from_iter(self.faults.keys().copied()),
             )?;
 
             return Ok(VoteResponse::Broadcast(self.cast_vote(&signed_vote)?));
