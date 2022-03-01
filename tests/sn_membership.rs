@@ -1035,11 +1035,13 @@ fn prop_validate_reconfig(
 fn prop_bft_consensus(
     recursion_limit: u8,
     n: u8,
+    n_actions: u8,
     faulty: Vec<u8>,
     seed: u128,
 ) -> Result<TestResult> {
     init();
     let n = n % 6 + 1;
+    let n_actions = n_actions.min(5);
     let recursion_limit = recursion_limit % (n / 2).max(1);
     let faulty = BTreeSet::from_iter(
         faulty
@@ -1058,23 +1060,12 @@ fn prop_bft_consensus(
 
     let faulty = BTreeSet::from_iter(faulty.into_iter().map(|idx| net.procs[idx as usize].id()));
 
-    let n_actions = rng.gen::<u8>() % 4;
-
     for _ in 0..n_actions {
         match rng.gen::<u8>() % 3 {
             0 if !faulty.is_empty() => {
-                match rng.gen::<bool>() {
-                    true => {
-                        // send a randomized packet
-                        let packet = net.gen_faulty_packet(recursion_limit, &faulty, &mut rng);
-                        net.enqueue_packets(vec![packet]);
-                    }
-                    false => {
-                        // drop a random packet
-                        let source = net.pick_id(&mut rng);
-                        net.drop_packet_from_source(source);
-                    }
-                };
+                // send a randomized packet
+                let packet = net.gen_faulty_packet(recursion_limit, &faulty, &mut rng);
+                net.enqueue_packets(vec![packet]);
             }
             1 => {
                 // node takes honest action

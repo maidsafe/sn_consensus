@@ -144,10 +144,6 @@ impl Net {
         }
     }
 
-    pub fn drop_packet_from_source(&mut self, source: NodeId) {
-        self.packets.get_mut(&source).map(VecDeque::pop_front);
-    }
-
     pub fn deliver_packet_from_source(&mut self, source: NodeId) -> Result<()> {
         let packet = match self.packets.get_mut(&source).map(|ps| ps.pop_front()) {
             Some(Some(p)) => p,
