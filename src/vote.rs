@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use blsttc::{PublicKeySet, SignatureShare};
@@ -66,6 +67,88 @@ pub fn proposals<T: Proposition>(
     )
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Candidate<T> {
+    pub proposals: BTreeSet<T>,
+    pub faulty: BTreeSet<NodeId>,
+}
+
+type SignatureSharesByVoter<T> = BTreeMap<NodeId, BTreeMap<T, SignatureShare>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoteCount<T> {
+    pub candidates: BTreeMap<Candidate<T>, usize>,
+    pub super_majorities: BTreeMap<Candidate<T>, SignatureSharesByVoter<T>>,
+    pub voters: BTreeSet<NodeId>,
+}
+
+impl<T> Default for VoteCount<T> {
+    fn default() -> Self {
+        Self {
+            candidates: Default::default(),
+            super_majorities: Default::default(),
+            voters: Default::default(),
+        }
+    }
+}
+
+impl<T: Proposition> VoteCount<T> {
+    pub fn count(votes: impl IntoIterator<Item = impl Borrow<SignedVote<T>>>) -> Self {
+        let mut count: VoteCount<T> = VoteCount::default();
+        let mut counted: BTreeSet<SignatureShare> = Default::default();
+
+        for vote in votes.into_iter() {
+            for unpacked_vote in vote.borrow().unpack_votes() {
+                if counted.contains(&unpacked_vote.sig) {
+                    continue;
+                }
+                counted.insert(unpacked_vote.sig.clone());
+
+                count.voters.insert(unpacked_vote.voter);
+                let candidate = unpacked_vote.vote.candidate();
+
+                match &unpacked_vote.vote.ballot {
+                    Ballot::SuperMajority { proposals, .. } => {
+                        let shares = count.super_majorities.entry(candidate).or_default();
+                        for (t, (id, sig)) in proposals {
+                            shares
+                                .entry(*id)
+                                .or_default()
+                                .insert(t.clone(), sig.clone());
+                        }
+                    }
+                    _ => {
+                        let c = count.candidates.entry(candidate).or_default();
+                        *c += 1;
+                    }
+                }
+            }
+        }
+
+        count
+    }
+
+    pub fn candidates_with_most_votes(&self) -> Option<(&Candidate<T>, usize)> {
+        self.candidates
+            .iter()
+            .map(|(candidates, c)| (candidates, *c))
+            .chain(
+                self.super_majorities
+                    .iter()
+                    .map(|(candidates, shares)| (candidates, shares.len())),
+            )
+            .max_by_key(|(_, c)| *c)
+    }
+
+    pub fn super_majorities_with_most_votes(
+        &self,
+    ) -> Option<(&Candidate<T>, &SignatureSharesByVoter<T>)> {
+        self.super_majorities
+            .iter()
+            .max_by_key(|(_, shares)| shares.len())
+    }
+}
+
 impl<T: Proposition> Ballot<T> {
     pub fn as_proposal(&self) -> Option<&T> {
         match &self {
@@ -106,6 +189,13 @@ impl<T: Proposition> Debug for Vote<T> {
 }
 
 impl<T: Proposition> Vote<T> {
+    pub fn candidate(&self) -> Candidate<T> {
+        Candidate {
+            proposals: self.proposals(),
+            faulty: self.known_faulty(),
+        }
+    }
+
     pub fn is_super_majority_ballot(&self) -> bool {
         matches!(self.ballot, Ballot::SuperMajority { .. })
     }
@@ -151,12 +241,12 @@ impl<T: Proposition> SignedVote<T> {
         crate::verify_sig_share(&self.vote, &self.sig, self.voter, voters)
     }
 
-    pub fn unpack_votes(&self) -> BTreeSet<&Self> {
+    pub fn unpack_votes(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
         match &self.vote.ballot {
-            Ballot::Propose(_) => BTreeSet::from_iter([self]),
-            Ballot::Merge(votes) | Ballot::SuperMajority { votes, .. } => BTreeSet::from_iter(
-                std::iter::once(self).chain(votes.iter().flat_map(Self::unpack_votes)),
-            ),
+            Ballot::Propose(_) => Box::new(std::iter::once(self)),
+            Ballot::Merge(votes) | Ballot::SuperMajority { votes, .. } => {
+                Box::new(std::iter::once(self).chain(votes.iter().flat_map(Self::unpack_votes)))
+            }
         }
     }
 

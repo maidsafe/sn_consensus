@@ -5,7 +5,7 @@ use log::info;
 use serde::Serialize;
 
 use crate::sn_membership::Generation;
-use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+use crate::vote::{Ballot, Proposition, SignedVote, Vote, VoteCount};
 use crate::{Error, Fault, NodeId, Result};
 
 #[derive(Debug)]
@@ -111,9 +111,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        let their_decision = self.get_super_majority_over_super_majorities(
-            &signed_vote.unpack_votes().into_iter().cloned().collect(),
-        )?;
+        let their_decision = self.get_decision(&VoteCount::count([&signed_vote]))?;
 
         if let Some(decision) = self.decision.clone() {
             let resp = if their_decision.is_none() {
@@ -155,9 +153,9 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        if let Some(proposals) =
-            self.get_super_majority_over_super_majorities(&self.votes.values().cloned().collect())?
-        {
+        let vote_count = VoteCount::count(self.votes.values());
+
+        if let Some(proposals) = self.get_decision(&vote_count)? {
             info!(
                 "[MBR-{}] Detected super majority over super majorities: {proposals:?}",
                 self.id()
@@ -172,7 +170,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        if self.is_split_vote(&self.votes.values().cloned().collect()) {
+        if self.is_split_vote(&vote_count) {
             info!("[MBR-{}] Detected split vote", self.id());
             let merge_vote = Vote {
                 gen: signed_vote.vote.gen,
@@ -180,16 +178,9 @@ impl<T: Proposition> Consensus<T> {
                 faults: self.faults(),
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
-            let current_count = self.count_votes(&self.votes.values().cloned().collect());
-            let merge_count = self.count_votes(
-                &signed_merge_vote
-                    .unpack_votes()
-                    .into_iter()
-                    .cloned()
-                    .collect(),
-            );
+            let merge_count = VoteCount::count([&signed_merge_vote]);
 
-            let resp = if current_count != merge_count {
+            let resp = if vote_count != merge_count {
                 info!("[MBR-{}] broadcasting merge.", self.id());
                 VoteResponse::Broadcast(self.cast_vote(&signed_merge_vote)?)
             } else {
@@ -200,7 +191,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(resp);
         }
 
-        if self.is_super_majority(&self.votes.values().cloned().collect()) {
+        if self.is_super_majority(&vote_count) {
             info!("[MBR-{}] Detected super majority", self.id());
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
@@ -267,94 +258,47 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {
-        let mut votes_by_voter: BTreeMap<NodeId, &SignedVote<T>> = BTreeMap::new();
-
-        for vote in votes.iter() {
-            let replace = if let Some(curr_vote) = votes_by_voter.get(&vote.voter) {
-                vote.supersedes(curr_vote)
-            } else {
-                true
-            };
-
-            if replace {
-                votes_by_voter.insert(vote.voter, vote);
-            }
-        }
-
-        let mut count: BTreeMap<BTreeSet<T>, usize> = Default::default();
-
-        for (_voter, vote) in votes_by_voter.iter() {
-            let proposals = vote.proposals();
-            let c = count.entry(proposals).or_default();
-            *c += 1;
-        }
-
-        count
-    }
-
-    fn is_split_vote(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
-        let counts = self.count_votes(votes);
-        let most_votes = counts.values().max().cloned().unwrap_or_default();
-        let voters = BTreeSet::from_iter(votes.iter().map(|v| v.voter));
-        let remaining_voters = self.n_elders - voters.len();
+    fn is_split_vote(&self, count: &VoteCount<T>) -> bool {
+        let most_votes = count
+            .candidates_with_most_votes()
+            .map(|(_, c)| c)
+            .unwrap_or(0);
+        let remaining_voters = self.n_elders - count.voters.len();
 
         // suppose the remaining votes go to the proposals with the most votes.
         let predicted_votes = most_votes + remaining_voters;
 
-        voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
+        count.voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
     }
 
-    pub fn is_super_majority(&self, votes: &BTreeSet<SignedVote<T>>) -> bool {
-        // TODO: super majority should always just be the largest 7 members
-        let most_votes = self
-            .count_votes(votes)
-            .values()
-            .max()
-            .cloned()
+    pub fn is_super_majority(&self, count: &VoteCount<T>) -> bool {
+        let most_votes = count
+            .candidates_with_most_votes()
+            .map(|(_, c)| c)
             .unwrap_or_default();
 
         most_votes > self.elders.threshold()
     }
 
-    fn get_super_majority_over_super_majorities(
-        &self,
-        votes: &BTreeSet<SignedVote<T>>,
-    ) -> Result<Option<BTreeMap<T, Signature>>> {
-        let sm_votes = BTreeSet::from_iter(
-            votes
-                .iter()
-                .filter(|v| v.vote.is_super_majority_ballot())
-                .cloned(),
-        );
-        if let Some((props, count_of_sm)) = self
-            .count_votes(&sm_votes)
-            .into_iter()
-            .max_by_key(|(_, c)| *c)
-        {
-            if count_of_sm > self.elders.threshold() {
+    fn get_decision(&self, vote_count: &VoteCount<T>) -> Result<Option<BTreeMap<T, Signature>>> {
+        if let Some((_candidate, shares_by_voter)) = vote_count.super_majorities_with_most_votes() {
+            if shares_by_voter.len() > self.elders.threshold() {
                 let mut proposal_sigs: BTreeMap<T, BTreeSet<(u64, SignatureShare)>> =
                     Default::default();
-                let proposals_from_each_supermajority = sm_votes
-                    .iter()
-                    .filter(|sm| sm.proposals() == props)
-                    .flat_map(|v| match &v.vote.ballot {
-                        Ballot::SuperMajority { proposals, .. } => proposals.clone(),
-                        _ => Default::default(),
-                    });
-                for (prop, (id, sig)) in proposals_from_each_supermajority {
-                    proposal_sigs
-                        .entry(prop)
-                        .or_default()
-                        .insert((id as u64, sig));
-                }
 
-                return Ok(Some(
-                    proposal_sigs
-                        .into_iter()
-                        .map(|(prop, sigs)| Ok((prop, self.elders.combine_signatures(sigs)?)))
-                        .collect::<Result<_>>()?,
-                ));
+                for (id, shares) in shares_by_voter {
+                    shares.iter().for_each(|(prop, sig)| {
+                        proposal_sigs
+                            .entry(prop.clone())
+                            .or_default()
+                            .insert((*id as u64, sig.clone()));
+                    });
+                }
+                let proposals = proposal_sigs
+                    .into_iter()
+                    .map(|(prop, sigs)| Ok((prop, self.elders.combine_signatures(sigs)?)))
+                    .collect::<Result<_>>()?;
+                return Ok(Some(proposals));
             }
         }
 
@@ -420,13 +364,7 @@ impl<T: Proposition> Consensus<T> {
                 Ok(())
             }
             Ballot::SuperMajority { votes, proposals } => {
-                if !self.is_super_majority(
-                    &votes
-                        .iter()
-                        .flat_map(SignedVote::unpack_votes)
-                        .cloned()
-                        .collect(),
-                ) {
+                if !self.is_super_majority(&VoteCount::count(votes)) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
                 } else if vote.proposals() != BTreeSet::from_iter(proposals.keys().cloned()) {
