@@ -18,8 +18,17 @@ use sn_membership::{
     Ballot, Error, Generation, Membership, Reconfig, Result, SignedVote, Vote, VoteResponse,
 };
 
+static INIT: std::sync::Once = std::sync::Once::new();
+
+fn init() {
+    INIT.call_once(|| {
+        let _ = env_logger::builder().is_test(true).try_init();
+    });
+}
+
 #[test]
 fn test_membership_reject_changing_reconfig_when_one_is_in_progress() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Membership::<u8>::from(
@@ -37,6 +46,7 @@ fn test_membership_reject_changing_reconfig_when_one_is_in_progress() -> Result<
 
 #[test]
 fn test_membership_reject_vote_from_non_member() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut p0 = Membership::<u8>::from(
@@ -59,6 +69,7 @@ fn test_membership_reject_vote_from_non_member() -> Result<()> {
 
 #[test]
 fn test_membership_reject_join_if_actor_is_already_a_member() {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Membership::from(
@@ -76,6 +87,7 @@ fn test_membership_reject_join_if_actor_is_already_a_member() {
 
 #[test]
 fn test_membership_reject_leave_if_actor_is_not_a_member() {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Membership::from(
@@ -93,6 +105,7 @@ fn test_membership_reject_leave_if_actor_is_not_a_member() {
 
 #[test]
 fn test_membership_returns_catchup_packets_from_previous_gen() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(0, 2, &mut rng);
 
@@ -153,6 +166,7 @@ fn test_membership_returns_catchup_packets_from_previous_gen() -> Result<()> {
 
 #[test]
 fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Membership::<u8>::from(
@@ -177,6 +191,7 @@ fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
 
 #[test]
 fn test_membership_split_vote() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         let mut net = Net::with_procs((nprocs * 2) / 3, nprocs, &mut rng);
@@ -207,6 +222,7 @@ fn test_membership_split_vote() -> Result<()> {
 
 #[test]
 fn test_membership_round_robin_split_vote() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         let mut net = Net::with_procs(((nprocs + 1) * 2 / 3).min(nprocs - 1), nprocs, &mut rng);
@@ -240,6 +256,7 @@ fn test_membership_round_robin_split_vote() -> Result<()> {
 
 #[test]
 fn test_membership_onboarding_across_many_generations() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(1, 2, &mut rng);
     let p0 = net.procs[0].id();
@@ -285,6 +302,7 @@ fn test_membership_onboarding_across_many_generations() -> Result<()> {
 
 #[test]
 fn test_membership_simple_proposal() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, 3, &mut rng);
 
@@ -377,6 +395,7 @@ impl Arbitrary for Instruction {
 
 #[test]
 fn test_membership_interpreter_qc1() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(1, 2, &mut rng);
     let p0 = net.procs[0].id();
@@ -399,6 +418,7 @@ fn test_membership_interpreter_qc1() -> Result<()> {
 
 #[test]
 fn test_membership_interpreter_qc2() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(2, 3, &mut rng);
     let p0 = net.procs[0].id();
@@ -427,6 +447,7 @@ fn test_membership_interpreter_qc2() -> Result<()> {
 
 #[test]
 fn test_membership_interpreter_qc3() {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, 4, &mut rng);
 
@@ -473,6 +494,7 @@ fn test_membership_interpreter_qc3() {
 
 #[test]
 fn test_membership_interpreter_qc4() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
 
     fn super_majority(m: usize, n: usize) -> bool {
@@ -559,6 +581,7 @@ fn test_membership_interpreter_qc4() -> Result<()> {
 
 #[test]
 fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Membership::<u8>::from(
@@ -591,6 +614,7 @@ fn test_membership_procs_refuse_to_propose_competing_votes() -> Result<()> {
 
 #[test]
 fn test_membership_validate_reconfig_rejects_when_members_at_capacity() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Membership::<u8>::from(
@@ -613,6 +637,7 @@ fn test_membership_validate_reconfig_rejects_when_members_at_capacity() -> Resul
 
 #[test]
 fn test_membership_bft_consensus_qc1() -> Result<()> {
+    init();
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(4, 6, &mut rng);
     let faulty = BTreeSet::from_iter([net.procs[1].id(), net.procs[5].id()]);
@@ -672,6 +697,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
 
 #[test]
 fn test_membership_bft_consensus_qc2() -> Result<()> {
+    init();
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, 5, &mut rng);
     let faulty = BTreeSet::from_iter([net.procs[0].id()]);
@@ -797,6 +823,7 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
 
 #[quickcheck]
 fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::Result<TestResult> {
+    init();
     let mut seed_buf = [0u8; 32];
     seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
     let mut rng = StdRng::from_seed(seed_buf);
@@ -949,6 +976,7 @@ fn prop_validate_reconfig(
     threshold: u8,
     seed: u128,
 ) -> Result<TestResult> {
+    init();
     let mut seed_buf = [0u8; 32];
     seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
     let mut rng = StdRng::from_seed(seed_buf);
@@ -1010,6 +1038,7 @@ fn prop_bft_consensus(
     faulty: Vec<u8>,
     seed: u128,
 ) -> Result<TestResult> {
+    init();
     let n = n % 6 + 1;
     let recursion_limit = recursion_limit % (n / 2).max(1);
     let faulty = BTreeSet::from_iter(

@@ -47,3 +47,4 @@ debug = true
 eyre = "0.6.5"
 quickcheck = "1"
 quickcheck_macros = "1"
+env_logger = "0.8"
