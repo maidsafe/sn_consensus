@@ -260,7 +260,7 @@ impl<T: Proposition> Consensus<T> {
 
     fn is_split_vote(&self, count: &VoteCount<T>) -> bool {
         let most_votes = count
-            .candidates_with_most_votes()
+            .candidate_with_most_votes()
             .map(|(_, c)| c)
             .unwrap_or(0);
         let remaining_voters = self.n_elders - count.voters.len();
@@ -273,7 +273,7 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn is_super_majority(&self, count: &VoteCount<T>) -> bool {
         let most_votes = count
-            .candidates_with_most_votes()
+            .candidate_with_most_votes()
             .map(|(_, c)| c)
             .unwrap_or_default();
 
@@ -281,7 +281,7 @@ impl<T: Proposition> Consensus<T> {
     }
 
     fn get_decision(&self, vote_count: &VoteCount<T>) -> Result<Option<BTreeMap<T, Signature>>> {
-        if let Some((_candidate, shares_by_voter)) = vote_count.super_majorities_with_most_votes() {
+        if let Some((_candidate, shares_by_voter)) = vote_count.super_majority_with_most_votes() {
             if shares_by_voter.len() > self.elders.threshold() {
                 let mut proposal_sigs: BTreeMap<T, BTreeSet<(u64, SignatureShare)>> =
                     Default::default();

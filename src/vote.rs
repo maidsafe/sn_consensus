@@ -128,7 +128,7 @@ impl<T: Proposition> VoteCount<T> {
         count
     }
 
-    pub fn candidates_with_most_votes(&self) -> Option<(&Candidate<T>, usize)> {
+    pub fn candidate_with_most_votes(&self) -> Option<(&Candidate<T>, usize)> {
         self.candidates
             .iter()
             .map(|(candidates, c)| (candidates, *c))
@@ -140,7 +140,7 @@ impl<T: Proposition> VoteCount<T> {
             .max_by_key(|(_, c)| *c)
     }
 
-    pub fn super_majorities_with_most_votes(
+    pub fn super_majority_with_most_votes(
         &self,
     ) -> Option<(&Candidate<T>, &SignatureSharesByVoter<T>)> {
         self.super_majorities
