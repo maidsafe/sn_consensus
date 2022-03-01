@@ -639,14 +639,14 @@ fn test_membership_validate_reconfig_rejects_when_members_at_capacity() -> Resul
 fn test_membership_bft_consensus_qc1() -> Result<()> {
     init();
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(4, 6, &mut rng);
-    let faulty = BTreeSet::from_iter([net.procs[1].id(), net.procs[5].id()]);
+    let mut net = Net::with_procs(4, 7, &mut rng);
+    let faulty = BTreeSet::from_iter([2, 6]);
 
     // send a randomized packet
     let packet = Packet {
-        source: net.procs[1].id(),
-        dest: net.procs[0].id(),
-        vote: net.procs[1].sign_vote(Vote {
+        source: 2,
+        dest: 1,
+        vote: net.proc(2).unwrap().sign_vote(Vote {
             gen: 1,
             ballot: Ballot::Propose(Reconfig::Join(240)),
             faults: Default::default(),
@@ -654,11 +654,11 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
     };
     net.enqueue_packets(vec![packet]);
     let packet = Packet {
-        source: net.procs[1].id(),
-        dest: net.procs[0].id(),
+        source: 2,
+        dest: 1,
         vote: SignedVote {
-            voter: net.procs[1].id(),
-            ..net.procs[5].sign_vote(Vote {
+            voter: 2,
+            ..net.proc(6).unwrap().sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(Reconfig::Join(115)),
                 faults: Default::default(),
@@ -666,11 +666,9 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
         },
     };
     net.enqueue_packets(vec![packet]);
+    net.drain_queued_packets()?;
 
-    while let Err(e) = net.drain_queued_packets() {
-        println!("Error while draining: {e:?}");
-    }
-    net.generate_msc("bft_consensus_qc1.msc")?;
+    net.generate_msc("test_membership_bft_consensus_qc1.msc")?;
 
     let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| !faulty.contains(&p.id())));
 
