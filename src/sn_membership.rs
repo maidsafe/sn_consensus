@@ -134,6 +134,7 @@ impl<T: Proposition> Membership<T> {
     }
 
     pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<SignedVote<Reconfig<T>>> {
+        info!("[{}] proposing {:?}", self.id(), reconfig);
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
@@ -204,8 +205,7 @@ impl<T: Proposition> Membership<T> {
         &mut self,
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<SignedVote<Reconfig<T>>> {
-        self.consensus.cast_vote(&signed_vote)?;
-        Ok(signed_vote)
+        self.consensus.cast_vote(signed_vote)
     }
 
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {

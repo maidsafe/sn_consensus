@@ -15,7 +15,7 @@ mod membership_net;
 use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
 use sn_membership::{
-    Ballot, Error, Generation, Membership, Reconfig, Result, SignedVote, Vote, VoteResponse,
+    Ballot, Error, Fault, Generation, Membership, Reconfig, Result, SignedVote, Vote, VoteResponse,
 };
 
 static INIT: std::sync::Once = std::sync::Once::new();

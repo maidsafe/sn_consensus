@@ -40,7 +40,7 @@ impl<T: Proposition> Handover<T> {
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
-        self.cast_vote(&signed_vote)
+        self.cast_vote(signed_vote)
     }
 
     // Get someone up to speed on our view of the current votes
@@ -60,25 +60,17 @@ impl<T: Proposition> Handover<T> {
         self.consensus.id()
     }
 
-    pub fn handle_signed_vote(
-        &mut self,
-        signed_vote: SignedVote<T>,
-    ) -> Result<Option<SignedVote<T>>> {
+    pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
         self.validate_signed_vote(&signed_vote)?;
 
-        let vote_response = self.consensus.handle_signed_vote(signed_vote)?;
-
-        match vote_response {
-            VoteResponse::Broadcast(vote) => Ok(Some(vote)),
-            VoteResponse::WaitingForMoreVotes => Ok(None),
-        }
+        self.consensus.handle_signed_vote(signed_vote)
     }
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
         self.consensus.sign_vote(vote)
     }
 
-    pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
+    pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> Result<SignedVote<T>> {
         self.consensus.cast_vote(signed_vote)
     }
 

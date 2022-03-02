@@ -4,10 +4,11 @@ use std::io::Write;
 use std::iter;
 
 use blsttc::{SecretKeySet, SignatureShare};
+use log::info;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
 
-use sn_membership::{Ballot, Error, Handover, NodeId, Result, SignedVote, Vote};
+use sn_membership::{Ballot, Error, Handover, NodeId, Result, SignedVote, Vote, VoteResponse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
@@ -168,13 +169,13 @@ impl Net {
         };
 
         let resp = dest_proc.handle_signed_vote(packet.vote);
-        // println!("[NET] resp: {:?}", resp);
+        info!("[NET] resp from {}: {:?}", packet.dest, resp);
         match resp {
-            Ok(Some(vote)) => {
+            Ok(VoteResponse::Broadcast(vote)) => {
                 let dest_actor = dest_proc.id();
                 self.broadcast(dest_actor, vote);
             }
-            Ok(None) => {}
+            Ok(VoteResponse::WaitingForMoreVotes) => {}
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }

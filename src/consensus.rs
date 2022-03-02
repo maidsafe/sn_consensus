@@ -184,7 +184,7 @@ impl<T: Proposition> Consensus<T> {
 
             let resp = if vote_count != signed_merge_vote.vote_count() {
                 info!("[MBR-{}] broadcasting merge.", self.id());
-                VoteResponse::Broadcast(self.cast_vote(&signed_merge_vote)?)
+                VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)?)
             } else {
                 info!("[MBR-{}] merge does not change counts, waiting.", self.id());
                 VoteResponse::WaitingForMoreVotes
@@ -212,7 +212,7 @@ impl<T: Proposition> Consensus<T> {
                 signed_vote.vote.gen,
             )?;
 
-            return Ok(VoteResponse::Broadcast(self.cast_vote(&signed_vote)?));
+            return Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)?));
         }
 
         // We have determined that we don't yet have enough votes to take action.
@@ -229,7 +229,7 @@ impl<T: Proposition> Consensus<T> {
                 signed_vote.vote.ballot
             );
 
-            Ok(VoteResponse::Broadcast(self.cast_vote(&signed_vote)?))
+            Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)?))
         } else {
             info!("[MBR-{}] waiting for more votes", self.id());
             Ok(VoteResponse::WaitingForMoreVotes)
@@ -244,9 +244,10 @@ impl<T: Proposition> Consensus<T> {
         })
     }
 
-    pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
+    pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> Result<SignedVote<T>> {
+        info!("[{}] casting vote {:?}", self.id(), signed_vote);
         match self.handle_signed_vote(signed_vote.clone())? {
-            VoteResponse::WaitingForMoreVotes => Ok(signed_vote.clone()),
+            VoteResponse::WaitingForMoreVotes => Ok(signed_vote),
             VoteResponse::Broadcast(vote) => Ok(vote),
         }
     }
