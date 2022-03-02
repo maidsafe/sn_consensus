@@ -178,7 +178,7 @@ impl Net {
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
-            Err(Error::VoteWithInvalidUniqueSectionId { vote_gen, gen }) => {
+            Err(Error::VoteForBadGeneration { vote_gen, gen }) => {
                 assert!(vote_gen != gen);
                 assert_eq!(dest_proc.gen, gen);
             }
@@ -219,17 +219,6 @@ impl Net {
             .into_iter()
             .filter(|(_, queue)| !queue.is_empty())
             .collect();
-    }
-
-    pub fn enqueue_anti_entropy(&mut self, i: usize, j: usize) {
-        let dest = self.procs[i].id();
-        let source = self.procs[j].id();
-
-        self.enqueue_packets(self.procs[j].anti_entropy().into_iter().map(|vote| Packet {
-            source,
-            dest,
-            vote,
-        }));
     }
 
     pub fn generate_msc(&self, name: &str) -> Result<()> {

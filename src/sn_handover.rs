@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use core::fmt::Debug;
@@ -40,7 +40,7 @@ impl<T: Proposition> Handover<T> {
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
-        Ok(self.cast_vote(signed_vote))
+        self.cast_vote(&signed_vote)
     }
 
     // Get someone up to speed on our view of the current votes
@@ -66,11 +66,10 @@ impl<T: Proposition> Handover<T> {
     ) -> Result<Option<SignedVote<T>>> {
         self.validate_signed_vote(&signed_vote)?;
 
-        let vote_response = self.consensus.handle_signed_vote(signed_vote, self.gen)?;
+        let vote_response = self.consensus.handle_signed_vote(signed_vote)?;
 
         match vote_response {
             VoteResponse::Broadcast(vote) => Ok(Some(vote)),
-            VoteResponse::Decided { .. } => Ok(None),
             VoteResponse::WaitingForMoreVotes => Ok(None),
         }
     }
@@ -79,22 +78,13 @@ impl<T: Proposition> Handover<T> {
         self.consensus.sign_vote(vote)
     }
 
-    pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> SignedVote<T> {
-        self.log_signed_vote(&signed_vote);
-        signed_vote
-    }
-
-    fn log_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
-        self.consensus.log_signed_vote(signed_vote);
-    }
-
-    pub fn count_votes(&self, votes: &BTreeSet<SignedVote<T>>) -> BTreeMap<BTreeSet<T>, usize> {
-        self.consensus.count_votes(votes)
+    pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
+        self.consensus.cast_vote(signed_vote)
     }
 
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         if signed_vote.vote.gen != self.gen {
-            return Err(Error::VoteWithInvalidUniqueSectionId {
+            return Err(Error::VoteForBadGeneration {
                 vote_gen: signed_vote.vote.gen,
                 gen: self.gen,
             });

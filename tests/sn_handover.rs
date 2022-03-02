@@ -110,7 +110,7 @@ fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
     // make sure the other elder rejects that vote
     assert!(matches!(
         net.procs[0].handle_signed_vote(vote),
-        Err(Error::VoteWithInvalidUniqueSectionId {
+        Err(Error::VoteForBadGeneration {
             vote_gen: 401,
             gen: 0,
         })
@@ -162,14 +162,6 @@ fn test_handover_split_vote() -> eyre::Result<()> {
         }
         net.drain_queued_packets()?;
 
-        // make elders notice split and vote for merge votes
-        for i in 0..nprocs {
-            for j in 0..nprocs {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-        net.drain_queued_packets()?;
-
         // make sure they all reach the same conclusion
         let first_voters_value = net.consensus_value(0);
         for i in 0..nprocs {
@@ -186,10 +178,10 @@ fn test_handover_split_vote() -> eyre::Result<()> {
 fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
-        println!("[TEST] testing with {nprocs} elders");
+        println!("[TEST] testing with {nprocs} elder(s)");
 
         // make network of nprocs elders
-        let mut net = Net::with_procs(((nprocs + 1) * 2 / 3).min(nprocs - 1), nprocs, &mut rng);
+        let mut net = Net::with_procs((2 * nprocs) / 3, nprocs, &mut rng);
 
         // make each elder propose a different thing
         for i in 0..net.procs.len() {
@@ -205,14 +197,6 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
             }
         }
 
-        // make elders notice split and vote for merge
-        for i in 0..nprocs {
-            for j in 0..nprocs {
-                net.enqueue_anti_entropy(i, j);
-            }
-        }
-        net.drain_queued_packets()?;
-
         // generate msc file
         net.generate_msc(&format!("handover_round_robin_split_vote_{}.msc", nprocs))?;
 
@@ -220,9 +204,10 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
         let max_proposed_value = nprocs - 1;
         let expected_consensus_value = Some(max_proposed_value as u8);
         for i in 0..nprocs {
+            println!("proc {i}");
             let decision = net.consensus_value(i);
             println!("[TEST] checking elder {i}'s consensus value: {decision:?}");
-            assert_eq!(net.consensus_value(i), expected_consensus_value);
+            assert_eq!(decision, expected_consensus_value);
         }
     }
     Ok(())
