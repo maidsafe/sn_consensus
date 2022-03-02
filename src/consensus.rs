@@ -111,7 +111,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        let their_decision = self.get_decision(&VoteCount::count([&signed_vote]))?;
+        let their_decision = self.get_decision(&signed_vote.vote_count())?;
 
         if let Some(decision) = self.decision.clone() {
             let resp = if their_decision.is_none() {
@@ -153,7 +153,10 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        let vote_count = VoteCount::count(self.votes.values());
+        let vote_count = VoteCount::count(
+            self.votes.values(),
+            &BTreeSet::from_iter(self.faults.keys().copied()),
+        );
 
         if let Some(proposals) = self.get_decision(&vote_count)? {
             info!(
@@ -178,9 +181,8 @@ impl<T: Proposition> Consensus<T> {
                 faults: self.faults(),
             };
             let signed_merge_vote = self.sign_vote(merge_vote)?;
-            let merge_count = VoteCount::count([&signed_merge_vote]);
 
-            let resp = if vote_count != merge_count {
+            let resp = if vote_count != signed_merge_vote.vote_count() {
                 info!("[MBR-{}] broadcasting merge.", self.id());
                 VoteResponse::Broadcast(self.cast_vote(&signed_merge_vote)?)
             } else {
@@ -364,7 +366,7 @@ impl<T: Proposition> Consensus<T> {
                 Ok(())
             }
             Ballot::SuperMajority { votes, proposals } => {
-                if !self.is_super_majority(&VoteCount::count(votes)) {
+                if !self.is_super_majority(&VoteCount::count(votes, &vote.known_faulty())) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
                 } else if vote.proposals() != BTreeSet::from_iter(proposals.keys().cloned()) {

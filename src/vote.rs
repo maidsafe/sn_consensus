@@ -93,18 +93,26 @@ impl<T> Default for VoteCount<T> {
 }
 
 impl<T: Proposition> VoteCount<T> {
-    pub fn count(votes: impl IntoIterator<Item = impl Borrow<SignedVote<T>>>) -> Self {
+    pub fn count<V: Borrow<SignedVote<T>>>(
+        votes: impl IntoIterator<Item = V>,
+        faulty: &BTreeSet<NodeId>,
+    ) -> Self {
         let mut count: VoteCount<T> = VoteCount::default();
         let mut counted: BTreeSet<SignatureShare> = Default::default();
 
         for vote in votes.into_iter() {
             for unpacked_vote in vote.borrow().unpack_votes() {
-                if counted.contains(&unpacked_vote.sig) {
+                // We always include voters in the voter set (even if they are faulty)
+                // so that we have an accurate reading of who has contributed votes.
+                // This is done to to aid in split-vote detection
+                count.voters.insert(unpacked_vote.voter);
+
+                if counted.contains(&unpacked_vote.sig) || faulty.contains(&unpacked_vote.voter) {
                     continue;
                 }
+
                 counted.insert(unpacked_vote.sig.clone());
 
-                count.voters.insert(unpacked_vote.voter);
                 let candidate = unpacked_vote.vote.candidate();
 
                 match &unpacked_vote.vote.ballot {
@@ -275,5 +283,9 @@ impl<T: Proposition> SignedVote<T> {
 
     pub fn strict_supersedes(&self, signed_vote: &Self) -> bool {
         self != signed_vote && self.supersedes(signed_vote)
+    }
+
+    pub fn vote_count(&self) -> VoteCount<T> {
+        VoteCount::count([self], &self.vote.known_faulty())
     }
 }
