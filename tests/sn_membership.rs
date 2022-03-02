@@ -674,7 +674,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        for g in 1..p.gen {
+        for g in 1..=p.gen {
             assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
         }
         assert_eq!(p.consensus.votes, BTreeMap::default());
@@ -726,7 +726,7 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        for g in 1..p.gen {
+        for g in 1..=p.gen {
             assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
         }
         assert_eq!(p.consensus.votes, BTreeMap::default());
@@ -800,7 +800,71 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        for g in 1..p.gen {
+        for g in 1..=p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
+    }
+
+    // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
+    let reference_proc = &honest_procs[0];
+    for p in honest_procs.iter() {
+        assert_eq!(reference_proc.gen, p.gen);
+        for g in 0..=reference_proc.gen {
+            assert_eq!(reference_proc.members(g).unwrap(), p.members(g).unwrap())
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_membership_votes_from_faulty_nodes_dont_contribute_to_vote_counts() -> Result<()> {
+    init();
+
+    let n = 5;
+
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+
+    let faulty = 3;
+    let honest = 1;
+
+    {
+        // node takes honest action
+        let proc = net.proc_mut(honest).unwrap();
+        let vote = proc.propose(Reconfig::Join(11)).unwrap();
+        net.broadcast(honest, dbg!(vote));
+    }
+
+    {
+        let faulty_proc = net.proc(faulty).unwrap();
+        let packet = Packet {
+            source: faulty,
+            dest: honest,
+            vote: faulty_proc
+                .sign_vote(Vote {
+                    gen: 1,
+                    ballot: Ballot::Propose(Reconfig::Join(22)),
+                    faults: Default::default(),
+                })
+                .unwrap(),
+        };
+        net.enqueue_packets(vec![packet]);
+    }
+
+    net.drain_queued_packets()?;
+
+    net.generate_msc("test_membership_bft_consensus_qc4.msc")?;
+
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        println!("Checking {}", p.id());
+        for g in 1..=p.gen {
+            println!(" at gen {g}");
             assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
         }
         assert_eq!(p.consensus.votes, BTreeMap::default());
@@ -1033,13 +1097,12 @@ fn prop_validate_reconfig(
 fn prop_bft_consensus(
     recursion_limit: u8,
     n: u8,
-    n_actions: u8,
+    actions: Vec<u8>,
     faulty: Vec<u8>,
     seed: u128,
-) -> Result<TestResult> {
+) -> Result<()> {
     init();
     let n = n % 6 + 1;
-    let n_actions = n_actions.min(5);
     let recursion_limit = recursion_limit % (n / 2).max(1);
     let faulty = BTreeSet::from_iter(
         faulty
@@ -1048,18 +1111,17 @@ fn prop_bft_consensus(
             .filter(|p| p != &0) // genesis can not be faulty
             .take((n / 3u8).saturating_sub(1) as usize),
     );
-    // All non-faulty nodes eventually decide on a reconfig
 
     let mut seed_buf = [0u8; 32];
     seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
     let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
 
-    let mut net = Net::with_procs(((n + 1) * 2 / 3).min(n - 1), n, &mut rng);
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
 
     let faulty = BTreeSet::from_iter(faulty.into_iter().map(|idx| net.procs[idx as usize].id()));
 
-    for _ in 0..n_actions {
-        match rng.gen::<u8>() % 3 {
+    for action in actions.iter().take(7) {
+        match action % 3 {
             0 if !faulty.is_empty() => {
                 // send a randomized packet
                 let packet = net.gen_faulty_packet(recursion_limit, &faulty, &mut rng);
@@ -1111,7 +1173,7 @@ fn prop_bft_consensus(
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        for g in 1..p.gen {
+        for g in 1..=p.gen {
             assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
         }
         assert_eq!(p.consensus.votes, BTreeMap::default());
@@ -1127,5 +1189,5 @@ fn prop_bft_consensus(
         }
     }
 
-    Ok(TestResult::passed())
+    Ok(())
 }
