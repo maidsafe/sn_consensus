@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.14.0](https://github.com/maidsafe/sn_membership/compare/v1.13.0...v1.14.0) (2022-03-02)
+
+
+### Features
+
+* **prop_bft_consensus:** take n_action as input instead of from rng ([939bfca](https://github.com/maidsafe/sn_membership/commit/939bfcaa45d510cf20c1980209a00e15c2e66b88))
+* **tests:** add env_logger to tests ([ce86f15](https://github.com/maidsafe/sn_membership/commit/ce86f153e0929b6f27cf6dab9ba6808c4e053c80))
+* test_membership_bft_consensus_qc3 ([a583900](https://github.com/maidsafe/sn_membership/commit/a583900aa5a6b9bc546edcf1af16622fde5287a9))
+* test_membership_interpreter_qc4 ([af209ad](https://github.com/maidsafe/sn_membership/commit/af209ad7553524a33d4fd84f070b668ea15fba8c))
+
+
+### Bug Fixes
+
+* add new test checking that faulty votes are not counted ([28d762f](https://github.com/maidsafe/sn_membership/commit/28d762fa15937d0edf3b8c3969264a0d54c4652f))
+* build_super_majority_vote takes faults as input ([c5652f0](https://github.com/maidsafe/sn_membership/commit/c5652f0d3b652db07b8b673e3d8a35fcf343190c))
+* filter out faulty votes when counting candidates ([d543b4d](https://github.com/maidsafe/sn_membership/commit/d543b4d4da88e8f5c8bbeefe86f2c33d40eb80f2))
+* recursively handle vote when casting; keep consensus history ([bd5a766](https://github.com/maidsafe/sn_membership/commit/bd5a7663e3b63d9c627afe2a1f32eb08e52525e2))
+* remove unneccessary anti_entropy calls that may mask errors ([f1ae81e](https://github.com/maidsafe/sn_membership/commit/f1ae81edda25f069718ddbe5ae68c79608c99355))
+* remove unused dependencies ([602662a](https://github.com/maidsafe/sn_membership/commit/602662a9f7f518b313a117f2cb895e6c5e39432a))
+* **naming:** singular candidate/super-majority in VoteCount methods ([64d97f5](https://github.com/maidsafe/sn_membership/commit/64d97f51648dd66910bd1a5aaeb72f402cf45d6b))
+* **tests:** simplify bft_qc1 test case ([fd18675](https://github.com/maidsafe/sn_membership/commit/fd18675d4fd8620d72a20fdcd6cde1660eb13db7))
+* don't log signed voted in sn_membership ([1c2da5f](https://github.com/maidsafe/sn_membership/commit/1c2da5f7daa4e33214136267c1169bcef2215175))
+* drop votes from faulty voters ([73625aa](https://github.com/maidsafe/sn_membership/commit/73625aaa96bda5bc6351609a357c70ea593dfbb9))
+* idempotency check and no-op when we've both terminated ([88ae8f3](https://github.com/maidsafe/sn_membership/commit/88ae8f31e6f53c64b85af1bb140425050398159d))
+* simplify votes when making decision ([9058262](https://github.com/maidsafe/sn_membership/commit/9058262bdebaf4a01d178b0d169c6bd32fa3d073))
+* undecided consensus is kept in it's own field to remove unwraps ([b3e99f3](https://github.com/maidsafe/sn_membership/commit/b3e99f3bac3e3aa9230c8dd5a71245e92da08a0f))
+* update tests ([56efb6f](https://github.com/maidsafe/sn_membership/commit/56efb6fe341fcb415e265c479d7cf64b6f8f1a37))
+* use count_votes instead of proposals to decide if a merge vote is productive ([bfbcbaf](https://github.com/maidsafe/sn_membership/commit/bfbcbaf2f6df7c256233a2c643846e48d6d479c8))
+* when adopting decision, use faults from signed vote rather than our ([41dcecc](https://github.com/maidsafe/sn_membership/commit/41dcecc63d2bfcb3a518181358b3c9c15505e2df))
+* **consensus:** derive Clone, PartialEq/Eq on Decision, VoteResponse ([b17dc9d](https://github.com/maidsafe/sn_membership/commit/b17dc9d7621f202926ed7c153bee5629fa3a630d))
+* **handle_signed_vote:** handle_signed_vote reads gen from vote ([c06ca78](https://github.com/maidsafe/sn_membership/commit/c06ca780a38b8b87d458481c4b3c791104adcb0b))
+* **logging:** move more logging to log::info ([27bd4ab](https://github.com/maidsafe/sn_membership/commit/27bd4ab5d1532728e3fd2eacc52661f50881be4a))
+* **vote counting:** count each voters proposals only once ([47572e3](https://github.com/maidsafe/sn_membership/commit/47572e38c559d820d2e05cabe606dcc15b5ce5b5))
+
 ## [1.13.0](https://github.com/maidsafe/sn_membership/compare/v1.12.0...v1.13.0) (2022-02-23)
 
 
