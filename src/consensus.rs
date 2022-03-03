@@ -13,6 +13,7 @@ pub struct Consensus<T: Proposition> {
     pub elders: PublicKeySet,
     pub n_elders: usize,
     pub secret_key: (NodeId, SecretKeyShare),
+    pub seen_votes_cache: BTreeSet<SignatureShare>,
     pub votes: BTreeMap<NodeId, SignedVote<T>>,
     pub faults: BTreeMap<NodeId, Fault<T>>,
     pub decision: Option<Decision<T>>,
@@ -41,6 +42,7 @@ impl<T: Proposition> Consensus<T> {
             elders,
             n_elders,
             secret_key,
+            seen_votes_cache: Default::default(),
             votes: Default::default(),
             faults: Default::default(),
             decision: None,
@@ -84,12 +86,7 @@ impl<T: Proposition> Consensus<T> {
     }
 
     pub fn have_we_seen_this_vote_before(&self, signed_vote: &SignedVote<T>) -> bool {
-        if let Some(previous_vote_from_voter) = self.votes.get(&signed_vote.voter) {
-            previous_vote_from_voter.supersedes(signed_vote)
-        } else {
-            // if we have no votes from this voter, then it is new
-            false
-        }
+        self.seen_votes_cache.contains(&signed_vote.sig)
     }
 
     // handover: gen = gen
@@ -99,8 +96,13 @@ impl<T: Proposition> Consensus<T> {
     pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
         info!("[{}] handling vote {:?}", self.id(), signed_vote);
 
+        if self.decision.is_some() {
+            info!("[{}] we've decided already, dropping vote", self.id());
+            return Ok(VoteResponse::WaitingForMoreVotes);
+        }
+
         if self.have_we_seen_this_vote_before(&signed_vote) {
-            info!("[{}] skipping already processed vote", self.id());
+            info!("[{}] dropping already processed vote", self.id());
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
@@ -240,9 +242,11 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn log_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
         for vote in signed_vote.unpack_votes() {
-            let existing_vote = self.votes.entry(vote.voter).or_insert_with(|| vote.clone());
-            if vote.supersedes(existing_vote) {
-                *existing_vote = vote.clone()
+            if self.seen_votes_cache.insert(vote.sig.clone()) {
+                let existing_vote = self.votes.entry(vote.voter).or_insert_with(|| vote.clone());
+                if vote.supersedes(existing_vote) {
+                    *existing_vote = vote.clone()
+                }
             }
         }
     }
