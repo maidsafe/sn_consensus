@@ -26,6 +26,12 @@ pub struct Decision<T: Proposition> {
     pub faults: BTreeSet<Fault<T>>,
 }
 
+impl<T: Proposition> Decision<T> {
+    pub fn faulty_ids(&self) -> BTreeSet<NodeId> {
+        BTreeSet::from_iter(self.faults.iter().map(Fault::voter_at_fault))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoteResponse<T: Proposition> {
     WaitingForMoreVotes,
@@ -59,6 +65,10 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn faults(&self) -> BTreeSet<Fault<T>> {
         BTreeSet::from_iter(self.faults.values().cloned())
+    }
+
+    pub fn faulty_ids(&self) -> BTreeSet<NodeId> {
+        BTreeSet::from_iter(self.faults.keys().copied())
     }
 
     pub fn build_super_majority_vote(
@@ -136,10 +146,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        let vote_count = VoteCount::count(
-            self.votes.values(),
-            &BTreeSet::from_iter(self.faults.keys().copied()),
-        );
+        let vote_count = VoteCount::count(self.votes.values(), &self.faulty_ids());
 
         if let Some(proposals) = self.get_decision(&vote_count)? {
             info!(
@@ -341,7 +348,8 @@ impl<T: Proposition> Consensus<T> {
             Ballot::Propose(_) => Ok(()),
             Ballot::Merge(votes) => self.validate_child_vote(vote.gen, votes),
             Ballot::SuperMajority { votes, proposals } => {
-                if !self.is_super_majority(&VoteCount::count(votes, &vote.known_faulty())) {
+                let vote_count = VoteCount::count(votes, &vote.faulty_ids());
+                if !self.is_super_majority(&vote_count) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
                 } else if vote.proposals() != BTreeSet::from_iter(proposals.keys().cloned()) {

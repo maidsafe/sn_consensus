@@ -211,13 +211,6 @@ impl<T: Proposition> Debug for Vote<T> {
 }
 
 impl<T: Proposition> Vote<T> {
-    pub fn candidate(&self) -> Candidate<T> {
-        Candidate {
-            proposals: self.proposals(),
-            faulty: self.known_faulty(),
-        }
-    }
-
     pub fn is_super_majority_ballot(&self) -> bool {
         matches!(self.ballot, Ballot::SuperMajority { .. })
     }
@@ -226,12 +219,12 @@ impl<T: Proposition> Vote<T> {
         Ok(bincode::serialize(&self)?)
     }
 
-    pub fn known_faulty(&self) -> BTreeSet<NodeId> {
+    pub fn faulty_ids(&self) -> BTreeSet<NodeId> {
         BTreeSet::from_iter(self.faults.iter().map(Fault::voter_at_fault))
     }
 
     pub fn proposals(&self) -> BTreeSet<T> {
-        self.proposals_with_known_faults(&self.known_faulty())
+        self.proposals_with_known_faults(&self.faulty_ids())
     }
 
     pub fn proposals_with_known_faults(&self, known_faulty: &BTreeSet<NodeId>) -> BTreeSet<T> {
@@ -259,6 +252,19 @@ impl<T: Proposition> Debug for SignedVote<T> {
 }
 
 impl<T: Proposition> SignedVote<T> {
+    pub fn candidate(&self) -> Candidate<T> {
+        match &self.vote.ballot {
+            Ballot::SuperMajority { votes, .. } => VoteCount::count(votes, &self.vote.faulty_ids())
+                .candidate_with_most_votes()
+                .map(|(candidate, _)| candidate.clone())
+                .unwrap_or(Candidate::default()),
+            _ => Candidate {
+                proposals: self.proposals(),
+                faulty: self.vote.faulty_ids(),
+            },
+        }
+    }
+
     pub fn validate_signature(&self, voters: &PublicKeySet) -> Result<()> {
         crate::verify_sig_share(&self.vote, &self.sig, self.voter, voters)
     }
@@ -277,12 +283,12 @@ impl<T: Proposition> SignedVote<T> {
     }
 
     pub fn supersedes(&self, other: &Self) -> bool {
-        let our_known_faulty = self.vote.known_faulty();
-        let other_known_faulty = other.vote.known_faulty();
+        let our_faulty = self.vote.faulty_ids();
+        let other_faulty = other.vote.faulty_ids();
 
         if (&self.voter, self.vote.gen, &self.vote.ballot)
             == (&other.voter, other.vote.gen, &other.vote.ballot)
-            && our_known_faulty.is_superset(&other_known_faulty)
+            && our_faulty.is_superset(&other_faulty)
         {
             true
         } else {
@@ -296,6 +302,6 @@ impl<T: Proposition> SignedVote<T> {
     }
 
     pub fn vote_count(&self) -> VoteCount<T> {
-        VoteCount::count([self], &self.vote.known_faulty())
+        VoteCount::count([self], &self.vote.faulty_ids())
     }
 }
