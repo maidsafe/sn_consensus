@@ -143,19 +143,18 @@ impl<T: Proposition> VoteCount<T> {
         for vote in votes_by_honest_voter.into_values() {
             let candidate = vote.candidate();
 
-            match &vote.vote.ballot {
-                Ballot::SuperMajority { proposals, .. } => {
-                    let sm_count = count.super_majorities.entry(candidate.clone()).or_default();
-                    sm_count.count += 1;
-                    for (t, (id, sig)) in proposals {
-                        sm_count
-                            .proposals
-                            .entry(t.clone())
-                            .or_default()
-                            .insert(*id as u64, sig.clone());
-                    }
+            if let Ballot::SuperMajority { proposals, .. } = &vote.vote.ballot {
+                let sm_count = count.super_majorities.entry(candidate.clone()).or_default();
+
+                sm_count.count += 1;
+
+                for (t, (id, sig)) in proposals {
+                    sm_count
+                        .proposals
+                        .entry(t.clone())
+                        .or_default()
+                        .insert(*id as u64, sig.clone());
                 }
-                _ => {}
             }
 
             let c = count.candidates.entry(candidate).or_default();
@@ -271,7 +270,7 @@ impl<T: Proposition> SignedVote<T> {
             Ballot::SuperMajority { votes, .. } => VoteCount::count(votes, &self.vote.faulty_ids())
                 .candidate_with_most_votes()
                 .map(|(candidate, _)| candidate.clone())
-                .unwrap_or(Candidate::default()),
+                .unwrap_or_default(),
             _ => Candidate {
                 proposals: self.proposals(),
                 faulty: self.vote.faulty_ids(),
