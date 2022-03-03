@@ -1,4 +1,5 @@
 use blsttc::{SecretKeySet, SecretKeyShare};
+use log::info;
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 mod handover_net;
@@ -32,6 +33,12 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     assert!(net.packets.is_empty());
 
     // by the time everyone agreed on smth segregated_elder is back online and receives the bad vote
+    for i in 0..4 {
+        let decision = net.consensus_value(i);
+        info!("[TEST] checking voter {i}'s consensus value: {decision:?}");
+        assert_eq!(decision, Some(1));
+    }
+
     let bad_vote = net.procs[0]
         .sign_vote(Vote {
             gen: 0,
@@ -39,12 +46,21 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
             faults: Default::default(),
         })
         .unwrap();
+
     net.enqueue_packets([Packet {
         source: p0,
         dest: segregated_elder.id(),
         vote: bad_vote,
     }]);
+
     net.procs.push(segregated_elder);
+
+    net.procs[1]
+        .anti_entropy()
+        .unwrap()
+        .into_iter()
+        .for_each(|v| net.broadcast(2, v));
+
     net.drain_queued_packets().unwrap();
 
     net.generate_msc("handover_one_faulty_node_and_many_packet_drops.msc")
@@ -55,7 +71,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     let first_voters_value = net.consensus_value(0);
     for i in 0..5 {
         let decision = net.consensus_value(i);
-        println!("[TEST] checking voter {i}'s consensus value: {decision:?}");
+        info!("[TEST] checking voter {i}'s consensus value: {decision:?}");
         assert_eq!(decision, first_voters_value);
     }
 

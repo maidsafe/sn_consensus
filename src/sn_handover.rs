@@ -44,10 +44,19 @@ impl<T: Proposition> Handover<T> {
     }
 
     // Get someone up to speed on our view of the current votes
-    pub fn anti_entropy(&self) -> Vec<SignedVote<T>> {
+    pub fn anti_entropy(&self) -> Result<Vec<SignedVote<T>>> {
         info!("[HDVR] anti-entropy from {:?}", self.id());
 
-        self.consensus.votes.values().cloned().collect()
+        if let Some(decision) = self.consensus.decision.as_ref() {
+            let vote = self.consensus.build_super_majority_vote(
+                decision.votes.clone(),
+                decision.faults.clone(),
+                self.gen,
+            )?;
+            Ok(vec![vote])
+        } else {
+            Ok(self.consensus.votes.values().cloned().collect())
+        }
     }
 
     pub fn resolve_votes<'a>(&self, proposals: &'a BTreeMap<T, Signature>) -> Option<&'a T> {

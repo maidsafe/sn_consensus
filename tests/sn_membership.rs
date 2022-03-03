@@ -150,7 +150,7 @@ fn test_membership_split_vote() -> Result<()> {
 
         let expected_members = BTreeSet::from_iter(0..=(2 * nprocs) / 3);
         for i in 0..nprocs {
-            println!("proc {i:?}");
+            info!("proc {i} / {nprocs}");
             let proc = &net.procs[i as usize];
             assert_eq!(proc.gen, 1);
             assert_eq!(proc.members(1)?, expected_members);
