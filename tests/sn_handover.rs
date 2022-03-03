@@ -5,8 +5,17 @@ mod handover_net;
 use handover_net::{Net, Packet};
 use sn_membership::{Ballot, Error, Handover, Result, SignedVote, Vote};
 
+static INIT: std::sync::Once = std::sync::Once::new();
+
+fn init() {
+    INIT.call_once(|| {
+        let _ = env_logger::builder().is_test(true).try_init();
+    });
+}
+
 #[test]
 fn test_handover_one_faulty_node_and_many_packet_drops() {
+    init();
     // make network of 5 elders with one segregated (his network is really bad)
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, 5, &mut rng);
@@ -55,6 +64,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
 
 #[test]
 fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc: Handover<u8> = Handover::from(
@@ -75,6 +85,7 @@ fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Res
 
 #[test]
 fn test_handover_reject_vote_from_non_member() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut p0 = Handover::<u8>::from(
@@ -99,6 +110,7 @@ fn test_handover_reject_vote_from_non_member() -> Result<()> {
 
 #[test]
 fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
+    init();
     // make net with 2 elders
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(1, 2, &mut rng);
@@ -119,6 +131,7 @@ fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
 
 #[test]
 fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Handover::<u8>::from(
@@ -147,6 +160,7 @@ fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
 
 #[test]
 fn test_handover_split_vote() -> eyre::Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         println!("[TEST] testing with {nprocs} elders");
@@ -176,6 +190,7 @@ fn test_handover_split_vote() -> eyre::Result<()> {
 
 #[test]
 fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         println!("[TEST] testing with {nprocs} elder(s)");
