@@ -78,15 +78,20 @@ impl<T: Proposition> Consensus<T> {
         gen: Generation,
     ) -> Result<SignedVote<T>> {
         let faulty = BTreeSet::from_iter(faults.iter().map(Fault::voter_at_fault));
-        let proposals: BTreeMap<T, (NodeId, SignatureShare)> =
-            crate::vote::proposals(&votes, &faulty)
-                .into_iter()
-                .map(|p| {
-                    let sig = self.sign(&p)?;
-                    Ok((p, (self.id(), sig)))
-                })
-                .collect::<Result<_>>()?;
+
+        let proposals = VoteCount::count(&votes, &faulty)
+            .candidate_with_most_votes()
+            .map(|(candidate, _)| candidate.proposals.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|proposal| {
+                let sig = self.sign(&proposal)?;
+                Ok((proposal, (self.id(), sig)))
+            })
+            .collect::<Result<_>>()?;
+
         let ballot = Ballot::SuperMajority { votes, proposals }.simplify();
+
         let vote = Vote {
             gen,
             ballot,
@@ -349,10 +354,16 @@ impl<T: Proposition> Consensus<T> {
             Ballot::Merge(votes) => self.validate_child_vote(vote.gen, votes),
             Ballot::SuperMajority { votes, proposals } => {
                 let vote_count = VoteCount::count(votes, &vote.faulty_ids());
+
+                let candidate_proposals = vote_count
+                    .candidate_with_most_votes()
+                    .map(|(c, _)| c.proposals.clone())
+                    .unwrap_or_default();
+
                 if !self.is_super_majority(&vote_count) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
-                } else if vote.proposals() != BTreeSet::from_iter(proposals.keys().cloned()) {
+                } else if !candidate_proposals.iter().eq(proposals.keys()) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
                 } else if proposals

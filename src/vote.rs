@@ -73,6 +73,15 @@ pub struct Candidate<T> {
     pub faulty: BTreeSet<NodeId>,
 }
 
+impl<T> Default for Candidate<T> {
+    fn default() -> Self {
+        Self {
+            proposals: Default::default(),
+            faulty: Default::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SuperMajorityCount<T> {
     pub count: usize,
@@ -111,41 +120,46 @@ impl<T: Proposition> VoteCount<T> {
         faulty: &BTreeSet<NodeId>,
     ) -> Self {
         let mut count: VoteCount<T> = VoteCount::default();
-        let mut counted: BTreeSet<SignatureShare> = Default::default();
+
+        let mut votes_by_honest_voter: BTreeMap<NodeId, SignedVote<T>> = Default::default();
 
         for vote in votes.into_iter() {
             for unpacked_vote in vote.borrow().unpack_votes() {
-                // We always include voters in the voter set (even if they are faulty)
-                // so that we have an accurate reading of who has contributed votes.
-                // This is done to to aid in split-vote detection
-                count.voters.insert(unpacked_vote.voter);
-
-                if counted.contains(&unpacked_vote.sig) || faulty.contains(&unpacked_vote.voter) {
+                if faulty.contains(&unpacked_vote.voter) {
                     continue;
                 }
-
-                counted.insert(unpacked_vote.sig.clone());
-
-                let candidate = unpacked_vote.vote.candidate();
-
-                match &unpacked_vote.vote.ballot {
-                    Ballot::SuperMajority { proposals, .. } => {
-                        let sm_count = count.super_majorities.entry(candidate).or_default();
-                        sm_count.count += 1;
-                        for (t, (id, sig)) in proposals {
-                            sm_count
-                                .proposals
-                                .entry(t.clone())
-                                .or_default()
-                                .insert(*id as u64, sig.clone());
-                        }
-                    }
-                    _ => {
-                        let c = count.candidates.entry(candidate).or_default();
-                        *c += 1;
-                    }
+                let existing_vote = votes_by_honest_voter
+                    .entry(unpacked_vote.voter)
+                    .or_insert_with(|| unpacked_vote.clone());
+                if unpacked_vote.supersedes(existing_vote) {
+                    *existing_vote = unpacked_vote.clone();
                 }
             }
+        }
+
+        count.voters.extend(votes_by_honest_voter.keys().copied());
+        count.voters.extend(faulty.iter().copied());
+
+        for vote in votes_by_honest_voter.into_values() {
+            let candidate = vote.candidate();
+
+            match &vote.vote.ballot {
+                Ballot::SuperMajority { proposals, .. } => {
+                    let sm_count = count.super_majorities.entry(candidate.clone()).or_default();
+                    sm_count.count += 1;
+                    for (t, (id, sig)) in proposals {
+                        sm_count
+                            .proposals
+                            .entry(t.clone())
+                            .or_default()
+                            .insert(*id as u64, sig.clone());
+                    }
+                }
+                _ => {}
+            }
+
+            let c = count.candidates.entry(candidate).or_default();
+            *c += 1;
         }
 
         count

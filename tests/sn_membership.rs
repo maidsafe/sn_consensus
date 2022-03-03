@@ -821,7 +821,7 @@ fn test_membership_votes_from_faulty_nodes_dont_contribute_to_vote_counts() -> R
 }
 
 #[test]
-fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
+fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
     init();
     let n = 5;
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
@@ -856,12 +856,75 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
 
     net.drain_queued_packets()?;
 
+    net.generate_msc("test_membership_faulty_node_attempts_to_trick_honest_node")?;
+
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
+
+    for p in honest_procs.iter() {
+        info!("P: {}", p.id());
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
+        assert_eq!(p.gen, 1);
+        let decision = p.consensus_at_gen(1).unwrap().decision.as_ref().unwrap();
+
+        // check that the decision includes the discovery that `faulty` was faulty
+        assert_eq!(
+            Vec::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
+            vec![faulty]
+        );
+
+        assert_eq!(
+            BTreeSet::from_iter(decision.proposals.keys()),
+            BTreeSet::from_iter([&Reconfig::Join(22)])
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
+    init();
+    let n = 5;
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+    let faulty = 1;
+    let honest = 2;
+    {
+        // send a randomized packet
+        let faulty_proc = net.proc(faulty).unwrap();
+        let packet = Packet {
+            source: faulty,
+            dest: honest,
+            vote: faulty_proc
+                .sign_vote(Vote {
+                    gen: 1,
+                    ballot: Ballot::Propose(Reconfig::Join(22)),
+                    faults: Default::default(),
+                })
+                .unwrap(),
+        };
+        net.enqueue_packets(vec![packet]);
+    }
+
+    {
+        let vote = net
+            .proc_mut(faulty)
+            .unwrap()
+            .propose(Reconfig::Join(33))
+            .unwrap();
+        net.broadcast(faulty, vote);
+    }
+
+    net.drain_queued_packets().unwrap();
+
     net.generate_msc("test_membership_bft_consensus_qc4.msc")
         .unwrap();
 
     let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
 
     for p in honest_procs.iter() {
+        info!("P: {}", p.id());
         assert_eq!(p.consensus.votes, BTreeMap::default());
         assert_eq!(p.consensus.decision, None);
         assert_eq!(p.gen, 1);
@@ -934,7 +997,7 @@ fn test_membership_final_broadcast_on_decision_catches_up_stragglers() -> Result
 
     net.drain_queued_packets()?;
 
-    net.generate_msc("test_membership_bft_consensus_qc5.msc")
+    net.generate_msc("test_membership_final_broadcast_on_decision_catches_up_stragglers.msc")
         .unwrap();
 
     let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
@@ -950,20 +1013,209 @@ fn test_membership_final_broadcast_on_decision_catches_up_stragglers() -> Result
         let consensus = p.consensus_at_gen(1).unwrap();
         let decision = consensus.decision.as_ref().unwrap();
 
-        // Due to the order of network packets, we formed a decision before nodes could notice the fault
-        assert_eq!(decision.faulty_ids(), BTreeSet::from_iter([]));
-        // And we accept both of the honest proposal and the faulty proposal
+        assert_eq!(decision.faulty_ids(), BTreeSet::from_iter([1]));
         assert_eq!(
             BTreeSet::from_iter(decision.proposals.keys()),
-            BTreeSet::from_iter([&Reconfig::Join(66), &Reconfig::Join(60)])
+            BTreeSet::from_iter([&Reconfig::Join(66)])
         );
     }
 
-    // But some of the nodes did notice the fault! They can use this information to remove the faulty voter in the next round
-    assert_eq!(
-        net.procs[2].consensus_at_gen(1).unwrap().faulty_ids(),
-        BTreeSet::from_iter([faulty])
-    );
+    Ok(())
+}
+
+#[test]
+fn test_membership_scenario_requiring_us_to_filter_to_most_recent_votes_when_counting() -> Result<()>
+{
+    init();
+    let n = 5;
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+
+    let faulty = 3;
+    let honest_a = 1;
+    let honest_b = 2;
+    let honest_c = 4;
+
+    {
+        // send a randomized packet
+        let packet = Packet {
+            source: faulty,
+            dest: honest_a,
+            vote: net.proc(faulty).unwrap().sign_vote(Vote {
+                gen: 1,
+                ballot: Ballot::Propose(Reconfig::Join(11)),
+                faults: Default::default(),
+            })?,
+        };
+        net.enqueue_packets(vec![dbg!(packet)]);
+    }
+
+    {
+        let vote = net
+            .proc_mut(honest_b)
+            .unwrap()
+            .propose(Reconfig::Join(22))?;
+        net.broadcast(honest_b, vote);
+    }
+    {
+        let vote = net
+            .proc_mut(honest_c)
+            .unwrap()
+            .propose(Reconfig::Join(33))?;
+        net.broadcast(honest_c, vote);
+    }
+
+    net.drain_queued_packets()?;
+
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        info!("P: {}", p.id());
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
+
+        assert_eq!(p.gen, 1);
+        let decision = p.consensus_at_gen(1).unwrap().decision.as_ref().unwrap();
+        assert_eq!(
+            BTreeSet::from_iter(decision.proposals.keys().cloned()),
+            BTreeSet::from_iter([Reconfig::Join(22), Reconfig::Join(33)])
+        )
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_membership_ensure_that_candidates_are_being_chosen_based_on_vote_count() -> Result<()> {
+    init();
+    let n = 5;
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+
+    {
+        let vote = net
+            .proc_mut(5)
+            .unwrap()
+            .propose(Reconfig::Join(255))
+            .unwrap();
+        net.broadcast(5, vote);
+    }
+
+    {
+        let _ = net.deliver_packet_from_source(5);
+    }
+
+    {
+        let vote = net
+            .proc_mut(4)
+            .unwrap()
+            .propose(Reconfig::Join(144))
+            .unwrap();
+        net.broadcast(4, vote);
+    }
+
+    while let Err(e) = net.drain_queued_packets() {
+        println!("Error while draining: {e:?}");
+    }
+
+    let honest_procs = Vec::from_iter(net.procs.iter());
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        for g in 1..=p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
+    }
+
+    // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
+    let reference_proc = &honest_procs[0];
+    for p in honest_procs.iter() {
+        assert_eq!(reference_proc.gen, p.gen);
+        for g in 0..=reference_proc.gen {
+            assert_eq!(reference_proc.members(g).unwrap(), p.members(g).unwrap())
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_membership_ensure_we_are_validating_super_majority_proposals() -> Result<()> {
+    init();
+    let mut rng = StdRng::from_seed([0u8; 32]);
+
+    fn super_majority(m: usize, n: usize) -> bool {
+        3 * m > 2 * n
+    }
+
+    let n = 5;
+    let mut net = Net::with_procs(((2 * n) / 3) as u8, n as u8, &mut rng);
+    let id_a = 5;
+    let id_b = 4;
+    {
+        let reconfig = Reconfig::Join(1);
+        let vote = net.proc_mut(id_a).unwrap().propose(reconfig).unwrap();
+        net.reconfigs_by_gen
+            .entry(vote.vote.gen)
+            .or_default()
+            .insert(reconfig);
+        net.broadcast(id_a, vote);
+    }
+
+    {
+        // deliver packet
+        net.deliver_packet_from_source(id_a)?;
+    }
+
+    {
+        let reconfig = Reconfig::Join(0);
+        let vote = net.proc_mut(id_b).unwrap().propose(reconfig).unwrap();
+        net.reconfigs_by_gen
+            .entry(vote.vote.gen)
+            .or_default()
+            .insert(reconfig);
+        net.broadcast(id_b, vote);
+    }
+
+    net.drain_queued_packets()?;
+    assert!(net.packets.is_empty());
+
+    // We should have no more pending votes.
+    for p in net.procs.iter() {
+        assert_eq!(p.consensus.votes, Default::default());
+    }
+
+    let mut procs_by_gen: BTreeMap<Generation, Vec<Membership<u8>>> = Default::default();
+
+    for proc in net.procs {
+        procs_by_gen.entry(proc.gen).or_default().push(proc);
+    }
+
+    let max_gen = procs_by_gen.keys().last().unwrap();
+
+    // And procs at each generation should have agreement on members
+    for (gen, procs) in procs_by_gen.iter() {
+        let mut proc_iter = procs.iter();
+        let first = proc_iter.next().ok_or(Error::NoMembers)?;
+        for proc in proc_iter {
+            assert_eq!(
+                first.members(first.gen)?,
+                proc.members(proc.gen)?,
+                "gen: {}",
+                gen
+            );
+        }
+    }
+
+    let proc_at_max_gen = procs_by_gen[max_gen].get(0).ok_or(Error::NoMembers)?;
+    assert!(super_majority(
+        procs_by_gen[max_gen].len(),
+        proc_at_max_gen.consensus.n_elders
+    ));
 
     Ok(())
 }
