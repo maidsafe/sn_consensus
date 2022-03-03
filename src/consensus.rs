@@ -333,19 +333,7 @@ impl<T: Proposition> Consensus<T> {
     fn validate_vote(&self, vote: &Vote<T>) -> Result<()> {
         match &vote.ballot {
             Ballot::Propose(_) => Ok(()),
-            Ballot::Merge(votes) => {
-                // TODO: generation checking needs to move to sn_membership
-                for child_vote in votes.iter() {
-                    if child_vote.vote.gen != vote.gen {
-                        return Err(Error::MergedVotesMustBeFromSameGen {
-                            child_gen: child_vote.vote.gen,
-                            merge_gen: vote.gen,
-                        });
-                    }
-                    self.validate_signed_vote(child_vote)?;
-                }
-                Ok(())
-            }
+            Ballot::Merge(votes) => self.validate_child_vote(vote.gen, votes),
             Ballot::SuperMajority { votes, proposals } => {
                 if !self.is_super_majority(&VoteCount::count(votes, &vote.known_faulty())) {
                     // TODO: this should be moved to fault detection
@@ -362,20 +350,24 @@ impl<T: Proposition> Consensus<T> {
                 {
                     Err(Error::InvalidElderSignature)
                 } else {
-                    for child_vote in votes.iter() {
-                        // TODO: generation checking needs to move to sn_membership
-                        if child_vote.vote.gen != vote.gen {
-                            return Err(Error::MergedVotesMustBeFromSameGen {
-                                child_gen: child_vote.vote.gen,
-                                merge_gen: vote.gen,
-                            });
-                        }
-                        self.validate_signed_vote(child_vote)?;
-                    }
-                    Ok(())
+                    self.validate_child_vote(vote.gen, votes)
                 }
             }
         }
+    }
+
+    fn validate_child_vote(&self, gen: Generation, votes: &BTreeSet<SignedVote<T>>) -> Result<()> {
+        for child_vote in votes {
+            // TODO: generation checking needs to move to sn_membership
+            if child_vote.vote.gen != gen {
+                return Err(Error::MergedVotesMustBeFromSameGen {
+                    child_gen: child_vote.vote.gen,
+                    merge_gen: gen,
+                });
+            }
+            self.validate_signed_vote(child_vote)?;
+        }
+        Ok(())
     }
 }
 
