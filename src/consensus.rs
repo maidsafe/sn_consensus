@@ -389,18 +389,16 @@ mod tests {
             )
         }));
 
-        states[0].votes = BTreeMap::from_iter((0..10u8).map(|i| {
-            (
-                i + 1,
-                states[i as usize]
-                    .sign_vote(Vote {
-                        gen: 0,
-                        ballot: Ballot::Propose(i),
-                        faults: Default::default(),
-                    })
-                    .unwrap(),
-            )
-        }));
+        for i in 0..10u8 {
+            let vote = states[i as usize]
+                .sign_vote(Vote {
+                    gen: 0,
+                    ballot: Ballot::Propose(i),
+                    faults: Default::default(),
+                })
+                .unwrap();
+            states[0].log_signed_vote(&vote);
+        }
 
         // try existing vote
         let new_vote = states[2]
