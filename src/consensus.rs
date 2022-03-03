@@ -83,12 +83,12 @@ impl<T: Proposition> Consensus<T> {
         self.sign_vote(vote)
     }
 
-    pub fn is_new_vote_from_voter(&self, signed_vote: &SignedVote<T>) -> bool {
+    pub fn have_we_seen_this_vote_before(&self, signed_vote: &SignedVote<T>) -> bool {
         if let Some(previous_vote_from_voter) = self.votes.get(&signed_vote.voter) {
-            signed_vote.strict_supersedes(previous_vote_from_voter)
+            previous_vote_from_voter.supersedes(signed_vote)
         } else {
             // if we have no votes from this voter, then it is new
-            true
+            false
         }
     }
 
@@ -98,16 +98,19 @@ impl<T: Proposition> Consensus<T> {
     /// Returns the vote we cast and the reached consensus vote in case consensus was reached
     pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
         info!("[MBR-{}] handling vote {:?}", self.id(), signed_vote);
+
+        if self.have_we_seen_this_vote_before(&signed_vote) {
+            info!("[MBR-{}] skipping already processed vote", self.id());
+            return Ok(VoteResponse::WaitingForMoreVotes);
+        }
+
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
             info!("[MBR-{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
+
         if self.faults.contains_key(&signed_vote.voter) {
             info!("[MBR-{}] dropping vote from faulty voter", self.id());
-            return Ok(VoteResponse::WaitingForMoreVotes);
-        }
-        if !self.is_new_vote_from_voter(&signed_vote) {
-            info!("[MBR-{}] dropping old vote {:?}", self.id(), signed_vote);
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
@@ -406,19 +409,21 @@ mod tests {
     use rand::{prelude::StdRng, SeedableRng};
 
     #[test]
-    fn test_is_new_vote_from_voter() {
+    fn test_have_we_seen_this_vote_before() {
         let mut rng = StdRng::from_seed([0u8; 32]);
         let elders_sk = SecretKeySet::random(10, &mut rng);
-        let mut consensus = Consensus::from(
-            (1u8, elders_sk.secret_key_share(1usize)),
-            elders_sk.public_keys(),
-            10,
-        );
+        let mut states = Vec::from_iter((1..=10).into_iter().map(|id| {
+            Consensus::from(
+                (id, elders_sk.secret_key_share(id as usize)),
+                elders_sk.public_keys(),
+                10,
+            )
+        }));
 
-        consensus.votes = BTreeMap::from_iter((0..10u8).map(|i| {
+        states[0].votes = BTreeMap::from_iter((0..10u8).map(|i| {
             (
-                i,
-                consensus
+                i + 1,
+                states[i as usize]
                     .sign_vote(Vote {
                         gen: 0,
                         ballot: Ballot::Propose(i),
@@ -429,35 +434,35 @@ mod tests {
         }));
 
         // try existing vote
-        let new_vote = consensus
+        let new_vote = states[2]
             .sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(2u8),
                 faults: Default::default(),
             })
             .unwrap();
-        assert!(!consensus.is_new_vote_from_voter(&new_vote));
+        assert!(states[0].have_we_seen_this_vote_before(&new_vote));
 
         // try merge vote superseding existing vote
-        let new_vote = consensus
+        let new_vote = states[0]
             .sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Merge(BTreeSet::from_iter(
-                    consensus.votes.iter().map(|(_, v)| v.clone()),
+                    states[0].votes.iter().map(|(_, v)| v.clone()),
                 )),
                 faults: Default::default(),
             })
             .unwrap();
-        assert!(consensus.is_new_vote_from_voter(&new_vote));
+        assert!(!states[0].have_we_seen_this_vote_before(&new_vote));
 
         // try bad vote not superseding existing
-        let new_vote = consensus
+        let new_vote = states[0]
             .sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(44u8),
                 faults: Default::default(),
             })
             .unwrap();
-        assert!(!consensus.is_new_vote_from_voter(&new_vote));
+        assert!(!states[0].have_we_seen_this_vote_before(&new_vote));
     }
 }
