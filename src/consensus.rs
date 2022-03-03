@@ -293,27 +293,31 @@ impl<T: Proposition> Consensus<T> {
         signed_vote: &SignedVote<T>,
     ) -> std::result::Result<(), BTreeMap<NodeId, Fault<T>>> {
         let mut faults = BTreeMap::new();
-        if let Some(existing_vote) = self.votes.get(&signed_vote.voter) {
-            let fault = Fault::ChangedVote {
-                a: existing_vote.clone(),
-                b: signed_vote.clone(),
-            };
+        for vote in signed_vote.unpack_votes() {
+            if self.have_we_seen_this_vote_before(vote) {
+                continue;
+            }
 
-            if let Ok(()) = fault.validate(&self.elders) {
-                faults.insert(signed_vote.voter, fault);
+            if let Some(existing_vote) = self.votes.get(&vote.voter) {
+                let fault = Fault::ChangedVote {
+                    a: existing_vote.clone(),
+                    b: vote.clone(),
+                };
+
+                if let Ok(()) = fault.validate(&self.elders) {
+                    faults.insert(vote.voter, fault);
+                }
+            }
+
+            {
+                let fault = Fault::InvalidFault {
+                    signed_vote: vote.clone(),
+                };
+                if let Ok(()) = fault.validate(&self.elders) {
+                    faults.insert(vote.voter, fault);
+                }
             }
         }
-
-        {
-            let fault = Fault::InvalidFault {
-                signed_vote: signed_vote.clone(),
-            };
-            if let Ok(()) = fault.validate(&self.elders) {
-                faults.insert(signed_vote.voter, fault);
-            }
-        }
-
-        // TODO: recursively check for faulty votes
 
         if faults.is_empty() {
             Ok(())
