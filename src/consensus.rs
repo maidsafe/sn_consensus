@@ -114,31 +114,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        let their_decision = self.get_decision(&signed_vote.vote_count())?;
-
-        if let Some(decision) = self.decision.clone() {
-            let resp = if their_decision.is_none() {
-                info!(
-                    "[MBR-{}] We've already terminated, responding with decision",
-                    self.id()
-                );
-                let vote = self.build_super_majority_vote(
-                    decision.votes,
-                    decision.faults,
-                    signed_vote.vote.gen,
-                )?;
-                VoteResponse::Broadcast(vote)
-            } else {
-                info!("[MBR-{}] We've both terminated, no-op", self.id());
-                VoteResponse::WaitingForMoreVotes
-            };
-
-            return Ok(resp);
-        }
-
-        self.log_signed_vote(&signed_vote);
-
-        if let Some(proposals) = their_decision {
+        if let Some(proposals) = self.get_decision(&signed_vote.vote_count())? {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
             // decision using the sm_over_sm logic below.
@@ -156,6 +132,8 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
+        self.log_signed_vote(&signed_vote);
+
         let vote_count = VoteCount::count(
             self.votes.values(),
             &BTreeSet::from_iter(self.faults.keys().copied()),
@@ -172,8 +150,13 @@ impl<T: Proposition> Consensus<T> {
                 proposals,
                 faults: self.faults(),
             };
+            let vote = self.build_super_majority_vote(
+                decision.votes.clone(),
+                decision.faults.clone(),
+                signed_vote.vote.gen,
+            )?;
             self.decision = Some(decision);
-            return Ok(VoteResponse::WaitingForMoreVotes);
+            return Ok(VoteResponse::Broadcast(vote));
         }
 
         if self.is_split_vote(&vote_count) {

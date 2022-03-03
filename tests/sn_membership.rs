@@ -1,5 +1,6 @@
 use blsttc::{SecretKeySet, SecretKeyShare};
 use eyre::eyre;
+use log::info;
 use membership_net::{Net, Packet};
 use rand::{
     prelude::{IteratorRandom, StdRng},
@@ -15,7 +16,7 @@ mod membership_net;
 use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
 use sn_membership::{
-    Ballot, Error, Fault, Generation, Membership, Reconfig, Result, SignedVote, Vote, VoteResponse,
+    Ballot, Error, Fault, Generation, Membership, Reconfig, Result, SignedVote, Vote,
 };
 
 static INIT: std::sync::Once = std::sync::Once::new();
@@ -101,67 +102,6 @@ fn test_membership_reject_leave_if_actor_is_not_a_member() {
         proc.propose(Reconfig::Leave(222)),
         Err(Error::LeaveRequestForNonMember { .. })
     ));
-}
-
-#[test]
-fn test_membership_returns_catchup_packets_from_previous_gen() -> Result<()> {
-    init();
-    let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs(0, 2, &mut rng);
-
-    let vote = net.proc_mut(1).unwrap().propose(Reconfig::Join(111))?;
-    net.enqueue_packets([Packet {
-        source: 1,
-        dest: 1,
-        vote,
-    }]);
-
-    let stale_vote = net.proc_mut(2).unwrap().sign_vote(Vote {
-        gen: 1,
-        ballot: Ballot::Propose(Reconfig::Join(222)),
-        faults: Default::default(),
-    })?;
-    let stale_packets = net.broadcast_packets(2, &stale_vote);
-
-    assert_eq!(stale_packets.len(), 2);
-
-    net.drain_queued_packets()?;
-
-    assert_eq!(
-        net.proc(1).unwrap().members(1).unwrap(),
-        BTreeSet::from_iter([111])
-    );
-    assert!(net.proc(2).unwrap().members(1).is_err());
-
-    for packet in stale_packets {
-        let resp = net.procs[0].handle_signed_vote(packet.vote);
-        assert!(resp.is_ok());
-        match resp.unwrap() {
-            VoteResponse::Broadcast(signed_vote) => {
-                if let Ballot::SuperMajority { proposals, .. } = &signed_vote.vote.ballot {
-                    assert_eq!(Vec::from_iter(proposals.keys()), vec![&Reconfig::Join(111)]);
-                } else {
-                    panic!("Expected SuperMajority Ballot, got: {:?}", signed_vote);
-                }
-
-                net.procs[1].handle_signed_vote(signed_vote)?;
-            }
-            e => panic!("Expected broadcast, got {:?}", e),
-        }
-    }
-
-    net.generate_msc("test_membership_returns_catchup_packets_from_previous_gen.msc")?;
-
-    assert_eq!(
-        net.proc(1).unwrap().members(1).unwrap(),
-        BTreeSet::from_iter([111])
-    );
-    assert_eq!(
-        net.proc(2).unwrap().members(1).unwrap(),
-        BTreeSet::from_iter([111])
-    );
-
-    Ok(())
 }
 
 #[test]
@@ -698,15 +638,17 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
     init();
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, 5, &mut rng);
-    let faulty = BTreeSet::from_iter([net.procs[0].id()]);
+    let faulty = 1;
+    let honest = 2;
     // node takes honest action
-    let vote = net.procs[1].propose(Reconfig::Join(0)).unwrap();
-    net.broadcast(net.procs[1].id(), vote);
+    let vote = net.proc_mut(honest).unwrap().propose(Reconfig::Join(0))?;
+    net.broadcast(honest, vote);
 
+    let faulty_proc = net.proc(faulty).unwrap();
     let packet = Packet {
-        source: net.procs[0].id(),
-        dest: net.procs[1].id(),
-        vote: net.procs[0]
+        source: faulty,
+        dest: honest,
+        vote: faulty_proc
             .sign_vote(Vote {
                 gen: 1,
                 ballot: Ballot::Propose(Reconfig::Join(1)),
@@ -715,20 +657,15 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
             .unwrap(),
     };
     net.enqueue_packets(vec![packet]);
-
-    while let Err(e) = net.drain_queued_packets() {
-        println!("Error while draining: {e:?}");
-    }
+    net.drain_queued_packets()?;
 
     net.generate_msc("test_membership_bft_consensus_qc2.msc")?;
 
-    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| !faulty.contains(&p.id())));
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
 
     // BFT TERMINATION PROPERTY: all honest procs have decided ==>
     for p in honest_procs.iter() {
-        for g in 1..=p.gen {
-            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
-        }
+        assert_eq!(p.gen, 1);
         assert_eq!(p.consensus.votes, BTreeMap::default());
         assert_eq!(p.consensus.decision, None);
     }
@@ -879,6 +816,154 @@ fn test_membership_votes_from_faulty_nodes_dont_contribute_to_vote_counts() -> R
             assert_eq!(reference_proc.members(g).unwrap(), p.members(g).unwrap())
         }
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
+    init();
+    let n = 5;
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+    let faulty = 2;
+    let honest = 1;
+    {
+        // send a randomized packet
+        let faulty_proc = net.proc(faulty).unwrap();
+        let packet = Packet {
+            source: faulty,
+            dest: honest,
+            vote: faulty_proc
+                .sign_vote(Vote {
+                    gen: 1,
+                    ballot: Ballot::Propose(Reconfig::Join(22)),
+                    faults: Default::default(),
+                })
+                .unwrap(),
+        };
+        net.enqueue_packets(vec![packet]);
+    }
+
+    {
+        let vote = net
+            .proc_mut(faulty)
+            .unwrap()
+            .propose(Reconfig::Join(33))
+            .unwrap();
+        net.broadcast(faulty, vote);
+    }
+
+    net.drain_queued_packets()?;
+
+    net.generate_msc("test_membership_bft_consensus_qc4.msc")
+        .unwrap();
+
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
+
+    for p in honest_procs.iter() {
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
+        assert_eq!(p.gen, 1);
+        let decision = p.consensus_at_gen(1).unwrap().decision.as_ref().unwrap();
+
+        // check that the decision includes the discovery that `faulty` was faulty
+        assert_eq!(
+            Vec::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
+            vec![faulty]
+        );
+
+        // since all proposals were initiated by faulty voters, we end up with 0 proposals as the decision
+        assert_eq!(decision.proposals, BTreeMap::new());
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_membership_final_broadcast_on_decision_catches_up_stragglers() -> Result<()> {
+    init();
+    // This scenario demonstrates why we need a final broadcast on decision.
+    // 1 is faulty
+    // 1 -> 3 voting F
+    // 2 -> {1,2,3,4,5} voting H
+    // 1 -> {1,2,3,4,5} voting H (changes vote from F above)
+    // 3 receives H from 1 and detects fault but waits for more votes
+    // 3 -> {1,2,3,4,5} voting F
+    // 4 -> {1,2,3,4,5} voting H
+    // 5 -> {1,2,3,4,5} voting H
+    // 1,2 sees enough votes to form super-majority
+    // 3 sees a split vote since it ignores votes from 1
+    // {1,2} -> {1,2,3,4,5} voting SM{H}
+    // 3 -> {1,2,3,4,5} voting M{H,F}-faulty(1)
+    // this continues and since 1 and 2 are ahead of 3 in the queue, they will reach a decision
+    // and leave 3 waiting for votes without a decision
+
+    let n = 5;
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+
+    let faulty = 1;
+    let honest_a = 2;
+    let honest_b = 3;
+
+    {
+        // node takes honest action
+        let vote = net
+            .proc_mut(honest_a)
+            .unwrap()
+            .propose(Reconfig::Join(66))?;
+        net.broadcast(honest_a, vote);
+    }
+    {
+        // send a randomized packet
+        let faulty_proc = net.proc(faulty).unwrap();
+        let packet = Packet {
+            source: faulty,
+            dest: honest_b,
+            vote: faulty_proc
+                .sign_vote(Vote {
+                    gen: 1,
+                    ballot: Ballot::Propose(Reconfig::Join(60)),
+                    faults: Default::default(),
+                })
+                .unwrap(),
+        };
+        net.enqueue_packets(vec![packet]);
+    }
+
+    net.drain_queued_packets()?;
+
+    net.generate_msc("test_membership_bft_consensus_qc5.msc")
+        .unwrap();
+
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        info!("P: {}", p.id());
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+        assert_eq!(p.consensus.decision, None);
+
+        assert_eq!(p.gen, 1);
+
+        let consensus = p.consensus_at_gen(1).unwrap();
+        let decision = consensus.decision.as_ref().unwrap();
+
+        // Due to the order of network packets, we formed a decision before nodes could notice the fault
+        assert_eq!(decision.faulty_ids(), BTreeSet::from_iter([]));
+        // And we accept both of the honest proposal and the faulty proposal
+        assert_eq!(
+            BTreeSet::from_iter(decision.proposals.keys()),
+            BTreeSet::from_iter([&Reconfig::Join(66), &Reconfig::Join(60)])
+        );
+    }
+
+    // But some of the nodes did notice the fault! They can use this information to remove the faulty voter in the next round
+    assert_eq!(
+        net.procs[2].consensus_at_gen(1).unwrap().faulty_ids(),
+        BTreeSet::from_iter([faulty])
+    );
 
     Ok(())
 }
