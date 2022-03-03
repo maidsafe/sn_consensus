@@ -73,12 +73,25 @@ pub struct Candidate<T> {
     pub faulty: BTreeSet<NodeId>,
 }
 
-type SignatureSharesByVoter<T> = BTreeMap<NodeId, BTreeMap<T, SignatureShare>>;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuperMajorityCount<T> {
+    pub count: usize,
+    pub proposals: BTreeMap<T, BTreeMap<u64, SignatureShare>>,
+}
+
+impl<T> Default for SuperMajorityCount<T> {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            proposals: Default::default(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VoteCount<T> {
     pub candidates: BTreeMap<Candidate<T>, usize>,
-    pub super_majorities: BTreeMap<Candidate<T>, SignatureSharesByVoter<T>>,
+    pub super_majorities: BTreeMap<Candidate<T>, SuperMajorityCount<T>>,
     pub voters: BTreeSet<NodeId>,
 }
 
@@ -117,12 +130,14 @@ impl<T: Proposition> VoteCount<T> {
 
                 match &unpacked_vote.vote.ballot {
                     Ballot::SuperMajority { proposals, .. } => {
-                        let shares = count.super_majorities.entry(candidate).or_default();
+                        let sm_count = count.super_majorities.entry(candidate).or_default();
+                        sm_count.count += 1;
                         for (t, (id, sig)) in proposals {
-                            shares
-                                .entry(*id)
+                            sm_count
+                                .proposals
+                                .entry(t.clone())
                                 .or_default()
-                                .insert(t.clone(), sig.clone());
+                                .insert(*id as u64, sig.clone());
                         }
                     }
                     _ => {
@@ -141,19 +156,18 @@ impl<T: Proposition> VoteCount<T> {
             .iter()
             .map(|(candidates, c)| (candidates, *c))
             .chain(
-                self.super_majorities
-                    .iter()
-                    .map(|(candidates, shares)| (candidates, shares.len())),
+                self.super_majority_with_most_votes()
+                    .map(|(candidates, sm_count)| (candidates, sm_count.count)),
             )
             .max_by_key(|(_, c)| *c)
     }
 
     pub fn super_majority_with_most_votes(
         &self,
-    ) -> Option<(&Candidate<T>, &SignatureSharesByVoter<T>)> {
+    ) -> Option<(&Candidate<T>, &SuperMajorityCount<T>)> {
         self.super_majorities
             .iter()
-            .max_by_key(|(_, shares)| shares.len())
+            .max_by_key(|(_, sm_count)| sm_count.count)
     }
 }
 

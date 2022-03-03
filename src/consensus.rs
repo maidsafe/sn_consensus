@@ -287,22 +287,12 @@ impl<T: Proposition> Consensus<T> {
     }
 
     fn get_decision(&self, vote_count: &VoteCount<T>) -> Result<Option<BTreeMap<T, Signature>>> {
-        if let Some((_candidate, shares_by_voter)) = vote_count.super_majority_with_most_votes() {
-            if shares_by_voter.len() > self.elders.threshold() {
-                let mut proposal_sigs: BTreeMap<T, BTreeSet<(u64, SignatureShare)>> =
-                    Default::default();
-
-                for (id, shares) in shares_by_voter {
-                    shares.iter().for_each(|(prop, sig)| {
-                        proposal_sigs
-                            .entry(prop.clone())
-                            .or_default()
-                            .insert((*id as u64, sig.clone()));
-                    });
-                }
-                let proposals = proposal_sigs
-                    .into_iter()
-                    .map(|(prop, sigs)| Ok((prop, self.elders.combine_signatures(sigs)?)))
+        if let Some((_candidate, sm_count)) = vote_count.super_majority_with_most_votes() {
+            if sm_count.count > self.elders.threshold() {
+                let proposals = sm_count
+                    .proposals
+                    .iter()
+                    .map(|(prop, sigs)| Ok((prop.clone(), self.elders.combine_signatures(sigs)?)))
                     .collect::<Result<_>>()?;
                 return Ok(Some(proposals));
             }
