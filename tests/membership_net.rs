@@ -159,15 +159,14 @@ impl Net {
         let dest_proc = match self.procs.iter_mut().find(|p| p.id() == packet.dest) {
             Some(proc) => proc,
             None => {
-                // println!("[NET] destination proc does not exist, dropping packet");
                 return Ok(());
             }
         };
 
-        info!("[NET] {} handling: {:?}", packet.dest, packet.vote);
+        info!("{} handling: {:?}", packet.dest, packet.vote);
         let packet_gen = packet.vote.vote.gen;
         let resp = dest_proc.handle_signed_vote(packet.vote);
-        info!("[NET] resp from {}: {:?}", packet.dest, resp);
+        info!("resp from {}: {:?}", packet.dest, resp);
         match resp {
             Ok(VoteResponse::Broadcast(vote)) => {
                 self.broadcast(packet.dest, vote);

@@ -97,20 +97,20 @@ impl<T: Proposition> Consensus<T> {
     /// Handles a signed vote
     /// Returns the vote we cast and the reached consensus vote in case consensus was reached
     pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
-        info!("[MBR-{}] handling vote {:?}", self.id(), signed_vote);
+        info!("[{}] handling vote {:?}", self.id(), signed_vote);
 
         if self.have_we_seen_this_vote_before(&signed_vote) {
-            info!("[MBR-{}] skipping already processed vote", self.id());
+            info!("[{}] skipping already processed vote", self.id());
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
-            info!("[MBR-{}] Found faults {:?}", self.id(), faults);
+            info!("[{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
 
         if self.faults.contains_key(&signed_vote.voter) {
-            info!("[MBR-{}] dropping vote from faulty voter", self.id());
+            info!("[{}] dropping vote from faulty voter", self.id());
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
@@ -143,7 +143,7 @@ impl<T: Proposition> Consensus<T> {
             // a faulty vote previously that is preventing it from accepting a network
             // decision using the sm_over_sm logic below.
             info!(
-                "[MBR-{}] They terminated but we haven't yet, accepting decision",
+                "[{}] They terminated but we haven't yet, accepting decision",
                 self.id()
             );
             let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
@@ -163,7 +163,7 @@ impl<T: Proposition> Consensus<T> {
 
         if let Some(proposals) = self.get_decision(&vote_count)? {
             info!(
-                "[MBR-{}] Detected super majority over super majorities: {proposals:?}",
+                "[{}] Detected super majority over super majorities: {proposals:?}",
                 self.id()
             );
             let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
@@ -177,7 +177,7 @@ impl<T: Proposition> Consensus<T> {
         }
 
         if self.is_split_vote(&vote_count) {
-            info!("[MBR-{}] Detected split vote", self.id());
+            info!("[{}] Detected split vote", self.id());
             let merge_vote = Vote {
                 gen: signed_vote.vote.gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
@@ -186,10 +186,10 @@ impl<T: Proposition> Consensus<T> {
             let signed_merge_vote = self.sign_vote(merge_vote)?;
 
             let resp = if vote_count != signed_merge_vote.vote_count() {
-                info!("[MBR-{}] broadcasting merge.", self.id());
+                info!("[{}] broadcasting merge.", self.id());
                 VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)?)
             } else {
-                info!("[MBR-{}] merge does not change counts, waiting.", self.id());
+                info!("[{}] merge does not change counts, waiting.", self.id());
                 VoteResponse::WaitingForMoreVotes
             };
 
@@ -197,18 +197,18 @@ impl<T: Proposition> Consensus<T> {
         }
 
         if self.is_super_majority(&vote_count) {
-            info!("[MBR-{}] Detected super majority", self.id());
+            info!("[{}] Detected super majority", self.id());
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
                 // We voted during this generation.
 
                 if our_vote.vote.is_super_majority_ballot() {
-                    info!("[MBR-{}] We've already sent a super majority, waiting till we either have a split vote or SM / SM", self.id());
+                    info!("[{}] We've already sent a super majority, waiting till we either have a split vote or SM / SM", self.id());
                     return Ok(VoteResponse::WaitingForMoreVotes);
                 }
             }
 
-            info!("[MBR-{}] broadcasting super majority", self.id());
+            info!("[{}] broadcasting super majority", self.id());
             let signed_vote = self.build_super_majority_vote(
                 self.votes.values().cloned().collect(),
                 BTreeSet::from_iter(self.faults.values().cloned()),
@@ -227,14 +227,14 @@ impl<T: Proposition> Consensus<T> {
                 faults: self.faults(),
             })?;
             info!(
-                "[MBR-{}] adopting ballot {:?}",
+                "[{}] adopting ballot {:?}",
                 self.id(),
                 signed_vote.vote.ballot
             );
 
             Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)?))
         } else {
-            info!("[MBR-{}] waiting for more votes", self.id());
+            info!("[{}] waiting for more votes", self.id());
             Ok(VoteResponse::WaitingForMoreVotes)
         }
     }
