@@ -326,7 +326,9 @@ impl<T: Proposition> Consensus<T> {
     /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
     pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         signed_vote.validate_signature(&self.elders)?;
-        self.validate_vote(&signed_vote.vote)?;
+        if !self.have_we_seen_this_vote_before(signed_vote) {
+            self.validate_vote(&signed_vote.vote)?
+        }
         Ok(())
     }
 
