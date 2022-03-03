@@ -116,6 +116,8 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
+        self.log_signed_vote(&signed_vote);
+
         if let Some(proposals) = self.get_decision(&signed_vote.vote_count())? {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
@@ -133,8 +135,6 @@ impl<T: Proposition> Consensus<T> {
             self.decision = Some(decision);
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
-
-        self.log_signed_vote(&signed_vote);
 
         let vote_count = VoteCount::count(
             self.votes.values(),
