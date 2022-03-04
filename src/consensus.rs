@@ -13,7 +13,7 @@ pub struct Consensus<T: Proposition> {
     pub elders: PublicKeySet,
     pub n_elders: usize,
     pub secret_key: (NodeId, SecretKeyShare),
-    pub seen_votes_cache: BTreeSet<SignatureShare>,
+    pub processed_votes_cache: BTreeSet<SignatureShare>,
     pub votes: BTreeMap<NodeId, SignedVote<T>>,
     pub faults: BTreeMap<NodeId, Fault<T>>,
     pub decision: Option<Decision<T>>,
@@ -48,7 +48,7 @@ impl<T: Proposition> Consensus<T> {
             elders,
             n_elders,
             secret_key,
-            seen_votes_cache: Default::default(),
+            processed_votes_cache: Default::default(),
             votes: Default::default(),
             faults: Default::default(),
             decision: None,
@@ -100,10 +100,6 @@ impl<T: Proposition> Consensus<T> {
         self.sign_vote(vote)
     }
 
-    pub fn have_we_seen_this_vote_before(&self, signed_vote: &SignedVote<T>) -> bool {
-        self.seen_votes_cache.contains(&signed_vote.sig)
-    }
-
     // handover: gen = gen
     // membership: gen = pending_gen
     /// Handles a signed vote
@@ -116,10 +112,12 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        if self.have_we_seen_this_vote_before(&signed_vote) {
+        if self.have_we_processed_vote(&signed_vote) {
             info!("[{}] dropping already processed vote", self.id());
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
+
+        self.validate_signed_vote(&signed_vote)?;
 
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
             info!("[{}] Found faults {:?}", self.id(), faults);
@@ -131,7 +129,11 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        self.log_signed_vote(&signed_vote);
+        self.process_signed_vote(signed_vote)
+    }
+
+    fn process_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
+        self.log_processed_signed_vote(&signed_vote);
 
         if let Some(proposals) = self.get_decision(&signed_vote.vote_count())? {
             // This case is here to handle situations where this node has recieved
@@ -252,9 +254,13 @@ impl<T: Proposition> Consensus<T> {
         }
     }
 
-    pub fn log_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
+    fn have_we_processed_vote(&self, signed_vote: &SignedVote<T>) -> bool {
+        self.processed_votes_cache.contains(&signed_vote.sig)
+    }
+
+    fn log_processed_signed_vote(&mut self, signed_vote: &SignedVote<T>) {
         for vote in signed_vote.unpack_votes() {
-            if self.seen_votes_cache.insert(vote.sig.clone()) {
+            if self.processed_votes_cache.insert(vote.sig.clone()) {
                 let existing_vote = self.votes.entry(vote.voter).or_insert_with(|| vote.clone());
                 if vote.supersedes(existing_vote) {
                     *existing_vote = vote.clone()
@@ -306,7 +312,7 @@ impl<T: Proposition> Consensus<T> {
     ) -> std::result::Result<(), BTreeMap<NodeId, Fault<T>>> {
         let mut faults = BTreeMap::new();
         for vote in signed_vote.unpack_votes() {
-            if self.have_we_seen_this_vote_before(vote) {
+            if self.have_we_processed_vote(vote) {
                 continue;
             }
 
@@ -340,18 +346,16 @@ impl<T: Proposition> Consensus<T> {
 
     /// Validates a vote recursively all the way down to the proposition (T)
     /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
-    pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
+    fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         signed_vote.validate_signature(&self.elders)?;
-        if !self.have_we_seen_this_vote_before(signed_vote) {
-            self.validate_vote(&signed_vote.vote)?
-        }
+        self.validate_vote(&signed_vote.vote)?;
         Ok(())
     }
 
     fn validate_vote(&self, vote: &Vote<T>) -> Result<()> {
         match &vote.ballot {
             Ballot::Propose(_) => Ok(()),
-            Ballot::Merge(votes) => self.validate_child_vote(vote.gen, votes),
+            Ballot::Merge(votes) => self.validate_child_votes(vote.gen, votes),
             Ballot::SuperMajority { votes, proposals } => {
                 let vote_count = VoteCount::count(votes, &vote.faulty_ids());
 
@@ -375,13 +379,13 @@ impl<T: Proposition> Consensus<T> {
                 {
                     Err(Error::InvalidElderSignature)
                 } else {
-                    self.validate_child_vote(vote.gen, votes)
+                    self.validate_child_votes(vote.gen, votes)
                 }
             }
         }
     }
 
-    fn validate_child_vote(&self, gen: Generation, votes: &BTreeSet<SignedVote<T>>) -> Result<()> {
+    fn validate_child_votes(&self, gen: Generation, votes: &BTreeSet<SignedVote<T>>) -> Result<()> {
         for child_vote in votes {
             // TODO: generation checking needs to move to sn_membership
             if child_vote.vote.gen != gen {
@@ -390,7 +394,9 @@ impl<T: Proposition> Consensus<T> {
                     merge_gen: gen,
                 });
             }
-            self.validate_signed_vote(child_vote)?;
+            if !self.have_we_processed_vote(child_vote) {
+                self.validate_signed_vote(child_vote)?
+            };
         }
         Ok(())
     }
@@ -422,7 +428,7 @@ mod tests {
                     faults: Default::default(),
                 })
                 .unwrap();
-            states[0].log_signed_vote(&vote);
+            states[0].log_processed_signed_vote(&vote);
         }
 
         // try existing vote
@@ -433,7 +439,7 @@ mod tests {
                 faults: Default::default(),
             })
             .unwrap();
-        assert!(states[0].have_we_seen_this_vote_before(&new_vote));
+        assert!(states[0].have_we_processed_vote(&new_vote));
 
         // try merge vote superseding existing vote
         let new_vote = states[0]
@@ -445,7 +451,7 @@ mod tests {
                 faults: Default::default(),
             })
             .unwrap();
-        assert!(!states[0].have_we_seen_this_vote_before(&new_vote));
+        assert!(!states[0].have_we_processed_vote(&new_vote));
 
         // try bad vote not superseding existing
         let new_vote = states[0]
@@ -455,6 +461,6 @@ mod tests {
                 faults: Default::default(),
             })
             .unwrap();
-        assert!(!states[0].have_we_seen_this_vote_before(&new_vote));
+        assert!(!states[0].have_we_processed_vote(&new_vote));
     }
 }

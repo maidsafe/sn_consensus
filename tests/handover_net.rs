@@ -179,8 +179,8 @@ impl Net {
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
-            Err(Error::VoteForBadGeneration { vote_gen, gen }) => {
-                assert!(vote_gen != gen);
+            Err(Error::BadGeneration { requested_gen, gen }) => {
+                assert!(requested_gen != gen);
                 assert_eq!(dest_proc.gen, gen);
             }
             Err(err) => return Err(err),

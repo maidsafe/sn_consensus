@@ -20,9 +20,9 @@ pub enum Error {
         child_gen: Generation,
         merge_gen: Generation,
     },
-    #[error("A vote must be tagged with a generation between 1..=(gen={gen} + 1): vote gen = {vote_gen}, gen: {gen}")]
-    VoteForBadGeneration {
-        vote_gen: Generation,
+    #[error("Valid generation are between 1..=(gen={gen} + 1): requested gen = {requested_gen}, gen: {gen}")]
+    BadGeneration {
+        requested_gen: Generation,
         gen: Generation,
     },
     #[error("The voter is not an elder")]

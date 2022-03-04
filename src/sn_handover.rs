@@ -36,7 +36,7 @@ impl<T: Proposition> Handover<T> {
             faults: self.consensus.faults(),
         };
         let signed_vote = self.sign_vote(vote)?;
-        self.validate_signed_vote(&signed_vote)?;
+        self.validate_proposals(&signed_vote)?;
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
@@ -70,7 +70,7 @@ impl<T: Proposition> Handover<T> {
     }
 
     pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
-        self.validate_signed_vote(&signed_vote)?;
+        self.validate_proposals(&signed_vote)?;
 
         self.consensus.handle_signed_vote(signed_vote)
     }
@@ -83,10 +83,10 @@ impl<T: Proposition> Handover<T> {
         self.consensus.cast_vote(signed_vote)
     }
 
-    pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
+    pub fn validate_proposals(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         if signed_vote.vote.gen != self.gen {
-            return Err(Error::VoteForBadGeneration {
-                vote_gen: signed_vote.vote.gen,
+            return Err(Error::BadGeneration {
+                requested_gen: signed_vote.vote.gen,
                 gen: self.gen,
             });
         }
@@ -94,9 +94,7 @@ impl<T: Proposition> Handover<T> {
         signed_vote
             .proposals()
             .into_iter()
-            .try_for_each(|prop| self.validate_proposal(prop))?;
-
-        self.consensus.validate_signed_vote(signed_vote)
+            .try_for_each(|prop| self.validate_proposal(prop))
     }
 
     // Placeholder for now, may be useful for sn_node

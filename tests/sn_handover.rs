@@ -138,8 +138,8 @@ fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
     // make sure the other elder rejects that vote
     assert!(matches!(
         net.procs[0].handle_signed_vote(vote),
-        Err(Error::VoteForBadGeneration {
-            vote_gen: 401,
+        Err(Error::BadGeneration {
+            requested_gen: 401,
             gen: 0,
         })
     ));

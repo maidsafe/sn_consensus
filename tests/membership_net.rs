@@ -175,8 +175,8 @@ impl Net {
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
-            Err(Error::VoteForBadGeneration { vote_gen, gen }) => {
-                assert!(vote_gen == 0 || vote_gen > gen + 1);
+            Err(Error::BadGeneration { requested_gen, gen }) => {
+                assert!(requested_gen == 0 || requested_gen > gen + 1);
                 assert_eq!(dest_proc.gen, gen);
             }
             Err(err) => return Err(err),
@@ -188,6 +188,7 @@ impl Net {
 
                 let proc_decision = proc
                     .consensus_at_gen(packet_gen)
+                    .ok()
                     .and_then(|c| c.decision.clone());
 
                 match (network_decision, proc_decision) {
