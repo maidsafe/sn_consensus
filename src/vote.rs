@@ -137,6 +137,9 @@ impl<T: Proposition> VoteCount<T> {
             }
         }
 
+        // We always include voters in the voter set (even if they are faulty)
+        // so that we have an accurate reading of who has contributed votes.
+        // This is done to to aid in split-vote detection
         count.voters.extend(votes_by_honest_voter.keys().copied());
         count.voters.extend(faulty.iter().copied());
 
