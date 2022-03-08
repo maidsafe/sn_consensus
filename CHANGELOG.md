@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.15.0](https://github.com/maidsafe/sn_membership/compare/v1.14.0...v1.15.0) (2022-03-08)
+
+
+### Features
+
+* **perf:** early out if we've already validated a vote ([aecbed2](https://github.com/maidsafe/sn_membership/commit/aecbed2517f80218b68594821f6bc5f4df8bd1b7))
+* cache processed votes by their signature ([e8a7998](https://github.com/maidsafe/sn_membership/commit/e8a79987df71e6aa1c35375e3f013d5ba5576bb7))
+
+
+### Bug Fixes
+
+* add back explanation for keeping faulty voter ids ([75a09d0](https://github.com/maidsafe/sn_membership/commit/75a09d009bb3515c17c084ec9a72bb4006ce2bd4))
+* add explicit struct for super_majority count summary ([e5931ac](https://github.com/maidsafe/sn_membership/commit/e5931ac22dd214a6eef7eff69b4cf161acdc6622))
+* get super-majority proposals from winning candidate ([38dedc7](https://github.com/maidsafe/sn_membership/commit/38dedc7be298c093230dbb5aa6815ed777e4e0bd))
+* handover anti-entropy returns decision vote if we've decided ([840b579](https://github.com/maidsafe/sn_membership/commit/840b579b6dc5bf2f3af61011f4d6112963608f0a))
+* handover tests now log with env_logger ([111ee6c](https://github.com/maidsafe/sn_membership/commit/111ee6cad411dbdd48a318fc5d8b89826fcd5427))
+* impl SignedVote::candidate + rename known_faulty to faulty_ids ([29b6568](https://github.com/maidsafe/sn_membership/commit/29b6568ab67e8fdbe78ea56defd07bb5223974a6))
+* log vote before checking for decision ([db4b23b](https://github.com/maidsafe/sn_membership/commit/db4b23be8574ce74aff038726dfda155a264706e))
+* move to a final broadcast on decision ([d53df88](https://github.com/maidsafe/sn_membership/commit/d53df88be7ed62fff7e4f695a4c98ad3abc4f0a5))
+* recursively check votes for faults ([20d95d7](https://github.com/maidsafe/sn_membership/commit/20d95d73851d708c7dea5b09551c32cdc78c0e35))
+* test_have_we_seen_this_vote_before signs votes properly ([13b6eb3](https://github.com/maidsafe/sn_membership/commit/13b6eb39f86caca87f33b7d62242b0150c6c2543))
+
 ## [1.14.0](https://github.com/maidsafe/sn_membership/compare/v1.13.0...v1.14.0) (2022-03-02)
 
 
