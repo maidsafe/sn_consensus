@@ -58,19 +58,25 @@ impl<T: Proposition> Membership<T> {
         }
     }
 
-    pub fn consensus_at_gen(&self, gen: Generation) -> Option<&Consensus<Reconfig<T>>> {
+    pub fn consensus_at_gen(&self, gen: Generation) -> Result<&Consensus<Reconfig<T>>> {
         if gen == self.gen + 1 {
-            Some(&self.consensus)
+            Ok(&self.consensus)
         } else {
-            self.history.get(&gen)
+            self.history.get(&gen).ok_or(Error::BadGeneration {
+                requested_gen: gen,
+                gen: self.gen,
+            })
         }
     }
 
-    pub fn consensus_at_gen_mut(&mut self, gen: Generation) -> Option<&mut Consensus<Reconfig<T>>> {
+    pub fn consensus_at_gen_mut(&mut self, gen: Generation) -> Result<&mut Consensus<Reconfig<T>>> {
         if gen == self.gen + 1 {
-            Some(&mut self.consensus)
+            Ok(&mut self.consensus)
         } else {
-            self.history.get_mut(&gen)
+            self.history.get_mut(&gen).ok_or(Error::BadGeneration {
+                requested_gen: gen,
+                gen: self.gen,
+            })
         }
     }
 
@@ -134,13 +140,14 @@ impl<T: Proposition> Membership<T> {
     }
 
     pub fn propose(&mut self, reconfig: Reconfig<T>) -> Result<SignedVote<Reconfig<T>>> {
+        info!("[{}] proposing {:?}", self.id(), reconfig);
         let vote = Vote {
             gen: self.gen + 1,
             ballot: Ballot::Propose(reconfig),
             faults: self.consensus.faults(),
         };
         let signed_vote = self.sign_vote(vote)?;
-        self.validate_signed_vote(&signed_vote)?;
+        self.validate_proposals(&signed_vote)?;
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
@@ -174,11 +181,11 @@ impl<T: Proposition> Membership<T> {
         &mut self,
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<VoteResponse<Reconfig<T>>> {
-        self.validate_signed_vote(&signed_vote)?;
+        self.validate_proposals(&signed_vote)?;
 
         let vote_gen = signed_vote.vote.gen;
 
-        let consensus = self.consensus_at_gen_mut(vote_gen).unwrap();
+        let consensus = self.consensus_at_gen_mut(vote_gen)?;
         let vote_response = consensus.handle_signed_vote(signed_vote)?;
 
         if consensus.decision.is_some() && vote_gen == self.gen + 1 {
@@ -204,19 +211,12 @@ impl<T: Proposition> Membership<T> {
         &mut self,
         signed_vote: SignedVote<Reconfig<T>>,
     ) -> Result<SignedVote<Reconfig<T>>> {
-        self.consensus.cast_vote(&signed_vote)?;
-        Ok(signed_vote)
+        self.consensus.cast_vote(signed_vote)
     }
 
-    pub fn validate_signed_vote(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {
-        if let Some(c) = self.consensus_at_gen(signed_vote.vote.gen) {
-            c.validate_signed_vote(signed_vote)?;
-        } else {
-            return Err(Error::VoteForBadGeneration {
-                vote_gen: signed_vote.vote.gen,
-                gen: self.gen,
-            });
-        }
+    pub fn validate_proposals(&self, signed_vote: &SignedVote<Reconfig<T>>) -> Result<()> {
+        // ensure we have a consensus instance for this votes generations
+        let _ = self.consensus_at_gen(signed_vote.vote.gen)?;
 
         signed_vote
             .proposals()

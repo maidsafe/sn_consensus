@@ -159,15 +159,14 @@ impl Net {
         let dest_proc = match self.procs.iter_mut().find(|p| p.id() == packet.dest) {
             Some(proc) => proc,
             None => {
-                // println!("[NET] destination proc does not exist, dropping packet");
                 return Ok(());
             }
         };
 
-        info!("[NET] {} handling: {:?}", packet.dest, packet.vote);
+        info!("{} handling: {:?}", packet.dest, packet.vote);
         let packet_gen = packet.vote.vote.gen;
         let resp = dest_proc.handle_signed_vote(packet.vote);
-        info!("[NET] resp from {}: {:?}", packet.dest, resp);
+        info!("resp from {}: {:?}", packet.dest, resp);
         match resp {
             Ok(VoteResponse::Broadcast(vote)) => {
                 self.broadcast(packet.dest, vote);
@@ -176,8 +175,8 @@ impl Net {
             Err(Error::NotElder) => {
                 assert_ne!(dest_proc.consensus.elders, source_elders);
             }
-            Err(Error::VoteForBadGeneration { vote_gen, gen }) => {
-                assert!(vote_gen == 0 || vote_gen > gen + 1);
+            Err(Error::BadGeneration { requested_gen, gen }) => {
+                assert!(requested_gen == 0 || requested_gen > gen + 1);
                 assert_eq!(dest_proc.gen, gen);
             }
             Err(err) => return Err(err),
@@ -189,6 +188,7 @@ impl Net {
 
                 let proc_decision = proc
                     .consensus_at_gen(packet_gen)
+                    .ok()
                     .and_then(|c| c.decision.clone());
 
                 match (network_decision, proc_decision) {

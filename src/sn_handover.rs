@@ -36,18 +36,27 @@ impl<T: Proposition> Handover<T> {
             faults: self.consensus.faults(),
         };
         let signed_vote = self.sign_vote(vote)?;
-        self.validate_signed_vote(&signed_vote)?;
+        self.validate_proposals(&signed_vote)?;
         self.consensus
             .detect_byzantine_voters(&signed_vote)
             .map_err(|_| Error::AttemptedFaultyProposal)?;
-        self.cast_vote(&signed_vote)
+        self.cast_vote(signed_vote)
     }
 
     // Get someone up to speed on our view of the current votes
-    pub fn anti_entropy(&self) -> Vec<SignedVote<T>> {
+    pub fn anti_entropy(&self) -> Result<Vec<SignedVote<T>>> {
         info!("[HDVR] anti-entropy from {:?}", self.id());
 
-        self.consensus.votes.values().cloned().collect()
+        if let Some(decision) = self.consensus.decision.as_ref() {
+            let vote = self.consensus.build_super_majority_vote(
+                decision.votes.clone(),
+                decision.faults.clone(),
+                self.gen,
+            )?;
+            Ok(vec![vote])
+        } else {
+            Ok(self.consensus.votes.values().cloned().collect())
+        }
     }
 
     pub fn resolve_votes<'a>(&self, proposals: &'a BTreeMap<T, Signature>) -> Option<&'a T> {
@@ -60,32 +69,24 @@ impl<T: Proposition> Handover<T> {
         self.consensus.id()
     }
 
-    pub fn handle_signed_vote(
-        &mut self,
-        signed_vote: SignedVote<T>,
-    ) -> Result<Option<SignedVote<T>>> {
-        self.validate_signed_vote(&signed_vote)?;
+    pub fn handle_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
+        self.validate_proposals(&signed_vote)?;
 
-        let vote_response = self.consensus.handle_signed_vote(signed_vote)?;
-
-        match vote_response {
-            VoteResponse::Broadcast(vote) => Ok(Some(vote)),
-            VoteResponse::WaitingForMoreVotes => Ok(None),
-        }
+        self.consensus.handle_signed_vote(signed_vote)
     }
 
     pub fn sign_vote(&self, vote: Vote<T>) -> Result<SignedVote<T>> {
         self.consensus.sign_vote(vote)
     }
 
-    pub fn cast_vote(&mut self, signed_vote: &SignedVote<T>) -> Result<SignedVote<T>> {
+    pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> Result<SignedVote<T>> {
         self.consensus.cast_vote(signed_vote)
     }
 
-    pub fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
+    pub fn validate_proposals(&self, signed_vote: &SignedVote<T>) -> Result<()> {
         if signed_vote.vote.gen != self.gen {
-            return Err(Error::VoteForBadGeneration {
-                vote_gen: signed_vote.vote.gen,
+            return Err(Error::BadGeneration {
+                requested_gen: signed_vote.vote.gen,
                 gen: self.gen,
             });
         }
@@ -93,9 +94,7 @@ impl<T: Proposition> Handover<T> {
         signed_vote
             .proposals()
             .into_iter()
-            .try_for_each(|prop| self.validate_proposal(prop))?;
-
-        self.consensus.validate_signed_vote(signed_vote)
+            .try_for_each(|prop| self.validate_proposal(prop))
     }
 
     // Placeholder for now, may be useful for sn_node

@@ -1,12 +1,22 @@
 use blsttc::{SecretKeySet, SecretKeyShare};
+use log::info;
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 mod handover_net;
 use handover_net::{Net, Packet};
 use sn_membership::{Ballot, Error, Handover, Result, SignedVote, Vote};
 
+static INIT: std::sync::Once = std::sync::Once::new();
+
+fn init() {
+    INIT.call_once(|| {
+        let _ = env_logger::builder().is_test(true).try_init();
+    });
+}
+
 #[test]
 fn test_handover_one_faulty_node_and_many_packet_drops() {
+    init();
     // make network of 5 elders with one segregated (his network is really bad)
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(3, 5, &mut rng);
@@ -23,6 +33,12 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     assert!(net.packets.is_empty());
 
     // by the time everyone agreed on smth segregated_elder is back online and receives the bad vote
+    for i in 0..4 {
+        let decision = net.consensus_value(i);
+        info!("[TEST] checking voter {i}'s consensus value: {decision:?}");
+        assert_eq!(decision, Some(1));
+    }
+
     let bad_vote = net.procs[0]
         .sign_vote(Vote {
             gen: 0,
@@ -30,12 +46,21 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
             faults: Default::default(),
         })
         .unwrap();
+
     net.enqueue_packets([Packet {
         source: p0,
         dest: segregated_elder.id(),
         vote: bad_vote,
     }]);
+
     net.procs.push(segregated_elder);
+
+    net.procs[1]
+        .anti_entropy()
+        .unwrap()
+        .into_iter()
+        .for_each(|v| net.broadcast(2, v));
+
     net.drain_queued_packets().unwrap();
 
     net.generate_msc("handover_one_faulty_node_and_many_packet_drops.msc")
@@ -46,7 +71,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
     let first_voters_value = net.consensus_value(0);
     for i in 0..5 {
         let decision = net.consensus_value(i);
-        println!("[TEST] checking voter {i}'s consensus value: {decision:?}");
+        info!("[TEST] checking voter {i}'s consensus value: {decision:?}");
         assert_eq!(decision, first_voters_value);
     }
 
@@ -55,6 +80,7 @@ fn test_handover_one_faulty_node_and_many_packet_drops() {
 
 #[test]
 fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc: Handover<u8> = Handover::from(
@@ -75,6 +101,7 @@ fn test_handover_reject_voter_changing_proposal_when_one_is_in_progress() -> Res
 
 #[test]
 fn test_handover_reject_vote_from_non_member() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut p0 = Handover::<u8>::from(
@@ -99,6 +126,7 @@ fn test_handover_reject_vote_from_non_member() -> Result<()> {
 
 #[test]
 fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
+    init();
     // make net with 2 elders
     let mut rng = StdRng::from_seed([0u8; 32]);
     let mut net = Net::with_procs(1, 2, &mut rng);
@@ -110,8 +138,8 @@ fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
     // make sure the other elder rejects that vote
     assert!(matches!(
         net.procs[0].handle_signed_vote(vote),
-        Err(Error::VoteForBadGeneration {
-            vote_gen: 401,
+        Err(Error::BadGeneration {
+            requested_gen: 401,
             gen: 0,
         })
     ));
@@ -119,6 +147,7 @@ fn test_handover_handle_vote_rejects_packet_from_bad_gen() {
 
 #[test]
 fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     let elders_sk = SecretKeySet::random(0, &mut rng);
     let mut proc = Handover::<u8>::from(
@@ -147,6 +176,7 @@ fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
 
 #[test]
 fn test_handover_split_vote() -> eyre::Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         println!("[TEST] testing with {nprocs} elders");
@@ -176,6 +206,7 @@ fn test_handover_split_vote() -> eyre::Result<()> {
 
 #[test]
 fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
+    init();
     let mut rng = StdRng::from_seed([0u8; 32]);
     for nprocs in 1..7 {
         println!("[TEST] testing with {nprocs} elder(s)");
