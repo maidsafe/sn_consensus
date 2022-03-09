@@ -1,4 +1,4 @@
-# sn_membership
+# sn_consensus
 
 [MaidSafe website](http://maidsafe.net) | [Safe Network Forum](https://safenetforum.org/)
 :-------------------------------------: | :---------------------------------------------:
