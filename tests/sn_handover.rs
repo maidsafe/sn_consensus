@@ -4,7 +4,7 @@ use rand::{prelude::StdRng, Rng, SeedableRng};
 
 mod handover_net;
 use handover_net::{Net, Packet};
-use sn_membership::{Ballot, Error, Handover, Result, SignedVote, Vote};
+use sn_consensus::{Ballot, Error, Handover, Result, SignedVote, Vote};
 
 static INIT: std::sync::Once = std::sync::Once::new();
 

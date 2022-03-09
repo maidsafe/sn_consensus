@@ -15,7 +15,7 @@ mod membership_net;
 
 use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
-use sn_membership::{
+use sn_consensus::{
     Ballot, Error, Fault, Generation, Membership, Reconfig, Result, SignedVote, Vote,
 };
 

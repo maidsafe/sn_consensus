@@ -7,7 +7,7 @@ use blsttc::{SecretKeySet, SignatureShare};
 use log::info;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
-use sn_membership::{
+use sn_consensus::{
     consensus::VoteResponse, Ballot, Decision, Error, Generation, Membership, NodeId, Reconfig,
     Result, SignedVote, Vote,
 };

@@ -8,7 +8,7 @@ use log::info;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::Rng;
 
-use sn_membership::{Ballot, Error, Handover, NodeId, Result, SignedVote, Vote, VoteResponse};
+use sn_consensus::{Ballot, Error, Handover, NodeId, Result, SignedVote, Vote, VoteResponse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Packet {
