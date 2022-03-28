@@ -8,7 +8,7 @@ use crate::sn_membership::Generation;
 use crate::vote::{Ballot, Proposition, SignedVote, Vote, VoteCount};
 use crate::{Error, Fault, NodeId, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Consensus<T: Proposition> {
     pub elders: PublicKeySet,
     pub n_elders: usize,
