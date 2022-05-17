@@ -182,7 +182,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(resp);
         }
 
-        if self.is_super_majority(&vote_count) {
+        if vote_count.do_we_have_supermajority(&self.elders) {
             info!("[{}] Detected super majority", self.id());
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
@@ -269,15 +269,6 @@ impl<T: Proposition> Consensus<T> {
         count.voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
     }
 
-    pub fn is_super_majority(&self, count: &VoteCount<T>) -> bool {
-        let most_votes = count
-            .candidate_with_most_votes()
-            .map(|(_, c)| c)
-            .unwrap_or_default();
-
-        most_votes > self.elders.threshold()
-    }
-
     pub fn detect_byzantine_voters(
         &self,
         signed_vote: &SignedVote<T>,
@@ -336,7 +327,7 @@ impl<T: Proposition> Consensus<T> {
                     .map(|(c, _)| c.proposals.clone())
                     .unwrap_or_default();
 
-                if !self.is_super_majority(&vote_count) {
+                if !vote_count.do_we_have_supermajority(&self.elders) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
                 } else if !candidate_proposals.iter().eq(proposals.keys()) {

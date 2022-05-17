@@ -4,6 +4,7 @@ pub mod fault;
 pub mod sn_handover;
 pub mod sn_membership;
 pub mod vote;
+pub mod vote_count;
 
 #[cfg(feature = "bad_crypto")]
 pub mod bad_crypto;
@@ -21,6 +22,7 @@ pub use crate::fault::{Fault, FaultError};
 pub use crate::sn_handover::{Handover, UniqueSectionId};
 pub use crate::sn_membership::{Generation, Membership, Reconfig};
 pub use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+pub use crate::vote_count::{Candidate, VoteCount};
 
 // #[cfg(feature = "bad_crypto")]
 // pub use crate::bad_crypto::{PublicKey, SecretKey, Signature};
