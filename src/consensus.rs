@@ -162,7 +162,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::Broadcast(vote));
         }
 
-        if self.is_split_vote(&vote_count) {
+        if vote_count.is_split_vote(&self.elders, self.n_elders) {
             info!("[{}] Detected split vote", self.id());
             let merge_vote = Vote {
                 gen: signed_vote.vote.gen,
@@ -254,19 +254,6 @@ impl<T: Proposition> Consensus<T> {
                 }
             }
         }
-    }
-
-    fn is_split_vote(&self, count: &VoteCount<T>) -> bool {
-        let most_votes = count
-            .candidate_with_most_votes()
-            .map(|(_, c)| c)
-            .unwrap_or(0);
-        let remaining_voters = self.n_elders - count.voters.len();
-
-        // suppose the remaining votes go to the proposals with the most votes.
-        let predicted_votes = most_votes + remaining_voters;
-
-        count.voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
     }
 
     pub fn detect_byzantine_voters(

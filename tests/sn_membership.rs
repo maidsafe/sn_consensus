@@ -148,7 +148,8 @@ fn test_membership_split_vote() -> Result<()> {
 
         net.generate_msc(&format!("split_vote_{}.msc", nprocs))?;
 
-        let expected_members = BTreeSet::from_iter(0..=(2 * nprocs) / 3);
+        let expected_members = net.procs[0].members(1)?;
+        assert_ne!(expected_members.len(), 0);
         for i in 0..nprocs {
             info!("proc {i} / {nprocs}");
             let proc = &net.procs[i as usize];

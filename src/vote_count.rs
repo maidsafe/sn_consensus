@@ -126,6 +126,22 @@ impl<T: Proposition> VoteCount<T> {
             .max_by_key(|(_, sm_count)| sm_count.count)
     }
 
+    pub fn is_split_vote(&self, voters: &PublicKeySet, n_voters: usize) -> bool {
+        let most_votes = self
+            .candidate_with_most_votes()
+            .map(|(_, c)| c)
+            .unwrap_or(0);
+
+        let remaining_voters = n_voters - self.voters.len();
+
+        // suppose the remaining votes go to the proposals with the most votes.
+        let predicted_votes = most_votes + remaining_voters;
+
+        // We're in a split vote if even in the best case scenario where all
+        // remaining votes are not enough to take us above the threshold.
+        predicted_votes <= voters.threshold()
+    }
+
     pub fn do_we_have_supermajority(&self, voters: &PublicKeySet) -> bool {
         let most_votes = self
             .candidate_with_most_votes()
