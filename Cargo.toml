@@ -8,7 +8,7 @@ repository = "https://github.com/maidsafe/sn_consensus"
 edition = "2021"
 
 [dependencies]
-rand = "0.7.3"
+rand = "0.8"
 bincode = "1.2.1"
 thiserror = "1.0"
 log = "0.4.13"
@@ -18,7 +18,7 @@ log = "0.4.13"
   features = [ "derive" ]
 
   [dependencies.blsttc]
-  version = "3.4.0"
+  version = "5.2.0"
 
   [dependencies.ed25519]
   version = "1.0.0"
