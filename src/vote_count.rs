@@ -139,7 +139,7 @@ impl<T: Proposition> VoteCount<T> {
 
         // We're in a split vote if even in the best case scenario where all
         // remaining votes are not enough to take us above the threshold.
-        predicted_votes <= voters.threshold()
+        self.voters.len() > voters.threshold() && predicted_votes <= voters.threshold()
     }
 
     pub fn do_we_have_supermajority(&self, voters: &PublicKeySet) -> bool {

@@ -104,7 +104,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        self.validate_signed_vote(&signed_vote)?;
+        signed_vote.validate(&self.elders, &self.processed_votes_cache)?;
 
         if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
             info!("[{}] Found faults {:?}", self.id(), faults);
@@ -292,63 +292,6 @@ impl<T: Proposition> Consensus<T> {
         } else {
             Err(faults)
         }
-    }
-
-    /// Validates a vote recursively all the way down to the proposition (T)
-    /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
-    fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
-        signed_vote.validate_signature(&self.elders)?;
-        self.validate_vote(&signed_vote.vote)?;
-        Ok(())
-    }
-
-    fn validate_vote(&self, vote: &Vote<T>) -> Result<()> {
-        match &vote.ballot {
-            Ballot::Propose(_) => Ok(()),
-            Ballot::Merge(votes) => self.validate_child_votes(vote.gen, votes),
-            Ballot::SuperMajority { votes, proposals } => {
-                let vote_count = VoteCount::count(votes, &vote.faulty_ids());
-
-                let candidate_proposals = vote_count
-                    .candidate_with_most_votes()
-                    .map(|(c, _)| c.proposals.clone())
-                    .unwrap_or_default();
-
-                if !vote_count.do_we_have_supermajority(&self.elders) {
-                    // TODO: this should be moved to fault detection
-                    Err(Error::SuperMajorityBallotIsNotSuperMajority)
-                } else if !candidate_proposals.iter().eq(proposals.keys()) {
-                    // TODO: this should be moved to fault detection
-                    Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
-                } else if proposals
-                    .iter()
-                    .try_for_each(|(p, (id, sig))| {
-                        crate::verify_sig_share(&p, sig, *id, &self.elders)
-                    })
-                    .is_err()
-                {
-                    Err(Error::InvalidElderSignature)
-                } else {
-                    self.validate_child_votes(vote.gen, votes)
-                }
-            }
-        }
-    }
-
-    fn validate_child_votes(&self, gen: Generation, votes: &BTreeSet<SignedVote<T>>) -> Result<()> {
-        for child_vote in votes {
-            // TODO: generation checking needs to move to sn_membership
-            if child_vote.vote.gen != gen {
-                return Err(Error::MergedVotesMustBeFromSameGen {
-                    child_gen: child_vote.vote.gen,
-                    merge_gen: gen,
-                });
-            }
-            if !self.have_we_processed_vote(child_vote) {
-                self.validate_signed_vote(child_vote)?
-            };
-        }
-        Ok(())
     }
 }
 

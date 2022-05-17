@@ -16,7 +16,7 @@ pub enum Error {
     #[error("You must be a member to request to leave")]
     LeaveRequestForNonMember,
     #[error("A merged vote must be from the same generation as the child vote: {child_gen} != {merge_gen}")]
-    MergedVotesMustBeFromSameGen {
+    ParentAndChildWithDiffGen {
         child_gen: Generation,
         merge_gen: Generation,
     },

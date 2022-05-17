@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
 use crate::sn_membership::Generation;
-use crate::{Candidate, Fault, NodeId, Result, VoteCount};
+use crate::{Candidate, Error, Fault, NodeId, Result, VoteCount};
 
 pub trait Proposition: Ord + Clone + Debug + Serialize {}
 impl<T: Ord + Clone + Debug + Serialize> Proposition for T {}
@@ -106,6 +106,59 @@ impl<T: Proposition> Debug for Vote<T> {
 }
 
 impl<T: Proposition> Vote<T> {
+    pub fn validate(
+        &self,
+        voters: &PublicKeySet,
+        valid_votes_memo: &BTreeSet<SignatureShare>,
+    ) -> Result<()> {
+        let validate_child_votes = |child_votes: &BTreeSet<SignedVote<T>>| {
+            for child_vote in child_votes {
+                let child_gen = child_vote.vote.gen;
+                let merge_gen = self.gen;
+                if child_gen != merge_gen {
+                    return Err(Error::ParentAndChildWithDiffGen {
+                        child_gen,
+                        merge_gen,
+                    });
+                }
+
+                if !valid_votes_memo.contains(&child_vote.sig) {
+                    child_vote.validate(voters, valid_votes_memo)?;
+                };
+            }
+            Ok(())
+        };
+
+        match &self.ballot {
+            Ballot::Propose(_) => Ok(()),
+            Ballot::Merge(votes) => validate_child_votes(votes),
+            Ballot::SuperMajority { votes, proposals } => {
+                let vote_count = VoteCount::count(votes, &self.faulty_ids());
+
+                let candidate_proposals = vote_count
+                    .candidate_with_most_votes()
+                    .map(|(c, _)| c.proposals.clone())
+                    .unwrap_or_default();
+
+                if !vote_count.do_we_have_supermajority(&voters) {
+                    // TODO: this should be moved to fault detection
+                    Err(Error::SuperMajorityBallotIsNotSuperMajority)
+                } else if !candidate_proposals.iter().eq(proposals.keys()) {
+                    // TODO: this should be moved to fault detection
+                    Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
+                } else if proposals
+                    .iter()
+                    .try_for_each(|(p, (id, sig))| crate::verify_sig_share(&p, sig, *id, &voters))
+                    .is_err()
+                {
+                    Err(Error::InvalidElderSignature)
+                } else {
+                    validate_child_votes(votes)
+                }
+            }
+        }
+    }
+
     pub fn is_super_majority_ballot(&self) -> bool {
         matches!(self.ballot, Ballot::SuperMajority { .. })
     }
@@ -162,6 +215,19 @@ impl<T: Proposition> SignedVote<T> {
 
     pub fn validate_signature(&self, voters: &PublicKeySet) -> Result<()> {
         crate::verify_sig_share(&self.vote, &self.sig, self.voter, voters)
+    }
+
+    /// Validates a vote recursively all the way down to the proposition (T)
+    /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
+    pub fn validate(
+        &self,
+        voters: &PublicKeySet,
+        valid_votes_cache: &BTreeSet<SignatureShare>,
+    ) -> Result<()> {
+        self.validate_signature(&voters)?;
+        self.vote.validate(&voters, &valid_votes_cache)?;
+
+        Ok(())
     }
 
     pub fn unpack_votes(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
