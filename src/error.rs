@@ -25,6 +25,8 @@ pub enum Error {
         requested_gen: Generation,
         gen: Generation,
     },
+    #[error("Decision doesn't have any votes")]
+    DecisionHasNoVotes,
     #[error("The voter is not an elder")]
     NotElder,
     #[error("Voter changed their vote")]

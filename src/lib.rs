@@ -1,4 +1,5 @@
 pub mod consensus;
+pub mod decision;
 pub mod fault;
 pub mod sn_handover;
 pub mod sn_membership;
@@ -14,7 +15,8 @@ pub mod ed25519;
 use blsttc::{PublicKeySet, SignatureShare};
 use serde::Serialize;
 
-pub use crate::consensus::{Consensus, Decision, VoteResponse};
+pub use crate::consensus::{Consensus, VoteResponse};
+pub use crate::decision::Decision;
 pub use crate::fault::{Fault, FaultError};
 pub use crate::sn_handover::{Handover, UniqueSectionId};
 pub use crate::sn_membership::{Generation, Membership, Reconfig};

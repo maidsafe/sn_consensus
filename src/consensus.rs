@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
 use log::info;
 use serde::Serialize;
 
 use crate::sn_membership::Generation;
-use crate::vote::{Ballot, Proposition, SignedVote, Vote, VoteCount};
-use crate::{Error, Fault, NodeId, Result};
+use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+use crate::{Decision, Error, Fault, NodeId, Result, VoteCount};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Consensus<T: Proposition> {
@@ -17,19 +17,6 @@ pub struct Consensus<T: Proposition> {
     pub votes: BTreeMap<NodeId, SignedVote<T>>,
     pub faults: BTreeMap<NodeId, Fault<T>>,
     pub decision: Option<Decision<T>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Decision<T: Proposition> {
-    pub votes: BTreeSet<SignedVote<T>>,
-    pub proposals: BTreeMap<T, Signature>,
-    pub faults: BTreeSet<Fault<T>>,
-}
-
-impl<T: Proposition> Decision<T> {
-    pub fn faulty_ids(&self) -> BTreeSet<NodeId> {
-        BTreeSet::from_iter(self.faults.iter().map(Fault::voter_at_fault))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,7 +122,7 @@ impl<T: Proposition> Consensus<T> {
     fn process_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
         self.log_processed_signed_vote(&signed_vote);
 
-        if let Some(proposals) = self.get_decision(&signed_vote.vote_count())? {
+        if let Some(proposals) = signed_vote.vote_count().get_decision(&self.elders)? {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
             // decision using the sm_over_sm logic below.
@@ -155,7 +142,7 @@ impl<T: Proposition> Consensus<T> {
 
         let vote_count = VoteCount::count(self.votes.values(), &self.faulty_ids());
 
-        if let Some(proposals) = self.get_decision(&vote_count)? {
+        if let Some(proposals) = vote_count.get_decision(&self.elders)? {
             info!(
                 "[{}] Detected super majority over super majorities: {proposals:?}",
                 self.id()
@@ -289,21 +276,6 @@ impl<T: Proposition> Consensus<T> {
             .unwrap_or_default();
 
         most_votes > self.elders.threshold()
-    }
-
-    fn get_decision(&self, vote_count: &VoteCount<T>) -> Result<Option<BTreeMap<T, Signature>>> {
-        if let Some((_candidate, sm_count)) = vote_count.super_majority_with_most_votes() {
-            if sm_count.count > self.elders.threshold() {
-                let proposals = sm_count
-                    .proposals
-                    .iter()
-                    .map(|(prop, sigs)| Ok((prop.clone(), self.elders.combine_signatures(sigs)?)))
-                    .collect::<Result<_>>()?;
-                return Ok(Some(proposals));
-            }
-        }
-
-        Ok(None)
     }
 
     pub fn detect_byzantine_voters(
