@@ -39,6 +39,8 @@ pub enum Error {
     InvalidGeneration(Generation),
     #[error("History contains an invalid vote")]
     InvalidVoteInHistory,
+    #[error("Invalid decision")]
+    InvalidDecision,
     #[error("Failed to encode with bincode")]
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
@@ -49,6 +51,8 @@ pub enum Error {
     Blsttc(#[from] blsttc::error::Error),
     #[error("Client attempted a faulty proposal")]
     AttemptedFaultyProposal,
+    #[error("Fault is not a valid fault: {0:?}")]
+    FaultIsFaulty(crate::fault::FaultError),
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]

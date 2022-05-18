@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::sn_membership::Generation;
 use crate::vote::{Ballot, Proposition, SignedVote, Vote};
-use crate::{Decision, Error, Fault, NodeId, Result, VoteCount};
+use crate::{Decision, Fault, NodeId, Result, VoteCount};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Consensus<T: Proposition> {
