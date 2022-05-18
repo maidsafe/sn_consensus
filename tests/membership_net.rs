@@ -196,6 +196,7 @@ impl Net {
                         assert_eq!(net_d.proposals, proc_d.proposals);
                     }
                     (None, Some(proc_d)) => {
+                        assert!(proc_d.validate(&proc.consensus.elders).is_ok());
                         self.decisions.insert(packet_gen, proc_d);
                     }
                     (None | Some(_), None) => (),
