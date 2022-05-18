@@ -14,8 +14,21 @@ pub struct Decision<T: Proposition> {
 
 impl<T: Proposition> Decision<T> {
     pub fn validate(&self, voters: &PublicKeySet) -> Result<()> {
+        let all_votes = self.votes_by_voter();
+        let known_faulty_voters = self.faulty_ids();
         for vote in self.votes.iter() {
             vote.validate(voters, &Default::default())?;
+            if let Err(faults) =
+                vote.detect_byzantine_faults(voters, &all_votes, &Default::default())
+            {
+                let detected_faults = BTreeSet::from_iter(faults.into_keys());
+                if !detected_faults.is_subset(&known_faulty_voters) {
+                    warn!(
+                        "Detected faulty voters who is not present in faults reported in decision"
+                    );
+                    return Err(Error::InvalidDecision);
+                }
+            }
         }
 
         for fault in self.faults.iter() {
@@ -35,6 +48,20 @@ impl<T: Proposition> Decision<T> {
         }
 
         Ok(())
+    }
+
+    pub fn votes_by_voter(&self) -> BTreeMap<NodeId, SignedVote<T>> {
+        let mut all_votes = BTreeMap::new();
+
+        for vote in self.votes.iter().flat_map(|v| v.unpack_votes()) {
+            let existing_vote = all_votes.entry(vote.voter).or_insert_with(|| vote.clone());
+
+            if vote.supersedes(existing_vote) {
+                all_votes.insert(vote.voter, vote.clone());
+            }
+        }
+
+        all_votes
     }
 
     pub fn faulty_ids(&self) -> BTreeSet<NodeId> {

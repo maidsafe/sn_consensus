@@ -106,7 +106,11 @@ impl<T: Proposition> Consensus<T> {
 
         signed_vote.validate(&self.elders, &self.processed_votes_cache)?;
 
-        if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
+        if let Err(faults) = signed_vote.detect_byzantine_faults(
+            &self.elders,
+            &self.votes,
+            &self.processed_votes_cache,
+        ) {
             info!("[{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
@@ -253,44 +257,6 @@ impl<T: Proposition> Consensus<T> {
                     *existing_vote = vote.clone()
                 }
             }
-        }
-    }
-
-    pub fn detect_byzantine_voters(
-        &self,
-        signed_vote: &SignedVote<T>,
-    ) -> std::result::Result<(), BTreeMap<NodeId, Fault<T>>> {
-        let mut faults = BTreeMap::new();
-        for vote in signed_vote.unpack_votes() {
-            if self.have_we_processed_vote(vote) {
-                continue;
-            }
-
-            if let Some(existing_vote) = self.votes.get(&vote.voter) {
-                let fault = Fault::ChangedVote {
-                    a: existing_vote.clone(),
-                    b: vote.clone(),
-                };
-
-                if let Ok(()) = fault.validate(&self.elders) {
-                    faults.insert(vote.voter, fault);
-                }
-            }
-
-            {
-                let fault = Fault::InvalidFault {
-                    signed_vote: vote.clone(),
-                };
-                if let Ok(()) = fault.validate(&self.elders) {
-                    faults.insert(vote.voter, fault);
-                }
-            }
-        }
-
-        if faults.is_empty() {
-            Ok(())
-        } else {
-            Err(faults)
         }
     }
 }

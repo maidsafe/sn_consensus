@@ -230,6 +230,46 @@ impl<T: Proposition> SignedVote<T> {
         Ok(())
     }
 
+    pub fn detect_byzantine_faults(
+        &self,
+        voters: &PublicKeySet,
+        existing_votes: &BTreeMap<NodeId, SignedVote<T>>,
+        valid_votes_cache: &BTreeSet<SignatureShare>,
+    ) -> std::result::Result<(), BTreeMap<NodeId, Fault<T>>> {
+        let mut faults = BTreeMap::new();
+        for vote in self.unpack_votes() {
+            if valid_votes_cache.contains(&vote.sig) {
+                continue;
+            }
+
+            if let Some(existing_vote) = existing_votes.get(&vote.voter) {
+                let fault = Fault::ChangedVote {
+                    a: existing_vote.clone(),
+                    b: vote.clone(),
+                };
+
+                if let Ok(()) = fault.validate(voters) {
+                    faults.insert(vote.voter, fault);
+                }
+            }
+
+            {
+                let fault = Fault::InvalidFault {
+                    signed_vote: vote.clone(),
+                };
+                if let Ok(()) = fault.validate(voters) {
+                    faults.insert(vote.voter, fault);
+                }
+            }
+        }
+
+        if faults.is_empty() {
+            Ok(())
+        } else {
+            Err(faults)
+        }
+    }
+
     pub fn unpack_votes(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
         match &self.vote.ballot {
             Ballot::Propose(_) => Box::new(std::iter::once(self)),
