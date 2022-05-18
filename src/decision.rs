@@ -16,16 +16,22 @@ impl<T: Proposition> Decision<T> {
     pub fn validate(&self, voters: &PublicKeySet) -> Result<()> {
         let all_votes = self.votes_by_voter();
         let known_faulty_voters = self.faulty_ids();
+        let expected_generation = self.generation()?;
+
         for vote in self.votes.iter() {
             vote.validate(voters, &Default::default())?;
+
+            if vote.vote.gen != expected_generation {
+                warn!("Not all votes in decision are from same generation");
+                return Err(Error::InvalidDecision);
+            }
+
             if let Err(faults) =
                 vote.detect_byzantine_faults(voters, &all_votes, &Default::default())
             {
                 let detected_faults = BTreeSet::from_iter(faults.into_keys());
                 if !detected_faults.is_subset(&known_faulty_voters) {
-                    warn!(
-                        "Detected faulty voters who is not present in faults reported in decision"
-                    );
+                    warn!("Detected faulty voters who is not present in faults");
                     return Err(Error::InvalidDecision);
                 }
             }
@@ -35,9 +41,8 @@ impl<T: Proposition> Decision<T> {
             fault.validate(voters).map_err(Error::FaultIsFaulty)?;
         }
 
-        if let Some(proposals) =
-            VoteCount::count(self.votes.iter().cloned(), &self.faulty_ids()).get_decision(voters)?
-        {
+        let vote_count = VoteCount::count(self.votes.iter().cloned(), &self.faulty_ids());
+        if let Some(proposals) = vote_count.get_decision(voters)? {
             if proposals != self.proposals {
                 warn!("Proposals from votes does not match decision proposals");
                 return Err(Error::InvalidDecision);
