@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.17.1](https://github.com/maidsafe/sn_consensus/compare/v1.17.0...v1.17.1) (2022-05-18)
+
+
+### Bug Fixes
+
+* **decision:** validate all votes in decision are from same gen ([91d896c](https://github.com/maidsafe/sn_consensus/commit/91d896c057f5b6b8dd0e74413a0031143c340173))
+
 ## [1.17.0](https://github.com/maidsafe/sn_consensus/compare/v1.16.1...v1.17.0) (2022-05-18)
 
 
