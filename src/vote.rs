@@ -140,7 +140,7 @@ impl<T: Proposition> Vote<T> {
                     .map(|(c, _)| c.proposals.clone())
                     .unwrap_or_default();
 
-                if !vote_count.do_we_have_supermajority(&voters) {
+                if !vote_count.do_we_have_supermajority(voters) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
                 } else if !candidate_proposals.iter().eq(proposals.keys()) {
@@ -148,7 +148,7 @@ impl<T: Proposition> Vote<T> {
                     Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
                 } else if proposals
                     .iter()
-                    .try_for_each(|(p, (id, sig))| crate::verify_sig_share(&p, sig, *id, &voters))
+                    .try_for_each(|(p, (id, sig))| crate::verify_sig_share(&p, sig, *id, voters))
                     .is_err()
                 {
                     Err(Error::InvalidElderSignature)
@@ -224,8 +224,8 @@ impl<T: Proposition> SignedVote<T> {
         voters: &PublicKeySet,
         valid_votes_cache: &BTreeSet<SignatureShare>,
     ) -> Result<()> {
-        self.validate_signature(&voters)?;
-        self.vote.validate(&voters, &valid_votes_cache)?;
+        self.validate_signature(voters)?;
+        self.vote.validate(voters, valid_votes_cache)?;
 
         Ok(())
     }
