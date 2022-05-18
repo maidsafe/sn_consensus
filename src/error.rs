@@ -16,7 +16,7 @@ pub enum Error {
     #[error("You must be a member to request to leave")]
     LeaveRequestForNonMember,
     #[error("A merged vote must be from the same generation as the child vote: {child_gen} != {merge_gen}")]
-    MergedVotesMustBeFromSameGen {
+    ParentAndChildWithDiffGen {
         child_gen: Generation,
         merge_gen: Generation,
     },
@@ -25,6 +25,8 @@ pub enum Error {
         requested_gen: Generation,
         gen: Generation,
     },
+    #[error("Decision doesn't have any votes")]
+    DecisionHasNoVotes,
     #[error("The voter is not an elder")]
     NotElder,
     #[error("Voter changed their vote")]
@@ -37,6 +39,8 @@ pub enum Error {
     InvalidGeneration(Generation),
     #[error("History contains an invalid vote")]
     InvalidVoteInHistory,
+    #[error("Invalid decision")]
+    InvalidDecision,
     #[error("Failed to encode with bincode")]
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
@@ -47,6 +51,8 @@ pub enum Error {
     Blsttc(#[from] blsttc::error::Error),
     #[error("Client attempted a faulty proposal")]
     AttemptedFaultyProposal,
+    #[error("Fault is not a valid fault: {0:?}")]
+    FaultIsFaulty(crate::fault::FaultError),
 
     #[cfg(feature = "ed25519")]
     #[error("Ed25519 Error {0}")]

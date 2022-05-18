@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
 use log::info;
 use serde::Serialize;
 
 use crate::sn_membership::Generation;
-use crate::vote::{Ballot, Proposition, SignedVote, Vote, VoteCount};
-use crate::{Error, Fault, NodeId, Result};
+use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+use crate::{Decision, Fault, NodeId, Result, VoteCount};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Consensus<T: Proposition> {
@@ -17,19 +17,6 @@ pub struct Consensus<T: Proposition> {
     pub votes: BTreeMap<NodeId, SignedVote<T>>,
     pub faults: BTreeMap<NodeId, Fault<T>>,
     pub decision: Option<Decision<T>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Decision<T: Proposition> {
-    pub votes: BTreeSet<SignedVote<T>>,
-    pub proposals: BTreeMap<T, Signature>,
-    pub faults: BTreeSet<Fault<T>>,
-}
-
-impl<T: Proposition> Decision<T> {
-    pub fn faulty_ids(&self) -> BTreeSet<NodeId> {
-        BTreeSet::from_iter(self.faults.iter().map(Fault::voter_at_fault))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,9 +104,13 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
-        self.validate_signed_vote(&signed_vote)?;
+        signed_vote.validate(&self.elders, &self.processed_votes_cache)?;
 
-        if let Err(faults) = self.detect_byzantine_voters(&signed_vote) {
+        if let Err(faults) = signed_vote.detect_byzantine_faults(
+            &self.elders,
+            &self.votes,
+            &self.processed_votes_cache,
+        ) {
             info!("[{}] Found faults {:?}", self.id(), faults);
             self.faults.extend(faults);
         }
@@ -135,7 +126,7 @@ impl<T: Proposition> Consensus<T> {
     fn process_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
         self.log_processed_signed_vote(&signed_vote);
 
-        if let Some(proposals) = self.get_decision(&signed_vote.vote_count())? {
+        if let Some(proposals) = signed_vote.vote_count().get_decision(&self.elders)? {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
             // decision using the sm_over_sm logic below.
@@ -155,7 +146,7 @@ impl<T: Proposition> Consensus<T> {
 
         let vote_count = VoteCount::count(self.votes.values(), &self.faulty_ids());
 
-        if let Some(proposals) = self.get_decision(&vote_count)? {
+        if let Some(proposals) = vote_count.get_decision(&self.elders)? {
             info!(
                 "[{}] Detected super majority over super majorities: {proposals:?}",
                 self.id()
@@ -175,7 +166,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(VoteResponse::Broadcast(vote));
         }
 
-        if self.is_split_vote(&vote_count) {
+        if vote_count.is_split_vote(&self.elders, self.n_elders) {
             info!("[{}] Detected split vote", self.id());
             let merge_vote = Vote {
                 gen: signed_vote.vote.gen,
@@ -195,7 +186,7 @@ impl<T: Proposition> Consensus<T> {
             return Ok(resp);
         }
 
-        if self.is_super_majority(&vote_count) {
+        if vote_count.do_we_have_supermajority(&self.elders) {
             info!("[{}] Detected super majority", self.id());
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
@@ -267,138 +258,6 @@ impl<T: Proposition> Consensus<T> {
                 }
             }
         }
-    }
-
-    fn is_split_vote(&self, count: &VoteCount<T>) -> bool {
-        let most_votes = count
-            .candidate_with_most_votes()
-            .map(|(_, c)| c)
-            .unwrap_or(0);
-        let remaining_voters = self.n_elders - count.voters.len();
-
-        // suppose the remaining votes go to the proposals with the most votes.
-        let predicted_votes = most_votes + remaining_voters;
-
-        count.voters.len() > self.elders.threshold() && predicted_votes <= self.elders.threshold()
-    }
-
-    pub fn is_super_majority(&self, count: &VoteCount<T>) -> bool {
-        let most_votes = count
-            .candidate_with_most_votes()
-            .map(|(_, c)| c)
-            .unwrap_or_default();
-
-        most_votes > self.elders.threshold()
-    }
-
-    fn get_decision(&self, vote_count: &VoteCount<T>) -> Result<Option<BTreeMap<T, Signature>>> {
-        if let Some((_candidate, sm_count)) = vote_count.super_majority_with_most_votes() {
-            if sm_count.count > self.elders.threshold() {
-                let proposals = sm_count
-                    .proposals
-                    .iter()
-                    .map(|(prop, sigs)| Ok((prop.clone(), self.elders.combine_signatures(sigs)?)))
-                    .collect::<Result<_>>()?;
-                return Ok(Some(proposals));
-            }
-        }
-
-        Ok(None)
-    }
-
-    pub fn detect_byzantine_voters(
-        &self,
-        signed_vote: &SignedVote<T>,
-    ) -> std::result::Result<(), BTreeMap<NodeId, Fault<T>>> {
-        let mut faults = BTreeMap::new();
-        for vote in signed_vote.unpack_votes() {
-            if self.have_we_processed_vote(vote) {
-                continue;
-            }
-
-            if let Some(existing_vote) = self.votes.get(&vote.voter) {
-                let fault = Fault::ChangedVote {
-                    a: existing_vote.clone(),
-                    b: vote.clone(),
-                };
-
-                if let Ok(()) = fault.validate(&self.elders) {
-                    faults.insert(vote.voter, fault);
-                }
-            }
-
-            {
-                let fault = Fault::InvalidFault {
-                    signed_vote: vote.clone(),
-                };
-                if let Ok(()) = fault.validate(&self.elders) {
-                    faults.insert(vote.voter, fault);
-                }
-            }
-        }
-
-        if faults.is_empty() {
-            Ok(())
-        } else {
-            Err(faults)
-        }
-    }
-
-    /// Validates a vote recursively all the way down to the proposition (T)
-    /// Assumes those propositions are correct, they MUST be checked beforehand by the caller
-    fn validate_signed_vote(&self, signed_vote: &SignedVote<T>) -> Result<()> {
-        signed_vote.validate_signature(&self.elders)?;
-        self.validate_vote(&signed_vote.vote)?;
-        Ok(())
-    }
-
-    fn validate_vote(&self, vote: &Vote<T>) -> Result<()> {
-        match &vote.ballot {
-            Ballot::Propose(_) => Ok(()),
-            Ballot::Merge(votes) => self.validate_child_votes(vote.gen, votes),
-            Ballot::SuperMajority { votes, proposals } => {
-                let vote_count = VoteCount::count(votes, &vote.faulty_ids());
-
-                let candidate_proposals = vote_count
-                    .candidate_with_most_votes()
-                    .map(|(c, _)| c.proposals.clone())
-                    .unwrap_or_default();
-
-                if !self.is_super_majority(&vote_count) {
-                    // TODO: this should be moved to fault detection
-                    Err(Error::SuperMajorityBallotIsNotSuperMajority)
-                } else if !candidate_proposals.iter().eq(proposals.keys()) {
-                    // TODO: this should be moved to fault detection
-                    Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
-                } else if proposals
-                    .iter()
-                    .try_for_each(|(p, (id, sig))| {
-                        crate::verify_sig_share(&p, sig, *id, &self.elders)
-                    })
-                    .is_err()
-                {
-                    Err(Error::InvalidElderSignature)
-                } else {
-                    self.validate_child_votes(vote.gen, votes)
-                }
-            }
-        }
-    }
-
-    fn validate_child_votes(&self, gen: Generation, votes: &BTreeSet<SignedVote<T>>) -> Result<()> {
-        for child_vote in votes {
-            // TODO: generation checking needs to move to sn_membership
-            if child_vote.vote.gen != gen {
-                return Err(Error::MergedVotesMustBeFromSameGen {
-                    child_gen: child_vote.vote.gen,
-                    merge_gen: gen,
-                });
-            }
-            if !self.have_we_processed_vote(child_vote) {
-                self.validate_signed_vote(child_vote)?
-            };
-        }
-        Ok(())
     }
 }
 
