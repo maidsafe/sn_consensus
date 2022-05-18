@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.17.0](https://github.com/maidsafe/sn_consensus/compare/v1.16.1...v1.17.0) (2022-05-18)
+
+
+### Features
+
+* **decision:** add byzantine fault checks to decision validation ([e5c5f8d](https://github.com/maidsafe/sn_consensus/commit/e5c5f8dc6aba12293caa402868a403b266dfe571))
+* **decision:** flesh out decision validation ([dd0fb7d](https://github.com/maidsafe/sn_consensus/commit/dd0fb7d5fe0849b7848ad3a5c39b30061f58557d))
+* **tests:** add decision validation as a part of the test harness ([7ff642e](https://github.com/maidsafe/sn_consensus/commit/7ff642e71b349665aa019a4ca6b13487f2897fe9))
+
 ### [1.16.1](https://github.com/maidsafe/sn_consensus/compare/v1.16.0...v1.16.1) (2022-05-17)
 
 ## [1.16.0](https://github.com/maidsafe/sn_consensus/compare/v1.15.1...v1.16.0) (2022-03-28)
