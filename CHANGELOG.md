@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.0.0](https://github.com/maidsafe/sn_consensus/compare/v1.17.1...v2.0.0) (2022-05-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **versions:** move validations to vote struct
+
+* **versions:** forgot to mark last commits as breaking changes ([8ae1e4c](https://github.com/maidsafe/sn_consensus/commit/8ae1e4cb82e20afb7125da6fa769d6ec70b1bec7))
+
 ### [1.17.1](https://github.com/maidsafe/sn_consensus/compare/v1.17.0...v1.17.1) (2022-05-18)
 
 
