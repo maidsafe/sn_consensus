@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use blsttc::{PublicKeySet, Signature};
 use log::warn;
+use serde::{Deserialize, Serialize};
 
 use crate::{Error, Fault, Generation, NodeId, Proposition, Result, SignedVote, VoteCount};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decision<T: Proposition> {
     pub votes: BTreeSet<SignedVote<T>>,
     pub proposals: BTreeMap<T, Signature>,
