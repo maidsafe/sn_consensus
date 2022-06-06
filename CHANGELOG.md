@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.1.0](https://github.com/maidsafe/sn_consensus/compare/v2.0.0...v2.1.0) (2022-06-06)
+
+
+### Features
+
+* **serde:** make decision serde ([59b866a](https://github.com/maidsafe/sn_consensus/commit/59b866a96a605f1f12959295369c69e3887fd603))
+
 ## [2.0.0](https://github.com/maidsafe/sn_consensus/compare/v1.17.1...v2.0.0) (2022-05-24)
 
 
