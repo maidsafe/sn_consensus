@@ -18,7 +18,7 @@ log = "0.4.13"
   features = [ "derive" ]
 
   [dependencies.blsttc]
-  version = "5.2.0"
+  version = "6.0.0"
 
   [dependencies.ed25519]
   version = "1.0.0"
