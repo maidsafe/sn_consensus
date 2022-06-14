@@ -7,7 +7,7 @@
 
 This Safe Network Membership module enables nodes to dynamically join and leave a Safe Network Section.
 
-A consensus algorithm is run by Section Elders to decide on reconfigurations, the agorithm procedes in stages:
+A consensus algorithm is run by Section Elders to decide on reconfigurations. The algorithm proceeds in stages:
 
 1. An Elder proposes a reconfig (Join or Leave) on behalf of a joining node. The proposal is broadcast to all Elders
 2. If an Elder detects a split vote, they propose a Merge vote. (this may happen up to O(log(n)) times)
