@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.0.0](https://github.com/maidsafe/sn_consensus/compare/v2.1.1...v3.0.0) (2022-06-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **decision:** Decisions hold signature over full proposal set
+rather than individual proposals
+
+### Features
+
+* **decision:** Sign proposal set rather than individual proposals ([fa48612](https://github.com/maidsafe/sn_consensus/commit/fa486124c0fe26d4111ecb04e622607d43836565))
+
 ### [2.1.1](https://github.com/maidsafe/sn_consensus/compare/v2.1.0...v2.1.1) (2022-06-14)
 
 ## [2.1.0](https://github.com/maidsafe/sn_consensus/compare/v2.0.0...v2.1.0) (2022-06-06)
