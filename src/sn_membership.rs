@@ -127,7 +127,7 @@ impl<T: Proposition> Membership<T> {
                 );
             };
 
-            for (reconfig, _sig) in decision.proposals.iter() {
+            for reconfig in decision.proposals().iter() {
                 reconfig.apply(&mut members);
             }
 

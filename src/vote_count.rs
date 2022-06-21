@@ -3,48 +3,74 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
-use blsttc::{PublicKeySet, Signature, SignatureShare};
+use blsttc::{Fr, PublicKeySet, Signature, SignatureShare};
 
-use crate::{Ballot, NodeId, Proposition, Result, SignedVote};
+use crate::{Ballot, Fault, NodeId, Proposition, Result, SignedVote};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Candidate<T> {
+/// A Candidate is a potential outcome of consensus run.
+#[derive(Debug, Clone)]
+pub struct Candidate<T: Proposition> {
+    /// The set of proposals that won the vote
     pub proposals: BTreeSet<T>,
-    pub faulty: BTreeSet<NodeId>,
+    /// Faults that were detected in this consensus run.
+    pub faults: BTreeSet<Fault<T>>,
 }
 
-impl<T> Default for Candidate<T> {
+impl<T: Proposition> PartialEq for Candidate<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp_repr() == other.cmp_repr()
+    }
+}
+
+impl<T: Proposition> Eq for Candidate<T> {}
+
+impl<T: Proposition> PartialOrd for Candidate<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T: Proposition> Ord for Candidate<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cmp_repr().cmp(&other.cmp_repr())
+    }
+}
+
+impl<T: Proposition> Default for Candidate<T> {
     fn default() -> Self {
         Self {
             proposals: Default::default(),
-            faulty: Default::default(),
+            faults: Default::default(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SuperMajorityCount<T> {
+impl<T: Proposition> Candidate<T> {
+    pub fn faulty_ids(&self) -> BTreeSet<NodeId> {
+        self.faults.iter().map(|f| f.voter_at_fault()).collect()
+    }
+
+    fn cmp_repr(&self) -> (&BTreeSet<T>, BTreeSet<NodeId>) {
+        (&self.proposals, self.faulty_ids())
+    }
+}
+
+/// The count of voters voting for the same Candidate with a super-majority ballot
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SuperMajorityCount {
     pub count: usize,
-    pub proposals: BTreeMap<T, BTreeMap<u64, SignatureShare>>,
-}
-
-impl<T> Default for SuperMajorityCount<T> {
-    fn default() -> Self {
-        Self {
-            count: 0,
-            proposals: Default::default(),
-        }
-    }
+    /// Super-majority ballots come with a signature share signing over the winning proposals
+    pub proposals_sig_shares: BTreeMap<Fr, SignatureShare>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VoteCount<T> {
+pub struct VoteCount<T: Proposition> {
     pub candidates: BTreeMap<Candidate<T>, usize>,
-    pub super_majorities: BTreeMap<Candidate<T>, SuperMajorityCount<T>>,
+    pub super_majorities: BTreeMap<Candidate<T>, SuperMajorityCount>,
     pub voters: BTreeSet<NodeId>,
 }
 
-impl<T> Default for VoteCount<T> {
+impl<T: Proposition> Default for VoteCount<T> {
     fn default() -> Self {
         Self {
             candidates: Default::default(),
@@ -86,18 +112,17 @@ impl<T: Proposition> VoteCount<T> {
         for vote in votes_by_honest_voter.into_values() {
             let candidate = vote.candidate();
 
-            if let Ballot::SuperMajority { proposals, .. } = &vote.vote.ballot {
+            if let Ballot::SuperMajority {
+                proposals_sig_share,
+                ..
+            } = vote.vote.ballot
+            {
                 let sm_count = count.super_majorities.entry(candidate.clone()).or_default();
 
                 sm_count.count += 1;
-
-                for (t, (id, sig)) in proposals {
-                    sm_count
-                        .proposals
-                        .entry(t.clone())
-                        .or_default()
-                        .insert(*id as u64, sig.clone());
-                }
+                sm_count
+                    .proposals_sig_shares
+                    .insert(Fr::from(vote.voter as u64), proposals_sig_share);
             }
 
             let c = count.candidates.entry(candidate).or_default();
@@ -118,9 +143,7 @@ impl<T: Proposition> VoteCount<T> {
             .max_by_key(|(_, c)| *c)
     }
 
-    pub fn super_majority_with_most_votes(
-        &self,
-    ) -> Option<(&Candidate<T>, &SuperMajorityCount<T>)> {
+    pub fn super_majority_with_most_votes(&self) -> Option<(&Candidate<T>, &SuperMajorityCount)> {
         self.super_majorities
             .iter()
             .max_by_key(|(_, sm_count)| sm_count.count)
@@ -151,15 +174,14 @@ impl<T: Proposition> VoteCount<T> {
         most_votes > voters.threshold()
     }
 
-    pub fn get_decision(&self, voters: &PublicKeySet) -> Result<Option<BTreeMap<T, Signature>>> {
-        if let Some((_candidate, sm_count)) = self.super_majority_with_most_votes() {
+    pub fn signed_decision(
+        &self,
+        voters: &PublicKeySet,
+    ) -> Result<Option<(&BTreeSet<T>, Signature)>> {
+        if let Some((candidate, sm_count)) = self.super_majority_with_most_votes() {
             if sm_count.count > voters.threshold() {
-                let proposals = sm_count
-                    .proposals
-                    .iter()
-                    .map(|(prop, sigs)| Ok((prop.clone(), voters.combine_signatures(sigs)?)))
-                    .collect::<Result<_>>()?;
-                return Ok(Some(proposals));
+                let proposals_sig = voters.combine_signatures(&sm_count.proposals_sig_shares)?;
+                return Ok(Some((&candidate.proposals, proposals_sig)));
             }
         }
 
