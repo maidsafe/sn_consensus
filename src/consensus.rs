@@ -66,18 +66,18 @@ impl<T: Proposition> Consensus<T> {
     ) -> Result<SignedVote<T>> {
         let faulty = BTreeSet::from_iter(faults.iter().map(Fault::voter_at_fault));
 
-        let proposals = VoteCount::count(&votes, &faulty)
+        let proposals: BTreeSet<T> = VoteCount::count(&votes, &faulty)
             .candidate_with_most_votes()
             .map(|(candidate, _)| candidate.proposals.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .map(|proposal| {
-                let sig = self.sign(&proposal)?;
-                Ok((proposal, (self.id(), sig)))
-            })
-            .collect::<Result<_>>()?;
+            .unwrap_or_default();
 
-        let ballot = Ballot::SuperMajority { votes, proposals }.simplify();
+        let proposals_sig_share = self.sign(&proposals)?;
+
+        let ballot = Ballot::SuperMajority {
+            votes,
+            proposals_sig_share,
+        }
+        .simplify();
 
         let vote = Vote {
             gen,
@@ -124,21 +124,20 @@ impl<T: Proposition> Consensus<T> {
     }
 
     fn process_signed_vote(&mut self, signed_vote: SignedVote<T>) -> Result<VoteResponse<T>> {
+        let node_id = self.id();
         self.log_processed_signed_vote(&signed_vote);
 
-        if let Some(proposals) = signed_vote.vote_count().get_decision(&self.elders)? {
+        if let Some((_, proposals_sig)) = signed_vote.vote_count().signed_decision(&self.elders)? {
             // This case is here to handle situations where this node has recieved
             // a faulty vote previously that is preventing it from accepting a network
             // decision using the sm_over_sm logic below.
-            info!(
-                "[{}] They terminated but we haven't yet, accepting decision",
-                self.id()
-            );
-            let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
+            info!("[{node_id}] They terminated but we haven't yet, accepting their decision");
+            let faults = signed_vote.vote.faults.clone();
+            let votes = BTreeSet::from_iter([signed_vote]);
             let decision = Decision {
                 votes,
-                proposals,
-                faults: signed_vote.vote.faults.clone(),
+                proposals_sig,
+                faults,
             };
             self.decision = Some(decision);
             return Ok(VoteResponse::WaitingForMoreVotes);
@@ -146,15 +145,12 @@ impl<T: Proposition> Consensus<T> {
 
         let vote_count = VoteCount::count(self.votes.values(), &self.faulty_ids());
 
-        if let Some(proposals) = vote_count.get_decision(&self.elders)? {
-            info!(
-                "[{}] Detected super majority over super majorities: {proposals:?}",
-                self.id()
-            );
+        if let Some((_, proposals_sig)) = vote_count.signed_decision(&self.elders)? {
+            info!("[{node_id}] Detected super majority over super majorities");
             let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
             let decision = Decision {
                 votes,
-                proposals,
+                proposals_sig,
                 faults: self.faults(),
             };
             let vote = self.build_super_majority_vote(
@@ -167,7 +163,7 @@ impl<T: Proposition> Consensus<T> {
         }
 
         if vote_count.is_split_vote(&self.elders, self.n_elders) {
-            info!("[{}] Detected split vote", self.id());
+            info!("[{node_id}] Detected split vote");
             let merge_vote = Vote {
                 gen: signed_vote.vote.gen,
                 ballot: Ballot::Merge(self.votes.values().cloned().collect()).simplify(),
@@ -176,10 +172,10 @@ impl<T: Proposition> Consensus<T> {
             let signed_merge_vote = self.sign_vote(merge_vote)?;
 
             let resp = if vote_count != signed_merge_vote.vote_count() {
-                info!("[{}] broadcasting merge.", self.id());
+                info!("[{node_id}] broadcasting merge.");
                 VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)?)
             } else {
-                info!("[{}] merge does not change counts, waiting.", self.id());
+                info!("[{node_id}] merge does not change counts, waiting.");
                 VoteResponse::WaitingForMoreVotes
             };
 
@@ -187,18 +183,18 @@ impl<T: Proposition> Consensus<T> {
         }
 
         if vote_count.do_we_have_supermajority(&self.elders) {
-            info!("[{}] Detected super majority", self.id());
+            info!("[{node_id}] Detected super majority");
 
             if let Some(our_vote) = self.votes.get(&self.id()) {
                 // We voted during this generation.
 
                 if our_vote.vote.is_super_majority_ballot() {
-                    info!("[{}] We've already sent a super majority, waiting till we either have a split vote or SM / SM", self.id());
+                    info!("[{node_id}] We've already sent a super majority, waiting till we either have a split vote or SM / SM");
                     return Ok(VoteResponse::WaitingForMoreVotes);
                 }
             }
 
-            info!("[{}] broadcasting super majority", self.id());
+            info!("[{node_id}] broadcasting super majority");
             let signed_vote = self.build_super_majority_vote(
                 self.votes.values().cloned().collect(),
                 BTreeSet::from_iter(self.faults.values().cloned()),

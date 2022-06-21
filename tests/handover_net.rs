@@ -53,7 +53,11 @@ impl Net {
             .consensus
             .decision
             .as_ref()
-            .and_then(|decision| self.procs[proc].resolve_votes(&decision.proposals).cloned())
+            .and_then(|decision| {
+                self.procs[proc]
+                    .resolve_votes(&decision.proposals())
+                    .cloned()
+            })
     }
 
     /// Pick a random public key from the set of procs
@@ -82,22 +86,23 @@ impl Net {
                     true => Ballot::Merge(votes),
                     false => {
                         let n_proposals = rng.gen::<usize>() % (self.procs.len() + 1);
-                        let proposals: BTreeMap<u8, (NodeId, SignatureShare)> =
-                            std::iter::repeat_with(|| {
-                                let prop = rng.gen();
-                                let sig = self
-                                    .procs
-                                    .iter()
-                                    .choose(rng)
-                                    .unwrap()
-                                    .consensus
-                                    .sign(&prop)?;
-                                Ok((prop, (self.pick_id(rng), sig)))
-                            })
+                        let proposals: BTreeSet<u8> = std::iter::repeat_with(|| rng.gen::<u8>())
                             .take(n_proposals)
-                            .collect::<Result<_>>()
+                            .collect();
+
+                        let proposals_sig_share: SignatureShare = self
+                            .procs
+                            .iter()
+                            .choose(rng)
+                            .unwrap()
+                            .consensus
+                            .sign(&proposals)
                             .unwrap();
-                        Ballot::SuperMajority { votes, proposals }
+
+                        Ballot::SuperMajority {
+                            votes,
+                            proposals_sig_share,
+                        }
                     }
                 }
             }

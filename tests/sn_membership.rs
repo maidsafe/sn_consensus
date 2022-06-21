@@ -875,8 +875,8 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
         );
 
         assert_eq!(
-            BTreeSet::from_iter(decision.proposals.keys()),
-            BTreeSet::from_iter([&Reconfig::Join(22)])
+            decision.proposals(),
+            BTreeSet::from_iter([Reconfig::Join(22)])
         );
     }
 
@@ -919,7 +919,7 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
 
     net.drain_queued_packets().unwrap();
 
-    net.generate_msc("test_membership_bft_consensus_qc4.msc")
+    net.generate_msc("test_membership_we_can_agree_to_an_empty_set.msc")
         .unwrap();
 
     let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
@@ -938,7 +938,7 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
         );
 
         // since all proposals were initiated by faulty voters, we end up with 0 proposals as the decision
-        assert_eq!(decision.proposals, BTreeMap::new());
+        assert_eq!(decision.proposals(), BTreeSet::new());
     }
 
     Ok(())
@@ -1016,8 +1016,8 @@ fn test_membership_final_broadcast_on_decision_catches_up_stragglers() -> Result
 
         assert_eq!(decision.faulty_ids(), BTreeSet::from_iter([1]));
         assert_eq!(
-            BTreeSet::from_iter(decision.proposals.keys()),
-            BTreeSet::from_iter([&Reconfig::Join(66)])
+            decision.proposals(),
+            BTreeSet::from_iter([Reconfig::Join(66)])
         );
     }
 
@@ -1080,7 +1080,7 @@ fn test_membership_scenario_requiring_us_to_filter_to_most_recent_votes_when_cou
         assert_eq!(p.gen, 1);
         let decision = p.consensus_at_gen(1).unwrap().decision.as_ref().unwrap();
         assert_eq!(
-            BTreeSet::from_iter(decision.proposals.keys().cloned()),
+            decision.proposals(),
             BTreeSet::from_iter([Reconfig::Join(22), Reconfig::Join(33)])
         )
     }

@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
-use blsttc::{PublicKeySet, SecretKeyShare, Signature};
+use blsttc::{PublicKeySet, SecretKeyShare};
 use core::fmt::Debug;
 use log::info;
 
@@ -63,10 +63,10 @@ impl<T: Proposition> Handover<T> {
         }
     }
 
-    pub fn resolve_votes<'a>(&self, proposals: &'a BTreeMap<T, Signature>) -> Option<&'a T> {
+    pub fn resolve_votes<'a>(&self, proposals: &'a BTreeSet<T>) -> Option<&'a T> {
         // we need to choose one deterministically
         // proposals are comparable because they impl Ord so we arbitrarily pick the max
-        proposals.keys().max()
+        proposals.iter().max()
     }
 
     pub fn id(&self) -> NodeId {

@@ -16,21 +16,16 @@ pub enum Ballot<T: Proposition> {
     Merge(BTreeSet<SignedVote<T>>),
     SuperMajority {
         votes: BTreeSet<SignedVote<T>>,
-        proposals: BTreeMap<T, (NodeId, SignatureShare)>,
+        proposals_sig_share: SignatureShare, // signature over BTreeSet<T>
     },
 }
 
 impl<T: Proposition> Debug for Ballot<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Ballot::Propose(r) => write!(f, "P({:?})", r),
-            Ballot::Merge(votes) => write!(f, "M{:?}", votes),
-            Ballot::SuperMajority { votes, proposals } => write!(
-                f,
-                "SM{:?}-{:?}",
-                votes,
-                BTreeSet::from_iter(proposals.keys())
-            ),
+            Ballot::Propose(r) => write!(f, "P({r:?})"),
+            Ballot::Merge(votes) => write!(f, "M{votes:?}"),
+            Ballot::SuperMajority { votes, .. } => write!(f, "SM{votes:?}"),
         }
     }
 }
@@ -79,9 +74,12 @@ impl<T: Proposition> Ballot<T> {
         match &self {
             Ballot::Propose(_) => self.clone(), // already in simplest form
             Ballot::Merge(votes) => Ballot::Merge(simplify_votes(votes)),
-            Ballot::SuperMajority { votes, proposals } => Ballot::SuperMajority {
+            Ballot::SuperMajority {
+                votes,
+                proposals_sig_share,
+            } => Ballot::SuperMajority {
                 votes: simplify_votes(votes),
-                proposals: proposals.clone(),
+                proposals_sig_share: proposals_sig_share.clone(),
             },
         }
     }
@@ -108,6 +106,7 @@ impl<T: Proposition> Debug for Vote<T> {
 impl<T: Proposition> Vote<T> {
     pub fn validate(
         &self,
+        voter: NodeId,
         voters: &PublicKeySet,
         valid_votes_memo: &BTreeSet<SignatureShare>,
     ) -> Result<()> {
@@ -132,10 +131,13 @@ impl<T: Proposition> Vote<T> {
         match &self.ballot {
             Ballot::Propose(_) => Ok(()),
             Ballot::Merge(votes) => validate_child_votes(votes),
-            Ballot::SuperMajority { votes, proposals } => {
+            Ballot::SuperMajority {
+                votes,
+                proposals_sig_share,
+            } => {
                 let vote_count = VoteCount::count(votes, &self.faulty_ids());
 
-                let candidate_proposals = vote_count
+                let proposals = vote_count
                     .candidate_with_most_votes()
                     .map(|(c, _)| c.proposals.clone())
                     .unwrap_or_default();
@@ -143,12 +145,7 @@ impl<T: Proposition> Vote<T> {
                 if !vote_count.do_we_have_supermajority(voters) {
                     // TODO: this should be moved to fault detection
                     Err(Error::SuperMajorityBallotIsNotSuperMajority)
-                } else if !candidate_proposals.iter().eq(proposals.keys()) {
-                    // TODO: this should be moved to fault detection
-                    Err(Error::SuperMajorityProposalsDoesNotMatchVoteProposals)
-                } else if proposals
-                    .iter()
-                    .try_for_each(|(p, (id, sig))| crate::verify_sig_share(&p, sig, *id, voters))
+                } else if crate::verify_sig_share(&proposals, proposals_sig_share, voter, voters)
                     .is_err()
                 {
                     Err(Error::InvalidElderSignature)
@@ -208,7 +205,7 @@ impl<T: Proposition> SignedVote<T> {
                 .unwrap_or_default(),
             _ => Candidate {
                 proposals: self.proposals(),
-                faulty: self.vote.faulty_ids(),
+                faults: self.vote.faults.clone(),
             },
         }
     }
@@ -225,7 +222,7 @@ impl<T: Proposition> SignedVote<T> {
         valid_votes_cache: &BTreeSet<SignatureShare>,
     ) -> Result<()> {
         self.validate_signature(voters)?;
-        self.vote.validate(voters, valid_votes_cache)?;
+        self.vote.validate(self.voter, voters, valid_votes_cache)?;
 
         Ok(())
     }

@@ -80,25 +80,27 @@ impl Net {
                     true => Ballot::Merge(votes),
                     false => {
                         let n_proposals = rng.gen::<usize>() % (self.procs.len() + 1);
-                        let proposals: BTreeMap<Reconfig<u8>, (NodeId, SignatureShare)> =
-                            std::iter::repeat_with(|| {
-                                let prop = match rng.gen() {
-                                    true => Reconfig::Join(rng.gen()),
-                                    false => Reconfig::Leave(rng.gen()),
-                                };
-                                let sig = self
-                                    .procs
-                                    .iter()
-                                    .choose(rng)
-                                    .unwrap()
-                                    .consensus
-                                    .sign(&prop)?;
-                                Ok((prop, (self.pick_id(rng), sig)))
+                        let proposals: BTreeSet<Reconfig<u8>> =
+                            std::iter::repeat_with(|| match rng.gen() {
+                                true => Reconfig::Join(rng.gen()),
+                                false => Reconfig::Leave(rng.gen()),
                             })
                             .take(n_proposals)
-                            .collect::<Result<_>>()
+                            .collect();
+
+                        let proposals_sig_share: SignatureShare = self
+                            .procs
+                            .iter()
+                            .choose(rng)
+                            .unwrap()
+                            .consensus
+                            .sign(&proposals)
                             .unwrap();
-                        Ballot::SuperMajority { votes, proposals }
+
+                        Ballot::SuperMajority {
+                            votes,
+                            proposals_sig_share,
+                        }
                     }
                 }
             }
@@ -193,7 +195,7 @@ impl Net {
 
                 match (network_decision, proc_decision) {
                     (Some(net_d), Some(proc_d)) => {
-                        assert_eq!(net_d.proposals, proc_d.proposals);
+                        assert_eq!(net_d.proposals(), proc_d.proposals());
                     }
                     (None, Some(proc_d)) => {
                         assert!(proc_d.validate(&proc.consensus.elders).is_ok());
