@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.1.0](https://github.com/maidsafe/sn_consensus/compare/v3.0.0...v3.1.0) (2022-06-23)
+
+
+### Features
+
+* **decision:** impl partial-ord, ord on Decision ([906b9c6](https://github.com/maidsafe/sn_consensus/commit/906b9c64a39115e4b7ef08fe7d3a0ec7131943d2))
+
 ## [3.0.0](https://github.com/maidsafe/sn_consensus/compare/v2.1.1...v3.0.0) (2022-06-21)
 
 
