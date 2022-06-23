@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Fault, Generation, NodeId, Proposition, Result, SignedVote, VoteCount};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Decision<T: Proposition> {
     pub votes: BTreeSet<SignedVote<T>>,
     pub faults: BTreeSet<Fault<T>>,
