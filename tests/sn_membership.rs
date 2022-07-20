@@ -857,7 +857,7 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
 
     net.drain_queued_packets()?;
 
-    net.generate_msc("test_membership_faulty_node_attempts_to_trick_honest_node")?;
+    net.generate_msc("test_membership_faulty_node_attempts_to_trick_honest_node.msc")?;
 
     let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| faulty != p.id()));
 
