@@ -77,13 +77,7 @@ impl<T: Proposition> Consensus<T> {
             })
             .collect::<Result<_>>()?;
 
-        let proposals_sig_share = Box::new(self.sign(&proposals)?);
-
-        let ballot = Ballot::SuperMajority {
-            votes,
-            proposals_sig_share,
-        }
-        .simplify();
+        let ballot = Ballot::SuperMajority { votes, proposals }.simplify();
 
         let vote = Vote {
             gen,
