@@ -13,7 +13,7 @@ pub mod bad_crypto;
 #[cfg(feature = "ed25519")]
 pub mod ed25519;
 
-use blsttc::{PublicKey, PublicKeySet, Signature, SignatureShare};
+use blsttc::{PublicKeySet, SignatureShare};
 use serde::Serialize;
 
 pub use crate::consensus::{Consensus, VoteResponse};
@@ -35,15 +35,6 @@ pub mod error;
 pub use crate::error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type NodeId = u8;
-
-pub fn verify_sig<M: Serialize>(msg: &M, sig: &Signature, public_key: &PublicKey) -> Result<()> {
-    let msg_bytes = bincode::serialize(msg)?;
-    if public_key.verify(sig, msg_bytes) {
-        Ok(())
-    } else {
-        Err(Error::InvalidElderSignature)
-    }
-}
 
 pub fn verify_sig_share<M: Serialize>(
     msg: &M,

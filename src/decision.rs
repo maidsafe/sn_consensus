@@ -9,8 +9,8 @@ use crate::{Error, Fault, Generation, NodeId, Proposition, Result, SignedVote, V
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decision<T: Proposition> {
     pub votes: BTreeSet<SignedVote<T>>,
+    pub proposals: BTreeMap<T, Signature>,
     pub faults: BTreeSet<Fault<T>>,
-    pub proposals_sig: Signature,
 }
 
 impl<T: Proposition> Decision<T> {
@@ -42,12 +42,16 @@ impl<T: Proposition> Decision<T> {
             fault.validate(voters).map_err(Error::FaultIsFaulty)?;
         }
 
-        if self.vote_count().signed_decision(voters)?.is_none() {
+        let vote_count = VoteCount::count(self.votes.iter().cloned(), &self.faulty_ids());
+        if let Some(proposals) = vote_count.get_decision(voters)? {
+            if proposals != self.proposals {
+                warn!("Proposals from votes does not match decision proposals");
+                return Err(Error::InvalidDecision);
+            }
+        } else {
             warn!("Votes in decision don't form a decision");
             return Err(Error::InvalidDecision);
         }
-
-        crate::verify_sig(&self.proposals(), &self.proposals_sig, &voters.public_key())?;
 
         Ok(())
     }
@@ -64,17 +68,6 @@ impl<T: Proposition> Decision<T> {
         }
 
         all_votes
-    }
-
-    pub fn vote_count(&self) -> VoteCount<T> {
-        VoteCount::count(self.votes.iter().cloned(), &self.faulty_ids())
-    }
-
-    pub fn proposals(&self) -> BTreeSet<T> {
-        self.vote_count()
-            .super_majority_with_most_votes()
-            .map(|(candidate, _)| candidate.proposals.clone())
-            .unwrap_or_default()
     }
 
     pub fn faulty_ids(&self) -> BTreeSet<NodeId> {

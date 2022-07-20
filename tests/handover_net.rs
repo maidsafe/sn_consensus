@@ -53,11 +53,7 @@ impl Net {
             .consensus
             .decision
             .as_ref()
-            .and_then(|decision| {
-                self.procs[proc]
-                    .resolve_votes(&decision.proposals())
-                    .cloned()
-            })
+            .and_then(|decision| self.procs[proc].resolve_votes(&decision.proposals).cloned())
     }
 
     /// Pick a random public key from the set of procs
@@ -86,23 +82,22 @@ impl Net {
                     true => Ballot::Merge(votes),
                     false => {
                         let n_proposals = rng.gen::<usize>() % (self.procs.len() + 1);
-                        let proposals: BTreeSet<u8> = std::iter::repeat_with(|| rng.gen::<u8>())
+                        let proposals: BTreeMap<u8, (NodeId, SignatureShare)> =
+                            std::iter::repeat_with(|| {
+                                let prop = rng.gen();
+                                let sig = self
+                                    .procs
+                                    .iter()
+                                    .choose(rng)
+                                    .unwrap()
+                                    .consensus
+                                    .sign(&prop)?;
+                                Ok((prop, (self.pick_id(rng), sig)))
+                            })
                             .take(n_proposals)
-                            .collect();
-
-                        let proposals_sig_share: SignatureShare = self
-                            .procs
-                            .iter()
-                            .choose(rng)
-                            .unwrap()
-                            .consensus
-                            .sign(&proposals)
+                            .collect::<Result<_>>()
                             .unwrap();
-
-                        Ballot::SuperMajority {
-                            votes,
-                            proposals_sig_share,
-                        }
+                        Ballot::SuperMajority { votes, proposals }
                     }
                 }
             }
