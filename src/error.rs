@@ -45,6 +45,8 @@ pub enum Error {
     Encoding(#[from] bincode::Error),
     #[error("Elder signature is not valid")]
     InvalidElderSignature,
+    #[error("SuperMajority signed a different set of proposals than the proposals in the vote")]
+    SuperMajorityProposalsDoesNotMatchVoteProposals,
     #[error("Blsttc Error {0}")]
     Blsttc(#[from] blsttc::error::Error),
     #[error("Client attempted a faulty proposal")]
