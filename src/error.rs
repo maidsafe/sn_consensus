@@ -7,6 +7,8 @@ use crate::Generation;
 pub enum Error {
     #[error("We experienced an IO error")]
     IO(#[from] std::io::Error),
+    #[error("We experienced an formatting error")]
+    Fmt(#[from] std::fmt::Error),
     #[error("The operation requested assumes we have at least one member")]
     NoMembers,
     #[error("We can not accept any new join requests, network member size is at capacity")]

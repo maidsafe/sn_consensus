@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt::Write as FmtWrite;
 use std::fs::File;
-use std::io::Write;
+use std::io::Write as IoWrite;
 use std::iter;
 
 use blsttc::{SecretKeySet, SignatureShare};
@@ -283,10 +284,11 @@ msc {\n
         msc.push_str(&procs);
         msc.push_str(";\n");
         for packet in self.delivered_packets.iter() {
-            msc.push_str(&format!(
-                "{:?} -> {:?} [ label=\"{:?}\"];\n",
+            write!(
+                &mut msc,
+                "{:?} -> {:?} [ label=\"{:?}\"];",
                 packet.source, packet.dest, packet.vote
-            ));
+            )?;
         }
         msc.push_str("}\n");
 
