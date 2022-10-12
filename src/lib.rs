@@ -1,20 +1,56 @@
-mod consensus;
+pub mod consensus;
+
 mod abba;
-mod rbc;
+mod bundle;
+mod crypto;
+mod doc;
+mod vcbc;
 
+use crypto::{hash::Hash, public::PubKey};
 
-type Hash = [u8;32];
+// trait GossipService {
+//     fn broadcast_msg(msg: Serializable) -> Result<()>;
+// }
+//
+// pub trait ProposalService<P: Proposal> {
+//     fn get_proposal(&self) -> P;
+//     fn check_proposal(&self, p: P) -> bool;
+//     fn decided_proposal(&self, p: P);
+// }
 
-trait Proposal {
-    fn hash() -> Hash;
+#[derive(Clone)]
+pub struct Proposal {
+    proposer: PubKey,
+    value: Vec<u8>,
 }
 
-trait ProposalService<P:Proposal> {
-    fn get_proposal() -> Result<P>;
-    fn check_proposal(p: P) -> bool;
-    fn decided_proposal(p: P);
+pub type ProposalChecker = fn(Proposal) -> bool;
+
+pub struct ProposalService {
+    proposal: Proposal,
+    checker: ProposalChecker,
 }
 
-trait GossipService {
-    fn broadcast_msg(msg: Serializable) -> Result<()>;
+impl ProposalService {
+    pub fn new(proposal: Proposal, checker: ProposalChecker) -> Self {
+        Self { proposal, checker }
+    }
+    pub fn get_proposal(&self) -> &Proposal {
+        &self.proposal
+    }
+
+    pub fn check_proposal(&self, p: &Proposal) -> bool {
+        self.check_proposal(&p)
+    }
+}
+
+
+
+impl Clone for ProposalService {
+    fn clone(&self) -> Self {
+        ProposalService {
+            proposal: self.proposal.clone(),
+            checker: self.checker,
+        }
+    }
 }

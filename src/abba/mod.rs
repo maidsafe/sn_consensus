@@ -1,14 +1,13 @@
-use crate::{GossipService, Proposal, ProposalService};
+use crate::Proposal;
 
 mod log;
+mod message;
 
-pub struct ABBA<P: Proposal> {
+pub struct ABBA {
     log: log::Log,
-    gossip_service: Box<dyn GossipService>,
-    proposal_service: Box<dyn ProposalService<P>>,
 }
 
-impl<P: Proposal> ABBA<P> {
+impl ABBA {
     pub fn new() -> Self {
         todo!()
     }

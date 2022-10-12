@@ -1,23 +1,38 @@
-use crate::{abba::ABBA, rbc::RBC, GossipService, Proposal, ProposalService};
+use crate::{
+    abba::ABBA, crypto::public::PubKey, vcbc::VCBC, Proposal, ProposalChecker, ProposalService,
+};
+use std::collections::HashMap;
 
-struct Consensus<P: Proposal> {
-    abba: ABBA<P>,
-    rbc: RBC,
+pub struct Consensus {
+    id: u32,
+    abba: ABBA,
+    vcbc_map: HashMap<PubKey, VCBC>,
 }
 
-impl<P: Proposal> Consensus<P> {
+impl Consensus {
     pub fn init(
         id: u32,
-        gs: Box<dyn GossipService>,
-        ps: Box<dyn ProposalService<P>>,
-        parties: [u8],
+        self_key: PubKey,
+        parties: Vec<PubKey>,
         threshold: u32,
-    ) -> Consensus<P> {
-        let abba = ABBA::new();
-        let rbc = RBC::new();
-        Consensus {
-            abba: abba,
-            rbc: rbc,
+        proposal_checker: ProposalChecker,
+        proposal: Proposal,
+    ) -> Consensus {
+        let abba = ABBA::new(); // TODO: Vec<> ???
+        let mut vcbc_map = HashMap::new();
+
+        let proposal_service = ProposalService::new(proposal, proposal_checker);
+
+        for p in &parties {
+            let mut vcbc = VCBC::new(&self_key, &p, &parties, threshold, &proposal_service);
+            vcbc.propose();
+            vcbc_map.insert(p.clone(), vcbc).unwrap();
         }
+
+        Consensus { id, abba, vcbc_map }
+    }
+
+    pub fn process_bundle(&mut self, data: &[u8]) -> Vec<Vec<u8>> {
+        todo!()
     }
 }
