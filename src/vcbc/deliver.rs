@@ -3,14 +3,17 @@ use super::State;
 
 pub(super) struct DeliverState {}
 
-impl DeliverState {
-    pub fn new() -> Self {
-        DeliverState {}
-    }
-}
 
 impl State for DeliverState {
-    fn process_message(self:Box<Self>, log: &log::Log) -> Box<dyn State> {
+    fn enter(self:Box<Self>, log: &mut log::Log) -> Box<dyn State> {
         todo!()
+    }
+
+    fn decide(self:Box<Self>, log: &mut log::Log) -> Box<dyn State> {
+        todo!()
+    }
+
+    fn name(&self) -> String {
+        "deliver state".to_string()
     }
 }

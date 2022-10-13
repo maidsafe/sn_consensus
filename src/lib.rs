@@ -6,22 +6,18 @@ mod crypto;
 mod doc;
 mod vcbc;
 
-use crypto::{hash::Hash, public::PubKey};
+use crypto::{hash::Hash, public::PubKey, signature::Signature};
+use minicbor::{Decode, Encode, to_vec};
 
-// trait GossipService {
-//     fn broadcast_msg(msg: Serializable) -> Result<()>;
-// }
-//
-// pub trait ProposalService<P: Proposal> {
-//     fn get_proposal(&self) -> P;
-//     fn check_proposal(&self, p: P) -> bool;
-//     fn decided_proposal(&self, p: P);
-// }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct Proposal {
+    #[n(1)]
     proposer: PubKey,
+    #[n(2)]
     value: Vec<u8>,
+    #[n(3)]
+    proof: Signature,
 }
 
 pub type ProposalChecker = fn(Proposal) -> bool;
@@ -53,4 +49,19 @@ impl Clone for ProposalService {
             checker: self.checker,
         }
     }
+}
+
+pub struct Broadcaster {
+    messages: Vec<Vec<u8>>,
+}
+
+impl Broadcaster {
+    pub fn new() -> Self {
+        Self { messages: Vec::new() }
+    }
+    pub fn broadcast<'a, E:Encode>(&mut self, msg: E)  {
+        let d = to_vec(msg).unwrap(); // todo: no unwrap
+        self.messages.push(d)
+    }
+
 }
