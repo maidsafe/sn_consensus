@@ -2,7 +2,7 @@ use super::{
     error::{Error, Result},
     message::Message,
 };
-use crate::{crypto::public::PubKey, Broadcaster, Proposal};
+use crate::mvba::{crypto::public::PubKey, Broadcaster, Proposal};
 use std::{collections::{HashMap, HashSet}, rc::Rc, cell::RefCell};
 
 //TODO: better name, like context

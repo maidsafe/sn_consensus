@@ -1,4 +1,4 @@
-use crate::crypto::signature::Signature;
+use crate::mvba::crypto::signature::Signature;
 
 use super::echo;
 use super::echo::EchoState;

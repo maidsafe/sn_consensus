@@ -1,67 +1,53 @@
 pub mod consensus;
+pub mod decision;
+pub mod fault;
+pub mod mvba;
+pub mod sn_handover;
+pub mod sn_membership;
+pub mod vote;
+pub mod vote_count;
 
-mod abba;
-mod bundle;
-mod crypto;
-mod doc;
-mod vcbc;
+#[cfg(feature = "bad_crypto")]
+pub mod bad_crypto;
+// #[cfg(feature = "blsttc")]
+// pub mod blsttc;
+#[cfg(feature = "ed25519")]
+pub mod ed25519;
 
-use crypto::{hash::Hash, public::PubKey, signature::Signature};
-use minicbor::{Decode, Encode, to_vec};
+use blsttc::{PublicKeySet, SignatureShare};
+use serde::Serialize;
 
+pub use crate::consensus::{Consensus, VoteResponse};
+pub use crate::decision::Decision;
+pub use crate::fault::{Fault, FaultError};
+pub use crate::sn_handover::{Handover, UniqueSectionId};
+pub use crate::sn_membership::{Generation, Membership, Reconfig};
+pub use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+pub use crate::vote_count::{Candidate, VoteCount};
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Proposal {
-    #[n(1)]
-    proposer: PubKey,
-    #[n(2)]
-    value: Vec<u8>,
-    #[n(3)]
-    proof: Signature,
-}
+// #[cfg(feature = "bad_crypto")]
+// pub use crate::bad_crypto::{PublicKey, SecretKey, Signature};
+// #[cfg(feature = "blsttc")]
+// pub use crate::blsttc::{PublicKey, SecretKey, Signature};
+// #[cfg(feature = "ed25519")]
+// pub use crate::ed25519::{PublicKey, SecretKey, Signature};
 
-pub type ProposalChecker = fn(Proposal) -> bool;
+pub mod error;
+pub use crate::error::Error;
+pub type Result<T> = std::result::Result<T, Error>;
+pub type NodeId = u8;
 
-pub struct ProposalService {
-    proposal: Proposal,
-    checker: ProposalChecker,
-}
-
-impl ProposalService {
-    pub fn new(proposal: Proposal, checker: ProposalChecker) -> Self {
-        Self { proposal, checker }
+pub fn verify_sig_share<M: Serialize>(
+    msg: &M,
+    sig: &SignatureShare,
+    voter: NodeId,
+    voters: &PublicKeySet,
+) -> Result<()> {
+    let public_key = voters.public_key_share(voter as u64);
+    let msg_bytes = bincode::serialize(msg)?;
+    if public_key.verify(sig, msg_bytes) {
+        Ok(())
+    } else {
+        Err(Error::InvalidElderSignature)
     }
-    pub fn get_proposal(&self) -> &Proposal {
-        &self.proposal
-    }
-
-    pub fn check_proposal(&self, p: &Proposal) -> bool {
-        self.check_proposal(&p)
-    }
-}
-
-
-
-impl Clone for ProposalService {
-    fn clone(&self) -> Self {
-        ProposalService {
-            proposal: self.proposal.clone(),
-            checker: self.checker,
-        }
-    }
-}
-
-pub struct Broadcaster {
-    messages: Vec<Vec<u8>>,
-}
-
-impl Broadcaster {
-    pub fn new() -> Self {
-        Self { messages: Vec::new() }
-    }
-    pub fn broadcast<'a, E:Encode>(&mut self, msg: E)  {
-        let d = to_vec(msg).unwrap(); // todo: no unwrap
-        self.messages.push(d)
-    }
-
 }

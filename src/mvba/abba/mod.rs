@@ -1,4 +1,4 @@
-use crate::Proposal;
+use crate::mvba::Proposal;
 
 mod log;
 mod message;

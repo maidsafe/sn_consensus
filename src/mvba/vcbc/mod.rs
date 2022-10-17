@@ -10,11 +10,11 @@ use std::rc::Rc;
 
 use self::error::{Error, Result};
 use self::message::Message;
-use crate::{crypto::public::PubKey, ProposalService};
-use crate::{Broadcaster, Proposal};
+use crate::mvba::{crypto::public::PubKey, ProposalService};
+use crate::mvba::{Broadcaster, Proposal};
 
 pub trait State {
-    
+
     fn enter(self: Box<Self>, log: &mut log::Log) -> Box<dyn State>;
     // check the log and decide to move to new state.
     fn decide(self: Box<Self>, log: &mut log::Log) -> Box<dyn State>;

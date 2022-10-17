@@ -1,6 +1,6 @@
-use crate::crypto::signature::Signature;
+use crate::mvba::crypto::signature::Signature;
 use minicbor::{Decode, Encode};
-use crate::Proposal;
+use crate::mvba::Proposal;
 
 
 #[derive(Debug, Encode, Decode)]

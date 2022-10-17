@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{crypto::public::PubKey, Proposal};
+use crate::mvba::{crypto::public::PubKey, Proposal};
 
 #[derive(Error, Debug)]
 pub enum Error {

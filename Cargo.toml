@@ -8,9 +8,15 @@ repository = "https://github.com/maidsafe/sn_consensus"
 edition = "2021"
 
 [dependencies]
+rand = "0.8"
+bincode = "1.2.1"
 thiserror = "1.0"
 log = "0.4.13"
 minicbor = { version = "0.12", features = ["std", "half", "derive"] }
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
 
 [dependencies.blsttc]
 version = "7.0.0"
