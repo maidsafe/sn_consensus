@@ -8,19 +8,19 @@ use std::{collections::{HashMap, HashSet}, rc::Rc, cell::RefCell};
 //TODO: better name, like context
 pub struct Log {
     pub parties: Vec<PubKey>,
-    pub threshold: u32,
+    pub threshold: usize,
     pub proposer: PubKey,
     pub proposal: Option<Proposal>,
     pub echos: HashSet<PubKey>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
+    pub delivered: bool,
 }
 
-struct MessageLog {}
 
 impl Log {
     pub fn new(
         parties: &Vec<PubKey>,
-        threshold: u32,
+        threshold: usize,
         proposer: &PubKey,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
@@ -31,7 +31,15 @@ impl Log {
             proposal: None,
             echos: HashSet::new(),
             broadcaster,
+            delivered: false,
         }
+    }
+
+    // super_majority_num simply return $n - t$.
+    // There are $n$ parties, $t$ of which may be corrupted.
+    // Protocol is reliable for $n > 3t$.
+    pub fn super_majority_num(&self) -> usize {
+        self.parties.len() - self.threshold
     }
 
     pub fn set_proposal(&mut self, proposal: Proposal) -> Result<()> {
@@ -46,5 +54,9 @@ impl Log {
         }
         self.proposal = Some(proposal);
         Ok(())
+    }
+
+    pub fn broadcast(&mut self, msg: self::Message) {
+        self.broadcaster.borrow_mut().broadcast(msg);
     }
 }

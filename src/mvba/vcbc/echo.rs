@@ -1,3 +1,4 @@
+use super::deliver::DeliverState;
 use super::log;
 use super::State;
 use super::message::Message;
@@ -13,8 +14,14 @@ impl State for EchoState {
         log.broadcaster.borrow_mut().broadcast(msg);
         self.decide(log)
     }
+
     fn decide(self: Box<Self>, log: &mut log::Log) -> Box<dyn State> {
-        todo!()
+        if log.echos.len() >= log.super_majority_num() {
+            let state = Box::new(DeliverState {});
+            state.enter(log)
+        } else {
+            self
+        }
     }
 
     fn name(&self) -> String {

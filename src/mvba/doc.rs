@@ -11,3 +11,6 @@
 // all other parties using verifiable authenticated consistent broadcast. This ensures that all
 // honest parties obtain the same proposal value for any particular party, even if the sender
 // is corrupted.
+//
+// ## Eco state
+//  wait for n − t messages (v-echo, w_j , π_j )  to be c-delivered.

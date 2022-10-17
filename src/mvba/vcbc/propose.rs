@@ -1,5 +1,4 @@
 use crate::mvba::crypto::signature::Signature;
-
 use super::echo;
 use super::echo::EchoState;
 use super::log;
@@ -21,8 +20,8 @@ impl State for ProposeState {
                     proposal: proposal.clone(),
                 };
                 log.broadcaster.borrow_mut().broadcast(msg);
-                let echo_state = Box::new(EchoState {});
-                echo_state.enter(log)
+                let state = Box::new(EchoState {});
+                state.enter(log)
 
             }
             None => self,
@@ -32,4 +31,5 @@ impl State for ProposeState {
     fn name(&self) -> String {
         "propose state".to_string()
     }
+
 }

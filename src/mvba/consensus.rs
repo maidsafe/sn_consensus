@@ -15,7 +15,7 @@ impl Consensus {
         id: u32,
         self_key: PubKey,
         parties: Vec<PubKey>,
-        threshold: u32,
+        threshold: usize,
         proposal_checker: ProposalChecker,
         proposal: Proposal,
     ) -> Consensus {

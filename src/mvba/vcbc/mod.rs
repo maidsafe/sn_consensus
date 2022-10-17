@@ -14,7 +14,6 @@ use crate::mvba::{crypto::public::PubKey, ProposalService};
 use crate::mvba::{Broadcaster, Proposal};
 
 pub trait State {
-
     fn enter(self: Box<Self>, log: &mut log::Log) -> Box<dyn State>;
     // check the log and decide to move to new state.
     fn decide(self: Box<Self>, log: &mut log::Log) -> Box<dyn State>;
@@ -35,13 +34,13 @@ impl VCBC {
     pub fn new(
         proposer: &PubKey,
         parties: &Vec<PubKey>,
-        threshold: u32,
+        threshold: usize,
         proposal_service: &ProposalService,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
             log: log::Log::new(parties, threshold, proposer, broadcaster),
-            state: Some(Box::new(propose::ProposeState{})),
+            state: Some(Box::new(propose::ProposeState {})),
             proposal_service: proposal_service.clone(),
         }
     }
@@ -62,7 +61,7 @@ impl VCBC {
         if self.log.proposal.is_some() {
             return Err(Error::DuplicatedProposal(proposal));
         }
-
+        // TODO: validate proposal
         self.log.proposal = Some(proposal);
         self.decide();
 
