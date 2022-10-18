@@ -1,7 +1,8 @@
 use crate::mvba::{
-    abba::ABBA, crypto::public::PubKey, vcbc::VCBC, Proposal, ProposalChecker, ProposalService, Broadcaster,
+    abba::ABBA, broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, vcbc::VCBC,
+    ProposalChecker,
 };
-use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
     id: u32,
@@ -17,27 +18,35 @@ impl Consensus {
         parties: Vec<PubKey>,
         threshold: usize,
         proposal_checker: ProposalChecker,
-        proposal: Proposal,
     ) -> Consensus {
         let abba = ABBA::new(); // TODO: Vec<> ???
         let mut vcbc_map = HashMap::new();
-
-        let proposal_service = ProposalService::new(proposal, proposal_checker);
-        let broadcaster = Rc::new(RefCell::new(Broadcaster::new()));
+        let broadcaster = Broadcaster::new(&self_key);
+        let broadcaster = Rc::new(RefCell::new(broadcaster));
 
         for p in &parties {
-            let  vcbc = VCBC::new( &p, &parties, threshold, &proposal_service, broadcaster.clone());
+            let vcbc = VCBC::new(
+                &p,
+                &parties,
+                threshold,
+                &proposal_checker,
+                broadcaster.clone(),
+            );
             vcbc_map.insert(p.clone(), vcbc).unwrap();
         }
 
-        Consensus { id, self_key,abba, vcbc_map }
+        Consensus {
+            id,
+            self_key,
+            abba,
+            vcbc_map,
+        }
     }
 
     // start the consensus by proposing a proposal and broadcasting it.
     pub fn start(&mut self, proposal: Proposal) -> Vec<Vec<u8>> {
-
         let vcbc = self.vcbc_map.get_mut(&self.self_key).unwrap(); // TODO: no unwrap
-        vcbc.set_proposal(proposal).unwrap();// TODO: no unwrap
+        vcbc.propose(&proposal).unwrap(); // TODO: no unwrap
 
         todo!()
     }

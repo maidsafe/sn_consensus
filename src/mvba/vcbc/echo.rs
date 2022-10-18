@@ -1,24 +1,30 @@
-use super::deliver::DeliverState;
-use super::log;
-use super::State;
-use super::message::Message;
+use crate::mvba::crypto::public::PubKey;
 
-pub(super) struct EchoState {}
+use super::context;
+use super::deliver::DeliverState;
+use super::message;
+use super::message::Message;
+use super::State;
+
+pub(super) struct EchoState {
+    pub ctx: context::Context,
+}
 
 impl State for EchoState {
-    fn enter(self:Box<Self>, log: &mut log::Log) -> Box<dyn State> {
+    fn enter(mut self: Box<Self>) -> Box<dyn State> {
         let msg = Message {
-            tag: "v-echo,".to_string(),
-            proposal: log.proposal.as_ref().unwrap().clone(),
+            tag: message::MSG_TAG_ECHO.to_string(),
+            proposal: self.context().proposal.as_ref().unwrap().clone(),
         };
-        log.broadcaster.borrow_mut().broadcast(msg);
-        self.decide(log)
+        self.context_mut().broadcast(&msg);
+        self.process_message(&self.context().cloned_self_key(), &msg);
+        self.decide()
     }
 
-    fn decide(self: Box<Self>, log: &mut log::Log) -> Box<dyn State> {
-        if log.echos.len() >= log.super_majority_num() {
-            let state = Box::new(DeliverState {});
-            state.enter(log)
+    fn decide(self: Box<Self>) -> Box<dyn State> {
+        if self.context().echos.len() >= self.context().super_majority_num() {
+            let state = Box::new(DeliverState { ctx: self.ctx });
+            state.enter()
         } else {
             self
         }
@@ -26,5 +32,12 @@ impl State for EchoState {
 
     fn name(&self) -> String {
         "echo state".to_string()
+    }
+
+    fn context_mut(&mut self) -> &mut context::Context {
+        &mut self.ctx
+    }
+    fn context(&self) -> &context::Context {
+        &self.ctx
     }
 }

@@ -1,33 +1,27 @@
+pub(super) mod context;
 mod deliver;
 mod echo;
 mod error;
-pub mod log;
-mod message;
+pub(super) mod message;
 mod propose;
-
-use std::cell::RefCell;
-use std::rc::Rc;
+pub(super) mod state;
 
 use self::error::{Error, Result};
 use self::message::Message;
-use crate::mvba::{crypto::public::PubKey, ProposalService};
-use crate::mvba::{Broadcaster, Proposal};
+use self::state::State;
+use crate::mvba::crypto::public::PubKey;
+use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
+use std::cell::RefCell;
+use std::rc::Rc;
 
-pub trait State {
-    fn enter(self: Box<Self>, log: &mut log::Log) -> Box<dyn State>;
-    // check the log and decide to move to new state.
-    fn decide(self: Box<Self>, log: &mut log::Log) -> Box<dyn State>;
-    // the name of current state.
-    fn name(&self) -> String;
-}
+use super::ProposalChecker;
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
 // using verifiable authenticated consistent broadcast.
-pub struct VCBC {
-    log: log::Log,
+pub(crate) struct VCBC {
     state: Option<Box<dyn State>>,
-    proposal_service: ProposalService,
+    proposal_checker: ProposalChecker,
 }
 
 impl VCBC {
@@ -35,40 +29,72 @@ impl VCBC {
         proposer: &PubKey,
         parties: &Vec<PubKey>,
         threshold: usize,
-        proposal_service: &ProposalService,
+        proposal_checker: &ProposalChecker,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
+        let ctx = context::Context::new(parties, threshold, proposer, broadcaster);
+
         Self {
-            log: log::Log::new(parties, threshold, proposer, broadcaster),
-            state: Some(Box::new(propose::ProposeState {})),
-            proposal_service: proposal_service.clone(),
+            state: Some(Box::new(propose::ProposeState { ctx })),
+            proposal_checker: proposal_checker.clone(),
         }
     }
 
     fn decide(&mut self) {
         if let Some(s) = self.state.take() {
-            self.state = Some(s.decide(&mut self.log));
+            self.state = Some(s.decide());
         }
     }
 
-    pub fn set_proposal(&mut self, proposal: Proposal) -> Result<()> {
-        if proposal.proposer != self.log.proposer {
-            return Err(Error::InvalidProposer(
-                proposal.proposer,
-                self.log.proposer.clone(),
-            ));
-        }
-        if self.log.proposal.is_some() {
-            return Err(Error::DuplicatedProposal(proposal));
-        }
-        // TODO: validate proposal
-        self.log.proposal = Some(proposal);
-        self.decide();
+    // fn set_proposal(&mut self, proposal: &Proposal) -> Result<()> {
+    //     if proposal.proposer != self.context.proposer {
+    //         return Err(Error::InvalidProposer(
+    //             proposal.proposer.clone(),
+    //             self.context.proposer.clone(),
+    //         ));
+    //     }
+    //     if let Some(context_proposal) = self.context.proposal.as_ref() {
+    //         if context_proposal != proposal {
+    //             return Err(Error::DuplicatedProposal(proposal.clone()));
+    //         }
+    //     }
+    //     if !(self.proposal_checker)(&proposal) {
+    //         return Err(Error::InvalidProposal(proposal.clone()));
+    //     }
+    //     self.context.proposal = Some(proposal.clone());
 
+    //     Ok(())
+    // }
+
+    // propose sets the proposal and sent broadcast propose message.
+    pub fn propose(&mut self, proposal: &Proposal) -> Result<()> {
+        debug_assert_eq!(
+            proposal.proposer,
+            self.state.as_ref().unwrap().context().cloned_self_key()
+        );
+
+        if let Some(mut s) = self.state.take() {
+            s.set_proposal(proposal)?;
+            self.state = Some(s.decide());
+        }
         Ok(())
     }
 
-    pub fn process_message(&mut self, msg: &Message) -> Box<dyn State> {
-        todo!()
+    pub fn is_delivered(&self) -> bool {
+        self.state.as_ref().unwrap().context().delivered
+    }
+
+    pub fn process_message(&mut self, sender: &PubKey, payload: &[u8]) -> Result<()> {
+        let msg: Message = minicbor::decode(payload)?;
+
+        if let Some(mut s) = self.state.take() {
+            s.process_message(sender, &msg)?;
+            self.state = Some(s.decide());
+        }
+        Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "./tests.rs"]
+mod tests;

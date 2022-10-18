@@ -1,28 +1,28 @@
-use crate::mvba::crypto::signature::Signature;
-use super::echo;
+use super::context;
 use super::echo::EchoState;
-use super::log;
 use super::message::Message;
 use super::State;
+use super::{echo, message};
 
-pub(super) struct ProposeState {}
+pub(super) struct ProposeState {
+    pub ctx: context::Context,
+}
 
 impl State for ProposeState {
-    fn enter(self:Box<Self>, log: &mut log::Log) -> Box<dyn State> {
-        todo!()
+    fn enter(self: Box<Self>) -> Box<dyn State> {
+        self
     }
 
-    fn decide(self: Box<Self>, log: &mut log::Log) -> Box<dyn State> {
-        match &log.proposal {
+    fn decide(mut self: Box<Self>) -> Box<dyn State> {
+        match &self.context().proposal {
             Some(proposal) => {
                 let msg = Message {
-                    tag: "v-propose".to_string(),
+                    tag: message::MSG_TAG_PROPOSE.to_string(),
                     proposal: proposal.clone(),
                 };
-                log.broadcaster.borrow_mut().broadcast(msg);
-                let state = Box::new(EchoState {});
-                state.enter(log)
-
+                self.context_mut().broadcast(&msg);
+                let state = Box::new(EchoState { ctx: self.ctx });
+                state.enter()
             }
             None => self,
         }
@@ -32,4 +32,10 @@ impl State for ProposeState {
         "propose state".to_string()
     }
 
+    fn context_mut(&mut self) -> &mut context::Context {
+        &mut self.ctx
+    }
+    fn context(&self) -> &context::Context {
+        &self.ctx
+    }
 }

@@ -13,6 +13,7 @@ bincode = "1.2.1"
 thiserror = "1.0"
 log = "0.4.13"
 minicbor = { version = "0.12", features = ["std", "half", "derive"] }
+tiny-keccak = "2.0.2"
 
 [dependencies.serde]
 version = "1"
