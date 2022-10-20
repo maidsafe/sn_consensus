@@ -1,20 +1,8 @@
+use super::message::Message;
+use crate::mvba::{broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, ProposalChecker};
 use minicbor::to_vec;
-use super::{
-    error::{Error, Result},
-    message::Message,
-};
-use crate::mvba::{
-    broadcaster::Broadcaster,
-    crypto::{hash::Hash32, public::PubKey},
-    proposal::Proposal,
-};
-use std::{
-    cell::RefCell,
-    collections::{hash_map::Entry, HashMap, HashSet},
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-//TODO: better name, like context
 pub(super) struct Context {
     pub parties: Vec<PubKey>,
     pub threshold: usize,
@@ -22,6 +10,7 @@ pub(super) struct Context {
     pub proposal: Option<Proposal>,
     pub echos: HashSet<PubKey>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
+    pub proposal_checker: Rc<RefCell<ProposalChecker>>,
     pub delivered: bool,
 }
 
@@ -31,6 +20,7 @@ impl Context {
         threshold: usize,
         proposer: &PubKey,
         broadcaster: Rc<RefCell<Broadcaster>>,
+        proposal_checker: Rc<RefCell<ProposalChecker>>
     ) -> Self {
         Self {
             parties: parties.clone(),
@@ -39,6 +29,7 @@ impl Context {
             proposal: None,
             echos: HashSet::new(),
             broadcaster,
+            proposal_checker: proposal_checker.clone(),
             delivered: false,
         }
     }
@@ -50,27 +41,12 @@ impl Context {
         self.parties.len() - self.threshold
     }
 
-    // pub fn set_proposal(&mut self, proposal: Proposal) -> Result<()> {
-    //     if proposal.proposer != self.proposer {
-    //         return Err(Error::InvalidProposer(
-    //             proposal.proposer,
-    //             self.proposer.clone(),
-    //         ));
-    //     }
-    //     if self.proposal.is_some() {
-    //         return Err(Error::DuplicatedProposal(proposal));
-    //     }
-    //     self.proposal = Some(proposal);
-    //     Ok(())
-    // }
-
-    pub fn broadcast(&mut self, msg: &self::Message) {
+    pub fn broadcast(&self, msg: &self::Message) {
         let data = to_vec(msg).unwrap();
-        self.broadcaster.borrow_mut().broadcast(data);
+        self.broadcaster.borrow_mut().push_message(data);
     }
 
     pub fn cloned_self_key(&self) -> PubKey {
         self.broadcaster.borrow().self_key().clone()
     }
 }
-

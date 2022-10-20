@@ -22,15 +22,17 @@ impl Consensus {
         let abba = ABBA::new(); // TODO: Vec<> ???
         let mut vcbc_map = HashMap::new();
         let broadcaster = Broadcaster::new(&self_key);
-        let broadcaster = Rc::new(RefCell::new(broadcaster));
+        let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
+        let proposal_checker_rc = Rc::new(RefCell::new(proposal_checker));
 
         for p in &parties {
             let vcbc = VCBC::new(
                 &p,
                 &parties,
                 threshold,
-                &proposal_checker,
-                broadcaster.clone(),
+                broadcaster_rc.clone(),
+                proposal_checker_rc.clone(),
+
             );
             vcbc_map.insert(p.clone(), vcbc).unwrap();
         }

@@ -6,7 +6,7 @@ pub struct PubKey {
     pub key: u32
 }
 
-
-pub fn RandomPubKey() -> PubKey {
+#[cfg(test)]
+pub fn random_pub_key() -> PubKey {
     PubKey { key: rand::random() }
 }

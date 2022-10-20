@@ -8,6 +8,7 @@ pub(super) mod state;
 
 use self::error::{Error, Result};
 use self::message::Message;
+use self::propose::ProposeState;
 use self::state::State;
 use crate::mvba::crypto::public::PubKey;
 use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
@@ -21,7 +22,6 @@ use super::ProposalChecker;
 // using verifiable authenticated consistent broadcast.
 pub(crate) struct VCBC {
     state: Option<Box<dyn State>>,
-    proposal_checker: ProposalChecker,
 }
 
 impl VCBC {
@@ -29,44 +29,18 @@ impl VCBC {
         proposer: &PubKey,
         parties: &Vec<PubKey>,
         threshold: usize,
-        proposal_checker: &ProposalChecker,
         broadcaster: Rc<RefCell<Broadcaster>>,
+        proposal_checker: Rc<RefCell<ProposalChecker>>,
     ) -> Self {
-        let ctx = context::Context::new(parties, threshold, proposer, broadcaster);
+        let ctx =
+            context::Context::new(parties, threshold, proposer, broadcaster, proposal_checker);
 
         Self {
-            state: Some(Box::new(propose::ProposeState { ctx })),
-            proposal_checker: proposal_checker.clone(),
+            state: Some(Box::new(ProposeState::new(ctx))),
         }
     }
 
-    fn decide(&mut self) {
-        if let Some(s) = self.state.take() {
-            self.state = Some(s.decide());
-        }
-    }
-
-    // fn set_proposal(&mut self, proposal: &Proposal) -> Result<()> {
-    //     if proposal.proposer != self.context.proposer {
-    //         return Err(Error::InvalidProposer(
-    //             proposal.proposer.clone(),
-    //             self.context.proposer.clone(),
-    //         ));
-    //     }
-    //     if let Some(context_proposal) = self.context.proposal.as_ref() {
-    //         if context_proposal != proposal {
-    //             return Err(Error::DuplicatedProposal(proposal.clone()));
-    //         }
-    //     }
-    //     if !(self.proposal_checker)(&proposal) {
-    //         return Err(Error::InvalidProposal(proposal.clone()));
-    //     }
-    //     self.context.proposal = Some(proposal.clone());
-
-    //     Ok(())
-    // }
-
-    // propose sets the proposal and sent broadcast propose message.
+    // propose sets the proposal and broadcast propose message.
     pub fn propose(&mut self, proposal: &Proposal) -> Result<()> {
         debug_assert_eq!(
             proposal.proposer,
@@ -75,7 +49,17 @@ impl VCBC {
 
         if let Some(mut s) = self.state.take() {
             s.set_proposal(proposal)?;
-            self.state = Some(s.decide());
+            self.state = Some(s.decide()?);
+        }
+        Ok(())
+    }
+
+    pub fn process_message(&mut self, sender: &PubKey, message: &[u8]) -> Result<()> {
+        let msg: Message = minicbor::decode(message)?;
+
+        if let Some(mut s) = self.state.take() {
+            s.process_message(sender, &msg)?;
+            self.state = Some(s.decide()?);
         }
         Ok(())
     }
@@ -84,14 +68,8 @@ impl VCBC {
         self.state.as_ref().unwrap().context().delivered
     }
 
-    pub fn process_message(&mut self, sender: &PubKey, payload: &[u8]) -> Result<()> {
-        let msg: Message = minicbor::decode(payload)?;
-
-        if let Some(mut s) = self.state.take() {
-            s.process_message(sender, &msg)?;
-            self.state = Some(s.decide());
-        }
-        Ok(())
+    pub fn proposal(&self) -> &Option<Proposal> {
+        &self.state.as_ref().unwrap().context().proposal
     }
 }
 

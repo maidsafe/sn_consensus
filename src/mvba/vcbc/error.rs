@@ -2,7 +2,7 @@ use minicbor::{decode, encode};
 use thiserror::Error;
 use crate::mvba::{crypto::public::PubKey, proposal::Proposal};
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum Error {
     #[error("invalid proposer. expected {0:?}, get {1:?}")]
     InvalidProposer(PubKey, PubKey),
