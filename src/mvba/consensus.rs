@@ -8,7 +8,9 @@ pub struct Consensus {
     id: u32,
     self_key: PubKey,
     abba: ABBA,
+    threshold: usize,
     vcbc_map: HashMap<PubKey, VCBC>,
+    broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
 impl Consensus {
@@ -21,7 +23,7 @@ impl Consensus {
     ) -> Consensus {
         let abba = ABBA::new(); // TODO: Vec<> ???
         let mut vcbc_map = HashMap::new();
-        let broadcaster = Broadcaster::new(&self_key);
+        let broadcaster = Broadcaster::new(id, &self_key);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
         let proposal_checker_rc = Rc::new(RefCell::new(proposal_checker));
 
@@ -41,7 +43,9 @@ impl Consensus {
             id,
             self_key,
             abba,
+            threshold,
             vcbc_map,
+            broadcaster: broadcaster_rc,
         }
     }
 
@@ -50,10 +54,27 @@ impl Consensus {
         let vcbc = self.vcbc_map.get_mut(&self.self_key).unwrap(); // TODO: no unwrap
         vcbc.propose(&proposal).unwrap(); // TODO: no unwrap
 
-        todo!()
+        self.broadcaster.borrow_mut().take_bundles()
     }
 
     pub fn process_bundle(&mut self, data: &[u8]) -> Vec<Vec<u8>> {
-        todo!()
+        
+        let mut delivered_count = 0;
+        for (_, vcbc) in &self.vcbc_map {
+            if vcbc.is_delivered() {
+                delivered_count+=1;
+            }
+        }
+
+        if delivered_count>=self.super_majority_num() {
+
+        }
+
+
+        self.broadcaster.borrow_mut().take_bundles()
+    }
+
+    fn super_majority_num(&self) -> usize {
+        self.vcbc_map.len() - self.threshold
     }
 }

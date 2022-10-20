@@ -1,15 +1,18 @@
-use super::crypto::public::{PubKey};
+use minicbor::{encode, to_vec};
+use super::{crypto::public::{PubKey}, bundle::Bundle};
 
 pub struct Broadcaster {
+    id: u32,
     self_key: PubKey,
-    messages: Vec<Vec<u8>>,
+    bundles: Vec<Bundle>,
 }
 
 impl Broadcaster {
-    pub fn new(self_key: &PubKey) -> Self {
+    pub fn new(id: u32, self_key: &PubKey) -> Self {
         Self {
+            id,
             self_key: self_key.clone(),
-            messages: Vec::new(),
+            bundles: Vec::new(),
         }
     }
 
@@ -17,12 +20,31 @@ impl Broadcaster {
         &self.self_key
     }
 
-    pub fn push_message(&mut self, data: Vec<u8>) {
-        self.messages.push(data)
+    pub fn push_message(&mut self, module: &str, message: Vec<u8>) {
+        let bdl = Bundle {
+            id:self.id,
+            module: module.to_string(),
+            message,
+        };
+        self.bundles.push(bdl);
+    }
+
+    pub fn take_bundles(&mut self) -> Vec<Vec<u8>> {
+        let mut data  = Vec::with_capacity(self.bundles.len());
+        for bdl in &self.bundles {
+            data.push(to_vec(bdl).unwrap())
+        }
+        self.bundles.clear();
+        data
     }
 
     #[cfg(test)]
     pub fn has_message(&self, data: &Vec<u8>) -> bool {
-        self.messages.contains(data)
+        for bdl in &self.bundles {
+            if bdl.message.eq(data) {
+                return true;
+            }
+        }
+        return false;
     }
 }

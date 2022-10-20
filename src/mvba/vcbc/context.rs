@@ -43,7 +43,7 @@ impl Context {
 
     pub fn broadcast(&self, msg: &self::Message) {
         let data = to_vec(msg).unwrap();
-        self.broadcaster.borrow_mut().push_message(data);
+        self.broadcaster.borrow_mut().push_message("vcbc", data);
     }
 
     pub fn cloned_self_key(&self) -> PubKey {
