@@ -1,10 +1,12 @@
 pub(super) mod context;
+pub(super) mod message;
+pub(super) mod state;
+
 mod deliver;
 mod echo;
 mod error;
-pub(super) mod message;
 mod propose;
-pub(super) mod state;
+
 
 use self::error::{Error, Result};
 use self::message::Message;

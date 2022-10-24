@@ -21,11 +21,12 @@ impl Consensus {
         threshold: usize,
         proposal_checker: ProposalChecker,
     ) -> Consensus {
-        let abba = ABBA::new(); // TODO: Vec<> ???
         let mut vcbc_map = HashMap::new();
         let broadcaster = Broadcaster::new(id, &self_key);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
         let proposal_checker_rc = Rc::new(RefCell::new(proposal_checker));
+
+        let abba = ABBA::new(&parties, threshold, broadcaster_rc.clone());
 
         for p in &parties {
             let vcbc = VCBC::new(
@@ -34,7 +35,6 @@ impl Consensus {
                 threshold,
                 broadcaster_rc.clone(),
                 proposal_checker_rc.clone(),
-
             );
             vcbc_map.insert(p.clone(), vcbc).unwrap();
         }
@@ -58,18 +58,14 @@ impl Consensus {
     }
 
     pub fn process_bundle(&mut self, data: &[u8]) -> Vec<Vec<u8>> {
-        
         let mut delivered_count = 0;
         for (_, vcbc) in &self.vcbc_map {
             if vcbc.is_delivered() {
-                delivered_count+=1;
+                delivered_count += 1;
             }
         }
 
-        if delivered_count>=self.super_majority_num() {
-
-        }
-
+        if delivered_count >= self.super_majority_num() {}
 
         self.broadcaster.borrow_mut().take_bundles()
     }
