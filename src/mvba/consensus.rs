@@ -24,7 +24,6 @@ impl Consensus {
         let mut vcbc_map = HashMap::new();
         let broadcaster = Broadcaster::new(id, &self_key);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
-        let proposal_checker_rc = Rc::new(RefCell::new(proposal_checker));
 
         let abba = ABBA::new(&parties, threshold, broadcaster_rc.clone());
 
@@ -34,7 +33,7 @@ impl Consensus {
                 &parties,
                 threshold,
                 broadcaster_rc.clone(),
-                proposal_checker_rc.clone(),
+                proposal_checker,
             );
             vcbc_map.insert(p.clone(), vcbc).unwrap();
         }

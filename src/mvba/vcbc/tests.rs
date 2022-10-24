@@ -43,19 +43,12 @@ impl TestData {
             _ => panic!("invalid proposer"),
         };
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(), &party_x)));
-        let proposal_checker: Rc<RefCell<ProposalChecker>> = Rc::new(RefCell::new(valid_proposal));
-        let vcbc = VCBC::new(
-            &proposer,
-            &parties,
-            1,
-            broadcaster.clone(),
-            proposal_checker.clone(),
-        );
+        let vcbc = VCBC::new(&proposer, &parties, 1, broadcaster.clone(), valid_proposal);
 
         // Creating a random proposal
         let mut rng = rand::thread_rng();
         let proposal = Proposal {
-            proposer: proposer.clone(),
+            proposer,
             value: (0..100).map(|_| rng.gen_range(0..64)).collect(),
             proof: (0..100).map(|_| rng.gen_range(0..64)).collect(),
         };
@@ -149,7 +142,7 @@ fn test_delayed_propose_message() {
 #[test]
 fn test_invalid_proposal() {
     let mut t = TestData::new("b");
-    t.vcbc.ctx.proposal_checker = Rc::new(RefCell::new(invalid_proposal));
+    t.vcbc.ctx.proposal_checker = invalid_proposal;
 
     assert_eq!(
         t.vcbc.process_message(&t.party_b, &t.propose_msg()).err(),

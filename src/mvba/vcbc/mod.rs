@@ -32,7 +32,7 @@ impl VCBC {
         parties: &Vec<PubKey>,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
-        proposal_checker: Rc<RefCell<ProposalChecker>>,
+        proposal_checker: ProposalChecker,
     ) -> Self {
         let ctx =
             context::Context::new(parties, threshold, proposer, broadcaster, proposal_checker);

@@ -30,7 +30,7 @@ pub(super) trait State {
                 return Err(Error::DuplicatedProposal(proposal.clone()));
             }
         }
-        if !(ctx.proposal_checker.borrow())(&proposal) {
+        if !(ctx.proposal_checker)(&proposal) {
             return Err(Error::InvalidProposal(proposal.clone()));
         }
         ctx.proposal = Some(proposal.clone());

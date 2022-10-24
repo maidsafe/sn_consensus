@@ -1,5 +1,7 @@
 use super::message::Message;
-use crate::mvba::{broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, ProposalChecker};
+use crate::mvba::{
+    broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, ProposalChecker,
+};
 use minicbor::to_vec;
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
@@ -10,7 +12,7 @@ pub(super) struct Context {
     pub proposal: Option<Proposal>,
     pub echos: HashSet<PubKey>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
-    pub proposal_checker: Rc<RefCell<ProposalChecker>>,
+    pub proposal_checker: ProposalChecker,
     pub delivered: bool,
 }
 
@@ -20,7 +22,7 @@ impl Context {
         threshold: usize,
         proposer: &PubKey,
         broadcaster: Rc<RefCell<Broadcaster>>,
-        proposal_checker: Rc<RefCell<ProposalChecker>>
+        proposal_checker: ProposalChecker,
     ) -> Self {
         Self {
             parties: parties.clone(),
@@ -29,7 +31,7 @@ impl Context {
             proposal: None,
             echos: HashSet::new(),
             broadcaster,
-            proposal_checker: proposal_checker.clone(),
+            proposal_checker,
             delivered: false,
         }
     }
