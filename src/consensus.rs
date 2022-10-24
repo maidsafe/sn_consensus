@@ -304,9 +304,7 @@ mod tests {
         let new_vote = states[0]
             .sign_vote(Vote {
                 gen: 0,
-                ballot: Ballot::Merge(BTreeSet::from_iter(
-                    states[0].votes.iter().map(|(_, v)| v.clone()),
-                )),
+                ballot: Ballot::Merge(BTreeSet::from_iter(states[0].votes.values().cloned())),
                 faults: Default::default(),
             })
             .unwrap();

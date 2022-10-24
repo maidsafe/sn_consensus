@@ -21,15 +21,15 @@ use super::ProposalChecker;
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
 // using verifiable authenticated consistent broadcast.
-pub(crate) struct VCBC {
+pub(crate) struct Vcbc {
     ctx: context::Context,
     state: Box<dyn State>,
 }
 
-impl VCBC {
+impl Vcbc {
     pub fn new(
-        proposer: &PubKey,
-        parties: &Vec<PubKey>,
+        proposer: PubKey,
+        parties: Vec<PubKey>,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
@@ -66,10 +66,6 @@ impl VCBC {
 
     pub fn is_delivered(&self) -> bool {
         self.ctx.delivered
-    }
-
-    pub fn proposal(&self) -> &Option<Proposal> {
-        &self.ctx.proposal
     }
 }
 

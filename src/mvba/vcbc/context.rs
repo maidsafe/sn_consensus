@@ -18,16 +18,16 @@ pub(super) struct Context {
 
 impl Context {
     pub fn new(
-        parties: &Vec<PubKey>,
+        parties: Vec<PubKey>,
         threshold: usize,
-        proposer: &PubKey,
+        proposer: PubKey,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
         Self {
-            parties: parties.clone(),
+            parties,
             threshold,
-            proposer: proposer.clone(),
+            proposer,
             proposal: None,
             echos: HashSet::new(),
             broadcaster,

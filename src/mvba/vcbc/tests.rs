@@ -8,7 +8,7 @@ struct TestData {
     party_y: PubKey,
     party_b: PubKey,
     party_s: PubKey,
-    vcbc: VCBC,
+    vcbc: Vcbc,
     broadcaster: Rc<RefCell<Broadcaster>>,
     proposal: Proposal,
 }
@@ -43,7 +43,13 @@ impl TestData {
             _ => panic!("invalid proposer"),
         };
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(), &party_x)));
-        let vcbc = VCBC::new(&proposer, &parties, 1, broadcaster.clone(), valid_proposal);
+        let vcbc = Vcbc::new(
+            proposer.clone(),
+            parties,
+            1,
+            broadcaster.clone(),
+            valid_proposal,
+        );
 
         // Creating a random proposal
         let mut rng = rand::thread_rng();
@@ -106,7 +112,7 @@ fn test_normal_case() {
     let mut t = TestData::new("x");
 
     assert!(!t.vcbc.is_delivered());
-    assert_eq!(t.vcbc.proposal(), &None);
+    assert_eq!(t.vcbc.ctx.proposal, None);
     assert!(t.vcbc.ctx.echos.is_empty());
 
     t.vcbc.propose(&t.proposal).unwrap();
@@ -114,7 +120,7 @@ fn test_normal_case() {
     t.vcbc.process_message(&t.party_s, &t.echo_msg()).unwrap();
 
     assert!(t.vcbc.is_delivered());
-    assert_eq!(t.vcbc.proposal(), &Some(t.proposal));
+    assert_eq!(t.vcbc.ctx.proposal, Some(t.proposal));
     let echos = &t.vcbc.ctx.echos;
     assert!(echos.contains(&t.party_x));
     assert!(echos.contains(&t.party_y));

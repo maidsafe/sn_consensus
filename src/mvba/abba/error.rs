@@ -1,6 +1,6 @@
+use crate::mvba::{crypto::public::PubKey, proposal::Proposal};
 use minicbor::{decode, encode};
 use thiserror::Error;
-use crate::mvba::{crypto::public::PubKey, proposal::Proposal};
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
@@ -11,21 +11,20 @@ pub enum Error {
     #[error("duplicated proposal: {0:?}")]
     DuplicatedProposal(Proposal),
     #[error("decoding error: {0}")]
-    DecodeError(String),
+    Decode(String),
     #[error("encoding error: {0}")]
-    EncodeError(String),
-
+    Encode(String),
 }
 
 impl<W: std::fmt::Display> From<encode::Error<W>> for Error {
     fn from(err: encode::Error<W>) -> Self {
-        Error::EncodeError(format!("{}", err))
+        Error::Encode(format!("{}", err))
     }
 }
 
 impl From<decode::Error> for Error {
     fn from(err: decode::Error) -> Self {
-        Error::DecodeError(format!("{}", err))
+        Error::Decode(format!("{}", err))
     }
 }
 pub type Result<T> = std::result::Result<T, Error>;

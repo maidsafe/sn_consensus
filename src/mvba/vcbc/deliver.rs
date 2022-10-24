@@ -5,7 +5,7 @@ use super::State;
 pub(super) struct DeliverState;
 
 impl State for DeliverState {
-    fn enter(mut self: Box<Self>, ctx: &mut Context) -> Result<Box<dyn State>> {
+    fn enter(self: Box<Self>, ctx: &mut Context) -> Result<Box<dyn State>> {
         ctx.delivered = true;
         Ok(self)
     }

@@ -30,7 +30,7 @@ pub(super) trait State {
                 return Err(Error::DuplicatedProposal(proposal.clone()));
             }
         }
-        if !(ctx.proposal_checker)(&proposal) {
+        if !(ctx.proposal_checker)(proposal) {
             return Err(Error::InvalidProposal(proposal.clone()));
         }
         ctx.proposal = Some(proposal.clone());
@@ -50,7 +50,7 @@ pub(super) trait State {
             }
             message::MSG_TAG_ECHO => {
                 self.set_proposal(&msg.proposal, ctx)?;
-                self.add_echo(&sender, ctx);
+                self.add_echo(sender, ctx);
             }
             _ => {}
         }

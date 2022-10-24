@@ -1,5 +1,5 @@
 use crate::mvba::{
-    abba::ABBA, broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, vcbc::VCBC,
+    abba::Abba, broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, vcbc::Vcbc,
     ProposalChecker,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -7,9 +7,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 pub struct Consensus {
     id: u32,
     self_key: PubKey,
-    abba: ABBA,
+    abba: Abba,
     threshold: usize,
-    vcbc_map: HashMap<PubKey, VCBC>,
+    vcbc_map: HashMap<PubKey, Vcbc>,
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
@@ -25,12 +25,12 @@ impl Consensus {
         let broadcaster = Broadcaster::new(id, &self_key);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
-        let abba = ABBA::new(&parties, threshold, broadcaster_rc.clone());
+        let abba = Abba::new(parties.clone(), threshold, broadcaster_rc.clone());
 
         for p in &parties {
-            let vcbc = VCBC::new(
-                &p,
-                &parties,
+            let vcbc = Vcbc::new(
+                p.clone(),
+                parties.clone(),
                 threshold,
                 broadcaster_rc.clone(),
                 proposal_checker,
@@ -58,7 +58,7 @@ impl Consensus {
 
     pub fn process_bundle(&mut self, data: &[u8]) -> Vec<Vec<u8>> {
         let mut delivered_count = 0;
-        for (_, vcbc) in &self.vcbc_map {
+        for vcbc in self.vcbc_map.values() {
             if vcbc.is_delivered() {
                 delivered_count += 1;
             }
