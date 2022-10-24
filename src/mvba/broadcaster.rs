@@ -47,4 +47,9 @@ impl Broadcaster {
         }
         return false;
     }
+
+    #[cfg(test)]
+    pub fn clear(&mut self) {
+        self.bundles.clear();
+    }
 }

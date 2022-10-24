@@ -1,7 +1,7 @@
 use super::*;
 use crate::mvba::crypto::public::random_pub_key;
 use minicbor::to_vec;
-use rand::{Rng, random};
+use rand::{random, Rng};
 
 struct TestData {
     party_x: PubKey,
@@ -42,7 +42,7 @@ impl TestData {
             "s" => party_s.clone(),
             _ => panic!("invalid proposer"),
         };
-        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(),&party_x)));
+        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(), &party_x)));
         let proposal_checker: Rc<RefCell<ProposalChecker>> = Rc::new(RefCell::new(valid_proposal));
         let vcbc = VCBC::new(
             &proposer,
@@ -92,6 +92,9 @@ impl TestData {
     pub fn should_echo(&self) {
         assert!(self.broadcaster.borrow().has_message(&self.echo_msg()))
     }
+    pub fn should_not_echo(&self) {
+        assert!(!self.broadcaster.borrow().has_message(&self.echo_msg()))
+    }
 }
 
 #[test]
@@ -119,30 +122,10 @@ fn test_normal_case() {
 
     assert!(t.vcbc.is_delivered());
     assert_eq!(t.vcbc.proposal(), &Some(t.proposal));
-    assert!(t
-        .vcbc
-        .state
-        .as_ref()
-        .unwrap()
-        .context()
-        .echos
-        .contains(&t.party_x));
-    assert!(t
-        .vcbc
-        .state
-        .as_ref()
-        .unwrap()
-        .context()
-        .echos
-        .contains(&t.party_y));
-    assert!(t
-        .vcbc
-        .state
-        .as_ref()
-        .unwrap()
-        .context()
-        .echos
-        .contains(&t.party_s));
+    let echos = &t.vcbc.state.as_ref().unwrap().context().echos;
+    assert!(echos.contains(&t.party_x));
+    assert!(echos.contains(&t.party_y));
+    assert!(echos.contains(&t.party_s));
 }
 
 #[test]
@@ -155,11 +138,12 @@ fn test_delayed_propose_message() {
     assert!(t.vcbc.is_delivered());
 
     // Receiving propose message now
+    t.broadcaster.borrow_mut().clear();
     t.vcbc
         .process_message(&t.party_s, &t.propose_msg())
         .unwrap();
 
-    assert_eq!(t.vcbc.state.unwrap().name(), "deliver state");
+    t.should_not_echo();
 }
 
 #[test]
