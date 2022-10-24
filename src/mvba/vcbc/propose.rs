@@ -26,8 +26,4 @@ impl State for ProposeState {
             None => Ok(None),
         }
     }
-
-    fn name(&self) -> String {
-        "propose state".to_string()
-    }
 }

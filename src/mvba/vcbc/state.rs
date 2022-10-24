@@ -10,9 +10,6 @@ pub(super) trait State {
     // checks the context and decides to move to new state.
     fn decide(&self, ctx: &mut context::Context) -> Result<Option<Box<dyn State>>>;
 
-    // return the name of the state
-    fn name(&self) -> String;
-
     // adds echo from the echoer for the context proposal
     fn add_echo(&mut self, echoer: &PubKey, ctx: &mut context::Context) {
         ctx.echos.insert(echoer.clone());

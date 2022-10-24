@@ -13,8 +13,4 @@ impl State for DeliverState {
     fn decide(&self, _ctx: &mut Context) -> Result<Option<Box<dyn State>>> {
         Ok(None)
     }
-
-    fn name(&self) -> String {
-        "deliver state".to_string()
-    }
 }

@@ -29,8 +29,4 @@ impl State for EchoState {
             Ok(None)
         }
     }
-
-    fn name(&self) -> String {
-        "echo state".to_string()
-    }
 }
