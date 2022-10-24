@@ -1,48 +1,33 @@
-use super::context;
+use super::context::Context;
 use super::echo::EchoState;
 use super::error::Result;
 use super::message;
 use super::message::Message;
 use super::State;
 
-pub(super) struct ProposeState {
-    pub ctx: context::Context,
-}
-
-impl ProposeState {
-    pub fn new(ctx: context::Context) -> Self {
-        Self{ctx}
-    }
-}
+pub(super) struct ProposeState;
 
 impl State for ProposeState {
-    fn enter(self: Box<Self>) -> Result<Box<dyn State>> {
+    fn enter(self: Box<Self>, ctx: &mut Context) -> Result<Box<dyn State>> {
         Ok(self)
     }
 
-    fn decide(self: Box<Self>) -> Result<Box<dyn State>> {
-        match &self.context().proposal {
+    fn decide(&self, ctx: &mut Context) -> Result<Option<Box<dyn State>>> {
+        match &ctx.proposal {
             Some(proposal) => {
                 let msg = Message {
                     tag: message::MSG_TAG_PROPOSE.to_string(),
                     proposal: proposal.clone(),
                 };
-                self.context().broadcast(&msg);
-                let state = Box::new(EchoState::new( self.ctx ));
-                state.enter()
+                ctx.broadcast(&msg);
+                let state = Box::new(EchoState);
+                Ok(Some(state.enter(ctx)?))
             }
-            None => Ok(self),
+            None => Ok(None),
         }
     }
 
     fn name(&self) -> String {
         "propose state".to_string()
-    }
-
-    fn context_mut(&mut self) -> &mut context::Context {
-        &mut self.ctx
-    }
-    fn context(&self) -> &context::Context {
-        &self.ctx
     }
 }

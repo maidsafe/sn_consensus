@@ -5,44 +5,32 @@ use super::message;
 use super::message::Message;
 use super::State;
 
-pub(super) struct EchoState {
-    pub ctx: context::Context,
-}
-
-impl EchoState {
-    pub fn new(ctx: context::Context) -> Self {
-        Self{ctx}
-    }
-}
+pub(super) struct EchoState;
 
 impl State for EchoState {
-    fn enter(mut self: Box<Self>) -> Result<Box<dyn State>> {
+    fn enter(mut self: Box<Self>, ctx: &mut context::Context) -> Result<Box<dyn State>> {
         let msg = Message {
             tag: message::MSG_TAG_ECHO.to_string(),
-            proposal: self.context().proposal.as_ref().unwrap().clone(),
+            proposal: ctx.proposal.as_ref().unwrap().clone(),
         };
-        self.context().broadcast(&msg);
-        self.process_message(&self.context().cloned_self_key(), &msg)?;
-        self.decide()
+        ctx.broadcast(&msg);
+        self.process_message(&ctx.cloned_self_key(), &msg, ctx)?;
+        match self.decide(ctx)? {
+            Some(s) => Ok(s),
+            None => Ok(self),
+        }
     }
 
-    fn decide(self: Box<Self>) -> Result<Box<dyn State>> {
-        if self.context().echos.len() >= self.context().super_majority_num() {
-            let state = Box::new(DeliverState::new( self.ctx ));
-            state.enter()
+    fn decide(&self, ctx: &mut context::Context) -> Result<Option<Box<dyn State>>> {
+        if ctx.echos.len() >= ctx.super_majority_num() {
+            let state = Box::new(DeliverState);
+            Ok(Some(state.enter(ctx)?))
         } else {
-            Ok(self)
+            Ok(None)
         }
     }
 
     fn name(&self) -> String {
         "echo state".to_string()
-    }
-
-    fn context_mut(&mut self) -> &mut context::Context {
-        &mut self.ctx
-    }
-    fn context(&self) -> &context::Context {
-        &self.ctx
     }
 }

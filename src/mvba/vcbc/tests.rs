@@ -105,7 +105,7 @@ fn test_propose() {
     t.should_propose();
     t.should_echo();
 
-    assert!(t.vcbc.state.unwrap().context().echos.contains(&t.party_x));
+    assert!(t.vcbc.ctx.echos.contains(&t.party_x));
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn test_normal_case() {
 
     assert!(!t.vcbc.is_delivered());
     assert_eq!(t.vcbc.proposal(), &None);
-    assert!(t.vcbc.state.as_ref().unwrap().context().echos.is_empty());
+    assert!(t.vcbc.ctx.echos.is_empty());
 
     t.vcbc.propose(&t.proposal).unwrap();
     t.vcbc.process_message(&t.party_y, &t.echo_msg()).unwrap();
@@ -122,7 +122,7 @@ fn test_normal_case() {
 
     assert!(t.vcbc.is_delivered());
     assert_eq!(t.vcbc.proposal(), &Some(t.proposal));
-    let echos = &t.vcbc.state.as_ref().unwrap().context().echos;
+    let echos = &t.vcbc.ctx.echos;
     assert!(echos.contains(&t.party_x));
     assert!(echos.contains(&t.party_y));
     assert!(echos.contains(&t.party_s));
@@ -149,12 +149,7 @@ fn test_delayed_propose_message() {
 #[test]
 fn test_invalid_proposal() {
     let mut t = TestData::new("b");
-    t.vcbc
-        .state
-        .as_mut()
-        .unwrap()
-        .context_mut()
-        .proposal_checker = Rc::new(RefCell::new(invalid_proposal));
+    t.vcbc.ctx.proposal_checker = Rc::new(RefCell::new(invalid_proposal));
 
     assert_eq!(
         t.vcbc.process_message(&t.party_b, &t.propose_msg()).err(),
