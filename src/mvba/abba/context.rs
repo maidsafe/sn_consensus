@@ -1,9 +1,9 @@
 use super::{message::Message, message_set::MessageSet};
 use crate::mvba::{
     broadcaster::Broadcaster,
-    crypto::{hash, public::PubKey},
+    crypto::{public::PubKey},
     proposal::Proposal,
-    ProposalChecker,
+    ProposalChecker, hash::Hash32,
 };
 use minicbor::to_vec;
 use std::{
@@ -15,8 +15,8 @@ use std::{
 pub(super) struct Context {
     pub parties: Vec<PubKey>,
     pub threshold: usize,
-    pub proposal_id: Option<hash::Hash32>,
-    pub depot: HashMap<hash::Hash32, MessageSet>,
+    pub proposal_id: Option<Hash32>,
+    pub depot: HashMap<Hash32, MessageSet>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
     pub decided: bool,
 }

@@ -1,5 +1,5 @@
 
-use super::crypto::{hash::Hash32, public::PubKey};
+use super::{hash::Hash32, crypto::public::PubKey};
 use minicbor::{Decode, Encode, to_vec};
 
 
