@@ -7,36 +7,43 @@ mod echo;
 mod error;
 mod propose;
 
-use self::error::{Error, Result};
+use self::error::Result;
 use self::message::Message;
 use self::propose::ProposeState;
 use self::state::State;
-use crate::mvba::crypto::public::PubKey;
+use super::ProposalChecker;
 use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
+use blsttc::{PublicKeySet, PublicKeyShare};
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::ProposalChecker;
 
-pub (crate) const MODULE_NAME: &'static str = "vcbc";
+pub(crate) const MODULE_NAME: &'static str = "vcbc";
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
 // using verifiable authenticated consistent broadcast.
-pub(crate) struct Vcbc {
+pub(crate) struct VCBC {
     ctx: context::Context,
     state: Box<dyn State>,
 }
 
-impl Vcbc {
+impl VCBC {
     pub fn new(
-        proposer: PubKey,
-        parties: Vec<PubKey>,
+        proposer: PublicKeyShare,
+        parties: PublicKeySet,
+        number: usize,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
-        let ctx =
-            context::Context::new(parties, threshold, proposer, broadcaster, proposal_checker);
+        let ctx = context::Context::new(
+            parties,
+            number,
+            threshold,
+            proposer,
+            broadcaster,
+            proposal_checker,
+        );
 
         Self {
             ctx,
@@ -55,8 +62,8 @@ impl Vcbc {
         Ok(())
     }
 
-    pub fn process_message(&mut self, sender: &PubKey, message: &[u8]) -> Result<()> {
-        let msg: Message = minicbor::decode(message)?;
+    pub fn process_message(&mut self, sender: &PublicKeyShare, message: &[u8]) -> Result<()> {
+        let msg: Message = bincode::deserialize(message)?;
 
         self.state.process_message(sender, &msg, &mut self.ctx)?;
         if let Some(s) = self.state.decide(&mut self.ctx)? {

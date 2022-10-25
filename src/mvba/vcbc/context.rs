@@ -1,16 +1,17 @@
 use super::message::Message;
 use crate::mvba::{
-    broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, ProposalChecker,
+    broadcaster::Broadcaster,  proposal::Proposal, ProposalChecker,
 };
-use minicbor::to_vec;
+use blsttc::{PublicKeySet, PublicKeyShare};
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 pub(super) struct Context {
-    pub parties: Vec<PubKey>,
+    pub parties: PublicKeySet,
+    pub number: usize,
     pub threshold: usize,
-    pub proposer: PubKey,
+    pub proposer: PublicKeyShare,
     pub proposal: Option<Proposal>,
-    pub echos: HashSet<PubKey>,
+    pub echos: HashSet<PublicKeyShare>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
     pub proposal_checker: ProposalChecker,
     pub delivered: bool,
@@ -18,14 +19,16 @@ pub(super) struct Context {
 
 impl Context {
     pub fn new(
-        parties: Vec<PubKey>,
+        parties: PublicKeySet,
+        number: usize,
         threshold: usize,
-        proposer: PubKey,
+        proposer: PublicKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
         Self {
             parties,
+            number,
             threshold,
             proposer,
             proposal: None,
@@ -40,15 +43,15 @@ impl Context {
     // There are $n$ parties, $t$ of which may be corrupted.
     // Protocol is reliable for $n > 3t$.
     pub fn super_majority_num(&self) -> usize {
-        self.parties.len() - self.threshold
+        self.number - self.threshold
     }
 
     pub fn broadcast(&self, msg: &self::Message) {
-        let data = to_vec(msg).unwrap();
+        let data = bincode::serialize(msg).unwrap();
         self.broadcaster.borrow_mut().push_message(super::MODULE_NAME, data);
     }
 
-    pub fn cloned_self_key(&self) -> PubKey {
+    pub fn cloned_self_key(&self) -> PublicKeyShare {
         self.broadcaster.borrow().self_key().clone()
     }
 }

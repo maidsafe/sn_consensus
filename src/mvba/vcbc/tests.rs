@@ -1,14 +1,14 @@
 use super::*;
-use crate::mvba::crypto::public::random_pub_key;
+use crate::mvba::{random_pub_key, vcbc::error::Error};
 use minicbor::to_vec;
 use rand::{random, Rng};
 
 struct TestData {
-    party_x: PubKey,
-    party_y: PubKey,
-    party_b: PubKey,
-    party_s: PubKey,
-    vcbc: Vcbc,
+    party_x: PublicKeyShare,
+    party_y: PublicKeyShare,
+    party_b: PublicKeyShare,
+    party_s: PublicKeyShare,
+    vcbc: VCBC,
     broadcaster: Rc<RefCell<Broadcaster>>,
     proposal: Proposal,
 }
@@ -43,9 +43,10 @@ impl TestData {
             _ => panic!("invalid proposer"),
         };
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(), &party_x)));
-        let vcbc = Vcbc::new(
+        let vcbc = VCBC::new(
             proposer.clone(),
             parties,
+            4,
             1,
             broadcaster.clone(),
             valid_proposal,

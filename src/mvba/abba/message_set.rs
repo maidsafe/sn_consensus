@@ -1,9 +1,10 @@
+use blsttc::PublicKeyShare;
+
 use super::message::Message;
-use crate::mvba::crypto::public::PubKey;
 use std::collections::HashMap;
 
 pub(super) struct MessageSet {
-    pre_process_messages: HashMap<PubKey, Message>,
+    pre_process_messages: HashMap<PublicKeyShare, Message>,
 }
 
 impl MessageSet {

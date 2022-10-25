@@ -6,16 +6,17 @@ mod error;
 mod message_set;
 mod pre_process;
 
+use blsttc::{PublicKeySet, PublicKeyShare};
+
 use self::error::{Error, Result};
 use self::message::Message;
 use self::pre_process::ProposeState;
 use self::state::State;
-use crate::mvba::crypto::public::PubKey;
-use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
+use crate::mvba::broadcaster::Broadcaster;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub (crate) const MODULE_NAME: &'static str = "abba";
+pub(crate) const MODULE_NAME: &'static str = "abba";
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
@@ -26,18 +27,19 @@ pub(crate) struct Abba {
 
 impl Abba {
     pub fn new(
-        parties: Vec<PubKey>,
+        parties: PublicKeySet,
+        number: usize,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
-        let ctx = context::Context::new(parties, threshold, broadcaster);
+        let ctx = context::Context::new(parties, number, threshold, broadcaster);
 
         Self {
             state: Some(Box::new(ProposeState::new(ctx))),
         }
     }
 
-    pub fn process_message(&mut self, sender: &PubKey, message: &[u8]) -> Result<()> {
+    pub fn process_message(&mut self, sender: &PublicKeyShare, message: &[u8]) -> Result<()> {
         let msg: Message = Message::decode(message)?;
 
         if let Some(mut s) = self.state.take() {

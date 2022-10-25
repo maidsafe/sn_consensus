@@ -1,6 +1,5 @@
 use super::error::Result;
 use crate::mvba::hash::Hash32;
-use minicbor::{Decode, Encode};
 
 pub(super) const MSG_TAG_PRE_PROCESS: &'static str = "pre-process";
 

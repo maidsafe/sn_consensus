@@ -1,23 +1,23 @@
-use super::{bundle::Bundle, crypto::public::PubKey};
-use minicbor::{encode, to_vec};
+use super::bundle::Bundle;
+use blsttc::{SecretKeyShare, PublicKeyShare};
 
 pub struct Broadcaster {
     id: u32,
-    self_key: PubKey,
+    secret_key: SecretKeyShare,
     bundles: Vec<Bundle>,
 }
 
 impl Broadcaster {
-    pub fn new(id: u32, self_key: &PubKey) -> Self {
+    pub fn new(id: u32, secret_key: &SecretKeyShare) -> Self {
         Self {
             id,
-            self_key: self_key.clone(),
+            secret_key: secret_key.clone(),
             bundles: Vec::new(),
         }
     }
 
-    pub fn self_key(&self) -> &PubKey {
-        &self.self_key
+    pub fn self_key(&self) -> PublicKeyShare {
+        self.secret_key.public_key_share()
     }
 
     pub fn push_message(&mut self, module: &str, message: Vec<u8>) {
@@ -32,7 +32,7 @@ impl Broadcaster {
     pub fn take_bundles(&mut self) -> Vec<Vec<u8>> {
         let mut data = Vec::with_capacity(self.bundles.len());
         for bdl in &self.bundles {
-            data.push(to_vec(bdl).unwrap())
+            data.push(bincode::serialize(bdl).unwrap())
         }
         self.bundles.clear();
         data

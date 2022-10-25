@@ -1,15 +1,12 @@
-use minicbor::{Decode, Encode};
+use serde::{Serialize, Deserialize};
 use crate::mvba::proposal::Proposal;
 
 
 pub (super) const MSG_TAG_PROPOSE: &'static str = "v-propose";
 pub (super) const MSG_TAG_ECHO: &'static str = "v-echo";
 
-#[derive(Debug, Encode, Decode)]
-#[cbor(map)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Message {
-    #[n(1)]
     pub tag: String,
-    #[n(2)]
     pub proposal: Proposal,
 }

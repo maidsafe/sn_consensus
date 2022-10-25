@@ -1,18 +1,13 @@
+use super::hash::Hash32;
+use blsttc::PublicKeyShare;
+use serde::{Deserialize, Serialize};
 
-use super::{hash::Hash32, crypto::public::PubKey};
-use minicbor::{Decode, Encode, to_vec};
-
-
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Proposal {
-    #[n(1)]
-    pub proposer: PubKey,
-    #[n(2)]
+    pub proposer: PublicKeyShare,
     pub value: Vec<u8>,
-    #[n(3)]
     pub proof: Vec<u8>,
 }
-
 
 impl Proposal {
     pub fn hash(&self) -> Hash32 {

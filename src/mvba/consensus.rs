@@ -1,47 +1,50 @@
 use crate::mvba::{
-    abba::Abba, broadcaster::Broadcaster, crypto::public::PubKey, proposal::Proposal, vcbc::Vcbc,
-    ProposalChecker,
+    abba::Abba, broadcaster::Broadcaster, proposal::Proposal, vcbc::VCBC, ProposalChecker,
 };
+use blsttc::{PublicKeySet, PublicKeyShare, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
     id: u32,
-    self_key: PubKey,
     abba: Abba,
+    number: usize,
     threshold: usize,
-    vcbc_map: HashMap<PubKey, Vcbc>,
+    vcbc_map: HashMap<PublicKeyShare, VCBC>,
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
 impl Consensus {
     pub fn init(
         id: u32,
-        self_key: PubKey,
-        parties: Vec<PubKey>,
+        secret_key: SecretKeyShare,
+        parties: PublicKeySet,
+        number: usize,
         threshold: usize,
         proposal_checker: ProposalChecker,
     ) -> Consensus {
         let mut vcbc_map = HashMap::new();
-        let broadcaster = Broadcaster::new(id, &self_key);
+        let broadcaster = Broadcaster::new(id, &secret_key);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
-        let abba = Abba::new(parties.clone(), threshold, broadcaster_rc.clone());
+        let abba = Abba::new(parties.clone(), number, threshold, broadcaster_rc.clone());
 
-        for p in &parties {
-            let vcbc = Vcbc::new(
-                p.clone(),
+        for id in 0..number {
+            let pub_key_share = parties.public_key_share(id);
+            let vcbc = VCBC::new(
+                pub_key_share.clone(),
                 parties.clone(),
+                number,
                 threshold,
                 broadcaster_rc.clone(),
                 proposal_checker,
             );
-            vcbc_map.insert(p.clone(), vcbc).unwrap();
+            vcbc_map.insert(pub_key_share.clone(), vcbc).unwrap();
         }
 
         Consensus {
             id,
-            self_key,
             abba,
+            number,
             threshold,
             vcbc_map,
             broadcaster: broadcaster_rc,
@@ -50,7 +53,11 @@ impl Consensus {
 
     // start the consensus by proposing a proposal and broadcasting it.
     pub fn start(&mut self, proposal: Proposal) -> Vec<Vec<u8>> {
-        let vcbc = self.vcbc_map.get_mut(&self.self_key).unwrap(); // TODO: no unwrap
+        // TODO: Keep self_key as ammber of consensus if we need it in other places....
+        let vcbc = self
+            .vcbc_map
+            .get_mut(&self.broadcaster.borrow().self_key())
+            .unwrap(); // TODO: no unwrap
         vcbc.propose(&proposal).unwrap(); // TODO: no unwrap
 
         self.broadcaster.borrow_mut().take_bundles()
