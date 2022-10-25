@@ -184,7 +184,7 @@ fn test_membership_round_robin_split_vote() -> Result<()> {
 
         let proc_0_gen = net.procs[0].gen;
         let expected_members = net.procs[0].members(proc_0_gen)?;
-        assert_eq!(expected_members, BTreeSet::from_iter(0..(nprocs as u8)));
+        assert_eq!(expected_members, BTreeSet::from_iter(0..nprocs));
 
         for i in 0..nprocs {
             let gen = net.procs[i as usize].gen;

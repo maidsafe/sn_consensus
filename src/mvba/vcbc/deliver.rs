@@ -1,35 +1,16 @@
-use super::context;
-use super::State;
+use super::context::Context;
 use super::error::Result;
+use super::State;
 
-pub(super) struct DeliverState {
-    pub ctx: context::Context
-}
-
-impl DeliverState {
-    pub fn new(ctx: context::Context) -> Self {
-        Self{ctx}
-    }
-}
+pub(super) struct DeliverState;
 
 impl State for DeliverState {
-    fn enter(mut self: Box<Self>) -> Result<Box<dyn State>> {
-        self.context_mut().delivered = true;
+    fn enter(self: Box<Self>, ctx: &mut Context) -> Result<Box<dyn State>> {
+        ctx.delivered = true;
         Ok(self)
     }
 
-    fn decide(self: Box<Self>) -> Result<Box<dyn State>> {
-        Ok(self)
-    }
-
-    fn name(&self) -> String {
-        "deliver state".to_string()
-    }
-
-    fn context_mut(&mut self) -> &mut context::Context {
-        &mut self.ctx
-    }
-    fn context(&self) -> &context::Context{
-        &self.ctx
+    fn decide(&self, _ctx: &mut Context) -> Result<Option<Box<dyn State>>> {
+        Ok(None)
     }
 }

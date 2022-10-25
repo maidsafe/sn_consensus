@@ -1,7 +1,16 @@
 use super::{message::Message, message_set::MessageSet};
-use crate::mvba::{broadcaster::Broadcaster, crypto::{public::PubKey, hash}, proposal::Proposal, ProposalChecker};
+use crate::mvba::{
+    broadcaster::Broadcaster,
+    crypto::{hash, public::PubKey},
+    proposal::Proposal,
+    ProposalChecker,
+};
 use minicbor::to_vec;
-use std::{cell::RefCell, collections::{HashSet, HashMap}, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 pub(super) struct Context {
     pub parties: Vec<PubKey>,
@@ -14,12 +23,12 @@ pub(super) struct Context {
 
 impl Context {
     pub fn new(
-        parties: &Vec<PubKey>,
+        parties: Vec<PubKey>,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            parties: parties.clone(),
+            parties,
             threshold,
             proposal_id: None,
             depot: HashMap::new(),

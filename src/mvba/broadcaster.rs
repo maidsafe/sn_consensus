@@ -1,5 +1,5 @@
+use super::{bundle::Bundle, crypto::public::PubKey};
 use minicbor::{encode, to_vec};
-use super::{crypto::public::{PubKey}, bundle::Bundle};
 
 pub struct Broadcaster {
     id: u32,
@@ -22,7 +22,7 @@ impl Broadcaster {
 
     pub fn push_message(&mut self, module: &str, message: Vec<u8>) {
         let bdl = Bundle {
-            id:self.id,
+            id: self.id,
             module: module.to_string(),
             message,
         };
@@ -30,7 +30,7 @@ impl Broadcaster {
     }
 
     pub fn take_bundles(&mut self) -> Vec<Vec<u8>> {
-        let mut data  = Vec::with_capacity(self.bundles.len());
+        let mut data = Vec::with_capacity(self.bundles.len());
         for bdl in &self.bundles {
             data.push(to_vec(bdl).unwrap())
         }
@@ -45,7 +45,7 @@ impl Broadcaster {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     #[cfg(test)]

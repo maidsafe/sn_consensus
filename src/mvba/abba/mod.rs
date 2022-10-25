@@ -2,10 +2,9 @@ pub(super) mod context;
 pub(super) mod message;
 pub(super) mod state;
 
-mod pre_process;
 mod error;
 mod message_set;
-
+mod pre_process;
 
 use self::error::{Error, Result};
 use self::message::Message;
@@ -21,24 +20,22 @@ use super::ProposalChecker;
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
 // using verifiable authenticated consistent broadcast.
-pub(crate) struct ABBA {
+pub(crate) struct Abba {
     state: Option<Box<dyn State>>,
 }
 
-impl ABBA {
+impl Abba {
     pub fn new(
-        parties: &Vec<PubKey>,
+        parties: Vec<PubKey>,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
-        let ctx =
-            context::Context::new(parties, threshold,  broadcaster);
+        let ctx = context::Context::new(parties, threshold, broadcaster);
 
         Self {
             state: Some(Box::new(ProposeState::new(ctx))),
         }
     }
-
 
     pub fn process_message(&mut self, sender: &PubKey, message: &[u8]) -> Result<()> {
         let msg: Message = minicbor::decode(message)?;
