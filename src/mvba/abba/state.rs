@@ -1,7 +1,9 @@
 use super::error::{Error, Result};
-use super::{context, message};
 use super::message::Message;
+use super::message_set::MessageSet;
+use super::{context, message};
 use crate::mvba::{crypto::public::PubKey, proposal::Proposal};
+use std::collections::hash_map::Entry;
 
 pub(super) trait State {
     // enters to the new state
@@ -19,9 +21,16 @@ pub(super) trait State {
     // returns the immutable version of context
     fn context(&self) -> &context::Context;
 
+    fn process_message(&mut self, sender: &PubKey, msg: Message) -> Result<()> {
+        match self.context_mut().depot.entry(msg.proposal_id.clone()) {
+            Entry::Occupied(mut occ_entry) => occ_entry.get_mut().add_message(msg),
+            Entry::Vacant(vac_ntry) => {
+                let mut message_set = MessageSet::new();
+                message_set.add_message(msg);
+                vac_ntry.insert(message_set);
+            }
+        };
 
-
-     fn process_message(&mut self, sender: &PubKey, msg: &Message) -> Result<()> {
         todo!()
     }
 }

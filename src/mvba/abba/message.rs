@@ -1,15 +1,22 @@
+use super::error::Result;
+use crate::mvba::hash::Hash32;
 use minicbor::{Decode, Encode};
-use crate::mvba::proposal::Proposal;
 
+pub(super) const MSG_TAG_PRE_PROCESS: &'static str = "pre-process";
 
-pub (super) const MSG_TAG_PROPOSE: &'static str = "v-propose";
-pub (super) const MSG_TAG_ECHO: &'static str = "v-echo";
-
-#[derive(Debug, Encode, Decode)]
-#[cbor(map)]
+#[derive(Debug)]
 pub(crate) struct Message {
-    #[n(1)]
+    pub proposal_id: Hash32,
     pub tag: String,
-    #[n(2)]
-    pub proposal: Proposal,
+    pub value: u8,
+}
+
+impl Message {
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn bytes(&self) -> Result<Vec<u8>> {
+        todo!()
+    }
 }

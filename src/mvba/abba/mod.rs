@@ -15,7 +15,7 @@ use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::ProposalChecker;
+pub (crate) const MODULE_NAME: &'static str = "abba";
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
@@ -38,10 +38,10 @@ impl Abba {
     }
 
     pub fn process_message(&mut self, sender: &PubKey, message: &[u8]) -> Result<()> {
-        let msg: Message = minicbor::decode(message)?;
+        let msg: Message = Message::decode(message)?;
 
         if let Some(mut s) = self.state.take() {
-            s.process_message(sender, &msg)?;
+            s.process_message(sender, msg)?;
             self.state = Some(s.decide()?);
         }
         Ok(())

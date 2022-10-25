@@ -12,6 +12,8 @@ use std::{
     rc::Rc,
 };
 
+
+
 pub(super) struct Context {
     pub parties: Vec<PubKey>,
     pub threshold: usize,
@@ -45,8 +47,8 @@ impl Context {
     }
 
     pub fn broadcast(&self, msg: &self::Message) {
-        let data = to_vec(msg).unwrap();
-        self.broadcaster.borrow_mut().push_message("vcbc", data);
+        let data = msg.bytes().unwrap();
+        self.broadcaster.borrow_mut().push_message(super::MODULE_NAME, data);
     }
 
     pub fn cloned_self_key(&self) -> PubKey {

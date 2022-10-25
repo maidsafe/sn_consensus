@@ -15,8 +15,9 @@ use crate::mvba::crypto::public::PubKey;
 use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
 use std::cell::RefCell;
 use std::rc::Rc;
-
 use super::ProposalChecker;
+
+pub (crate) const MODULE_NAME: &'static str = "vcbc";
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties

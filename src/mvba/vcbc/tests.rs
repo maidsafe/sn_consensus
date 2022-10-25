@@ -85,14 +85,11 @@ impl TestData {
         })
         .unwrap()
     }
-    pub fn should_propose(&self) {
-        assert!(self.broadcaster.borrow().has_message(&self.propose_msg()))
+    pub fn is_proposed(&self) -> bool {
+        self.broadcaster.borrow().has_message(&self.propose_msg())
     }
-    pub fn should_echo(&self) {
-        assert!(self.broadcaster.borrow().has_message(&self.echo_msg()))
-    }
-    pub fn should_not_echo(&self) {
-        assert!(!self.broadcaster.borrow().has_message(&self.echo_msg()))
+    pub fn is_echoed(&self) -> bool {
+        self.broadcaster.borrow().has_message(&self.echo_msg())
     }
 }
 
@@ -101,9 +98,9 @@ fn test_propose() {
     let mut t = TestData::new("x");
 
     t.vcbc.propose(&t.proposal).unwrap();
-    t.should_propose();
-    t.should_echo();
 
+    assert!(t.is_proposed());
+    assert!(t.is_echoed());
     assert!(t.vcbc.ctx.echos.contains(&t.party_x));
 }
 
@@ -121,10 +118,9 @@ fn test_normal_case() {
 
     assert!(t.vcbc.is_delivered());
     assert_eq!(t.vcbc.ctx.proposal, Some(t.proposal));
-    let echos = &t.vcbc.ctx.echos;
-    assert!(echos.contains(&t.party_x));
-    assert!(echos.contains(&t.party_y));
-    assert!(echos.contains(&t.party_s));
+    assert!(&t.vcbc.ctx.echos.contains(&t.party_x));
+    assert!(&t.vcbc.ctx.echos.contains(&t.party_y));
+    assert!(&t.vcbc.ctx.echos.contains(&t.party_s));
 }
 
 #[test]
@@ -142,7 +138,7 @@ fn test_delayed_propose_message() {
         .process_message(&t.party_s, &t.propose_msg())
         .unwrap();
 
-    t.should_not_echo();
+    assert!(!t.is_echoed());
 }
 
 #[test]

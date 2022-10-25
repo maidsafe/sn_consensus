@@ -12,4 +12,8 @@ impl MessageSet {
             pre_process_messages: HashMap::new(),
         }
     }
+
+    pub fn add_message(&mut self, msg: Message) {
+        todo!()
+    }
 }
