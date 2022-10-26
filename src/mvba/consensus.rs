@@ -6,10 +6,11 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
     id: u32,
-    abba: Abba,
     number: usize,
     threshold: usize,
-    vcbc_map: HashMap<PublicKeyShare, VCBC>,
+    self_key_index: usize,
+    abba: Abba,
+    vcbc_map: HashMap<usize, VCBC>, // Mapping proposer_index to VCBC instance
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
@@ -26,25 +27,40 @@ impl Consensus {
         let broadcaster = Broadcaster::new(id, &secret_key);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
+        let mut self_key_index = usize::MAX;
+         for index in 0..number {
+            let pub_key_share = parties.public_key_share(index);
+            if secret_key.public_key_share().eq(&pub_key_share) {
+                self_key_index = index;
+                break;
+            }
+        };
+
+        if self_key_index == usize::MAX {
+            // TODO: return error: no panic
+            panic!("invalid secret key share")
+            //return
+        }
+
         let abba = Abba::new(parties.clone(), number, threshold, broadcaster_rc.clone());
 
-        for id in 0..number {
-            let pub_key_share = parties.public_key_share(id);
+        for index in 0..number {
             let vcbc = VCBC::new(
-                pub_key_share.clone(),
                 parties.clone(),
+                index,
                 number,
                 threshold,
                 broadcaster_rc.clone(),
                 proposal_checker,
             );
-            vcbc_map.insert(pub_key_share.clone(), vcbc).unwrap();
+            vcbc_map.insert(index, vcbc).unwrap();
         }
 
         Consensus {
             id,
             abba,
             number,
+            self_key_index,
             threshold,
             vcbc_map,
             broadcaster: broadcaster_rc,
@@ -56,7 +72,7 @@ impl Consensus {
         // TODO: Keep self_key as ammber of consensus if we need it in other places....
         let vcbc = self
             .vcbc_map
-            .get_mut(&self.broadcaster.borrow().self_key())
+            .get_mut(&self.self_key_index)
             .unwrap(); // TODO: no unwrap
         vcbc.propose(&proposal).unwrap(); // TODO: no unwrap
 

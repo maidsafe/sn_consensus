@@ -5,7 +5,7 @@ use thiserror::Error;
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
     #[error("invalid proposer. expected {0:?}, get {1:?}")]
-    InvalidProposer(PublicKeyShare, PublicKeyShare),
+    InvalidProposer(usize, usize),
     #[error("invalid proposal: {0:?}")]
     InvalidProposal(Proposal),
     #[error("duplicated proposal: {0:?}")]

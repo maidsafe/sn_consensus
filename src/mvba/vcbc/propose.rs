@@ -15,10 +15,7 @@ impl State for ProposeState {
     fn decide(&self, ctx: &mut Context) -> Result<Option<Box<dyn State>>> {
         match &ctx.proposal {
             Some(proposal) => {
-                let msg = Message {
-                    tag: message::MSG_TAG_PROPOSE.to_string(),
-                    proposal: proposal.clone(),
-                };
+                let msg = Message::Propose(ctx.proposal.as_ref().unwrap().clone());
                 ctx.broadcast(&msg);
                 let state = Box::new(EchoState);
                 Ok(Some(state.enter(ctx)?))

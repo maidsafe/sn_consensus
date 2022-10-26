@@ -9,7 +9,7 @@ pub(super) struct Context {
     pub parties: PublicKeySet,
     pub number: usize,
     pub threshold: usize,
-    pub proposer: PublicKeyShare,
+    pub proposer_index: usize,
     pub proposal: Option<Proposal>,
     pub echos: HashSet<PublicKeyShare>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
@@ -22,7 +22,7 @@ impl Context {
         parties: PublicKeySet,
         number: usize,
         threshold: usize,
-        proposer: PublicKeyShare,
+        proposer_index: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
@@ -30,7 +30,7 @@ impl Context {
             parties,
             number,
             threshold,
-            proposer,
+            proposer_index,
             proposal: None,
             echos: HashSet::new(),
             broadcaster,
@@ -51,7 +51,11 @@ impl Context {
         self.broadcaster.borrow_mut().push_message(super::MODULE_NAME, data);
     }
 
-    pub fn cloned_self_key(&self) -> PublicKeyShare {
+    pub fn proposer_key(&self) -> PublicKeyShare {
+        self.parties.public_key_share(self.proposer_index)
+    }
+
+    pub fn self_key(&self) -> PublicKeyShare {
         self.broadcaster.borrow().self_key().clone()
     }
 }

@@ -1,5 +1,4 @@
 use blsttc::PublicKeyShare;
-
 use super::error::{Error, Result};
 use super::message::Message;
 use super::{context, message};
@@ -18,10 +17,10 @@ pub(super) trait State {
     }
 
     fn set_proposal(&mut self, proposal: &Proposal, ctx: &mut context::Context) -> Result<()> {
-        if proposal.proposer != ctx.proposer {
+        if proposal.proposer_index != ctx.proposer_index {
             return Err(Error::InvalidProposer(
-                proposal.proposer.clone(),
-                ctx.proposer.clone(),
+                proposal.proposer_index,
+                ctx.proposer_index,
             ));
         }
         if let Some(context_proposal) = ctx.proposal.as_ref() {
@@ -43,12 +42,12 @@ pub(super) trait State {
         msg: &Message,
         ctx: &mut context::Context,
     ) -> Result<()> {
-        match msg.tag.as_str() {
-            message::MSG_TAG_PROPOSE => {
-                self.set_proposal(&msg.proposal, ctx)?;
+        match msg {
+            Message::Propose(proposal) => {
+                self.set_proposal(&proposal, ctx)?;
             }
-            message::MSG_TAG_ECHO => {
-                self.set_proposal(&msg.proposal, ctx)?;
+            Message::Echo(proposal) => {
+                self.set_proposal(&proposal, ctx)?;
                 self.add_echo(sender, ctx);
             }
             _ => {}

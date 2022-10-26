@@ -13,4 +13,5 @@
 // is corrupted.
 //
 // ## Eco state
+//
 //  wait for n − t messages (v-echo, w_j , π_j )  to be c-delivered.

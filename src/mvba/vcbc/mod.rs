@@ -29,8 +29,8 @@ pub(crate) struct VCBC {
 
 impl VCBC {
     pub fn new(
-        proposer: PublicKeyShare,
         parties: PublicKeySet,
+        proposer_index: usize,
         number: usize,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
@@ -40,7 +40,7 @@ impl VCBC {
             parties,
             number,
             threshold,
-            proposer,
+            proposer_index,
             broadcaster,
             proposal_checker,
         );
@@ -53,7 +53,7 @@ impl VCBC {
 
     // propose sets the proposal and broadcast propose message.
     pub fn propose(&mut self, proposal: &Proposal) -> Result<()> {
-        debug_assert_eq!(proposal.proposer, self.ctx.cloned_self_key());
+        debug_assert_eq!(proposal.proposer_index, self.ctx.proposer_index);
 
         self.state.set_proposal(proposal, &mut self.ctx)?;
         if let Some(s) = self.state.decide(&mut self.ctx)? {

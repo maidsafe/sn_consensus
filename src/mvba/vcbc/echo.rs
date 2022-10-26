@@ -9,12 +9,9 @@ pub(super) struct EchoState;
 
 impl State for EchoState {
     fn enter(mut self: Box<Self>, ctx: &mut context::Context) -> Result<Box<dyn State>> {
-        let msg = Message {
-            tag: message::MSG_TAG_ECHO.to_string(),
-            proposal: ctx.proposal.as_ref().unwrap().clone(),
-        };
+        let msg = Message::Echo(ctx.proposal.as_ref().unwrap().clone());
         ctx.broadcast(&msg);
-        self.process_message(&ctx.cloned_self_key(), &msg, ctx)?;
+        self.process_message(&ctx.self_key(), &msg, ctx)?;
         match self.decide(ctx)? {
             Some(s) => Ok(s),
             None => Ok(self),

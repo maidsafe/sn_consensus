@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Proposal {
-    pub proposer: PublicKeyShare,
+    pub proposer_index: usize,
     pub value: Vec<u8>,
     pub proof: Vec<u8>,
 }
