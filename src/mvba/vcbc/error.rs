@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
+    #[error("invalid sender: {0:?}")]
+    InvalidSender(NodeId),
     #[error("invalid proposer. expected {0:?}, get {1:?}")]
     InvalidProposer(NodeId, NodeId),
     #[error("invalid proposal: {0:?}")]

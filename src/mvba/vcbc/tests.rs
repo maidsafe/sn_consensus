@@ -4,7 +4,6 @@ use blsttc::SecretKeySet;
 use rand::{random, thread_rng, Rng};
 
 struct TestData {
-    sec_key_set: SecretKeySet,
     vcbc: Vcbc,
     broadcaster: Rc<RefCell<Broadcaster>>,
     proposal: Proposal,
@@ -29,7 +28,6 @@ impl TestData {
     pub fn new(proposer_id: NodeId) -> Self {
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(4, &mut rng);
-        let pub_key_set = sec_key_set.public_keys();
         let proposer_key = sec_key_set.secret_key_share(proposer_id);
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
             random(),
@@ -37,9 +35,8 @@ impl TestData {
             Some(Self::PARTY_X),
         )));
         let vcbc = Vcbc::new(
-            pub_key_set,
+            vec![Self::PARTY_X, Self::PARTY_Y, Self::PARTY_B, Self::PARTY_S],
             proposer_id,
-            4,
             1,
             broadcaster.clone(),
             valid_proposal,
@@ -54,7 +51,6 @@ impl TestData {
         };
 
         Self {
-            sec_key_set,
             vcbc,
             broadcaster,
             proposal,
@@ -180,5 +176,26 @@ fn test_duplicated_proposal() {
     assert_eq!(
         t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
         Some(Error::DuplicatedProposal(duplicated_proposal)),
+    );
+}
+
+#[test]
+fn test_byzantine_messages() {
+    let mut t = TestData::new(TestData::PARTY_B);
+
+    let mut byz_proposal = t.proposal.clone();
+    byz_proposal.proposer_id = 66; // unknown proposer
+    let data = bincode::serialize(&Message::Propose(byz_proposal.clone())).unwrap();
+    assert_eq!(
+        t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
+        Some(Error::InvalidProposer(
+            TestData::PARTY_B,
+            byz_proposal.proposer_id
+        ))
+    );
+
+    assert_eq!(
+        t.vcbc.process_message(&66, &t.propose_msg()).err(),
+        Some(Error::InvalidSender(66))
     );
 }

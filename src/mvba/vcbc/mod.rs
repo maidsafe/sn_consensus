@@ -13,7 +13,7 @@ use self::propose::ProposeState;
 use self::state::State;
 use super::{NodeId, ProposalChecker};
 use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
-use blsttc::{PublicKeySet};
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -29,16 +29,14 @@ pub(crate) struct Vcbc {
 
 impl Vcbc {
     pub fn new(
-        parties: PublicKeySet,
+        parties: Vec<NodeId>,
         proposer_id: NodeId,
-        number: usize,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
         let ctx = context::Context::new(
             parties,
-            number,
             threshold,
             proposer_id,
             broadcaster,

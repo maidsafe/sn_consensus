@@ -51,6 +51,9 @@ pub(super) trait State {
     ) -> Result<()> {
         log::debug!("{} processing message: {:?}", self.name(), msg);
 
+        if !ctx.parties.contains(sender) {
+            return Err(Error::InvalidSender(*sender));
+        }
         match msg {
             Message::Propose(proposal) => {
                 self.set_proposal(proposal, ctx)?;

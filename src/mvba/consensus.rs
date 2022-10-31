@@ -17,15 +17,15 @@ impl Consensus {
     pub fn init(
         id: u32,
         secret_key: SecretKeyShare,
-        parties: PublicKeySet,
-        party_ids: Vec<NodeId>,
+        pub_key_set: PublicKeySet,
+        parties: Vec<NodeId>,
         number: usize,
         threshold: usize,
         proposal_checker: ProposalChecker,
     ) -> Consensus {
         let mut self_id = None;
-        for id in &party_ids {
-            let pub_key_share = parties.public_key_share(id);
+        for id in &parties {
+            let pub_key_share = pub_key_set.public_key_share(id);
             if secret_key.public_key_share().eq(&pub_key_share) {
                 self_id = Some(*id);
                 break;
@@ -35,20 +35,19 @@ impl Consensus {
         let broadcaster = Broadcaster::new(id, &secret_key, self_id);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
-        let abba = Abba::new(parties.clone(), number, threshold, broadcaster_rc.clone());
+        let abba = Abba::new(pub_key_set.clone(), number, threshold, broadcaster_rc.clone());
         let mut vcbc_map = HashMap::new();
 
-        for id in party_ids {
-            let _pub_key = parties.public_key_share(id);
+        for id in &parties {
+            let _pub_key = pub_key_set.public_key_share(id);
             let vcbc = Vcbc::new(
                 parties.clone(),
-                id,
-                number,
+                *id,
                 threshold,
                 broadcaster_rc.clone(),
                 proposal_checker,
             );
-            vcbc_map.insert(id, vcbc).unwrap();
+            vcbc_map.insert(*id, vcbc).unwrap();
         }
 
         Consensus {

@@ -1,11 +1,10 @@
 use super::message::Message;
 use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal, NodeId, ProposalChecker};
-use blsttc::{PublicKeySet};
+
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 pub(super) struct Context {
-    pub parties: PublicKeySet,
-    pub number: usize,
+    pub parties: Vec<NodeId>,
     pub threshold: usize,
     pub proposer_id: NodeId,
     pub proposal: Option<Proposal>,
@@ -17,8 +16,7 @@ pub(super) struct Context {
 
 impl Context {
     pub fn new(
-        parties: PublicKeySet,
-        number: usize,
+        parties: Vec<NodeId>,
         threshold: usize,
         proposer_id: NodeId,
         broadcaster: Rc<RefCell<Broadcaster>>,
@@ -26,7 +24,6 @@ impl Context {
     ) -> Self {
         Self {
             parties,
-            number,
             threshold,
             proposer_id,
             proposal: None,
@@ -41,7 +38,7 @@ impl Context {
     // There are $n$ parties, $t$ of which may be corrupted.
     // Protocol is reliable for $n > 3t$.
     pub fn super_majority_num(&self) -> usize {
-        self.number - self.threshold
+        self.parties.len() - self.threshold
     }
 
     pub fn broadcast(&self, msg: &self::Message) {
