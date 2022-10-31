@@ -1,17 +1,15 @@
 use super::message::Message;
-use crate::mvba::{
-    broadcaster::Broadcaster,  proposal::Proposal, ProposalChecker,
-};
-use blsttc::{PublicKeySet, PublicKeyShare};
+use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal, NodeId, ProposalChecker};
+use blsttc::{PublicKeySet};
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 pub(super) struct Context {
     pub parties: PublicKeySet,
     pub number: usize,
     pub threshold: usize,
-    pub proposer_index: usize,
+    pub proposer_id: NodeId,
     pub proposal: Option<Proposal>,
-    pub echos: HashSet<PublicKeyShare>,
+    pub echos: HashSet<NodeId>,
     pub broadcaster: Rc<RefCell<Broadcaster>>,
     pub proposal_checker: ProposalChecker,
     pub delivered: bool,
@@ -22,7 +20,7 @@ impl Context {
         parties: PublicKeySet,
         number: usize,
         threshold: usize,
-        proposer_index: usize,
+        proposer_id: NodeId,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
@@ -30,7 +28,7 @@ impl Context {
             parties,
             number,
             threshold,
-            proposer_index,
+            proposer_id,
             proposal: None,
             echos: HashSet::new(),
             broadcaster,
@@ -48,14 +46,12 @@ impl Context {
 
     pub fn broadcast(&self, msg: &self::Message) {
         let data = bincode::serialize(msg).unwrap();
-        self.broadcaster.borrow_mut().push_message(super::MODULE_NAME, data);
+        self.broadcaster
+            .borrow_mut()
+            .push_message(super::MODULE_NAME, data);
     }
 
-    pub fn proposer_key(&self) -> PublicKeyShare {
-        self.parties.public_key_share(self.proposer_index)
-    }
-
-    pub fn self_key(&self) -> PublicKeyShare {
-        self.broadcaster.borrow().self_key().clone()
+    pub fn self_id(&self) -> Option<NodeId> {
+        self.broadcaster.borrow().self_id()
     }
 }

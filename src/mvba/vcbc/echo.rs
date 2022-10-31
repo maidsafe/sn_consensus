@@ -1,7 +1,7 @@
 use super::context;
 use super::deliver::DeliverState;
 use super::error::Result;
-use super::message;
+
 use super::message::Message;
 use super::State;
 
@@ -11,7 +11,11 @@ impl State for EchoState {
     fn enter(mut self: Box<Self>, ctx: &mut context::Context) -> Result<Box<dyn State>> {
         let msg = Message::Echo(ctx.proposal.as_ref().unwrap().clone());
         ctx.broadcast(&msg);
-        self.process_message(&ctx.self_key(), &msg, ctx)?;
+
+        if let Some(id) = &ctx.self_id() {
+            self.process_message(id, &msg, ctx)?;
+        }
+
         match self.decide(ctx)? {
             Some(s) => Ok(s),
             None => Ok(self),
@@ -25,5 +29,9 @@ impl State for EchoState {
         } else {
             Ok(None)
         }
+    }
+
+    fn name(&self) -> String {
+        "echo state".to_string()
     }
 }

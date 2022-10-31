@@ -1,10 +1,10 @@
 use super::hash::Hash32;
-use blsttc::PublicKeyShare;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Proposal {
-    pub proposer_index: usize,
+    pub proposer_id: usize,
     pub value: Vec<u8>,
     pub proof: Vec<u8>,
 }

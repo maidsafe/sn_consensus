@@ -1,7 +1,7 @@
 use super::error::Result;
 use crate::mvba::hash::Hash32;
 
-pub(super) const MSG_TAG_PRE_PROCESS: &'static str = "pre-process";
+pub(super) const MSG_TAG_PRE_PROCESS: &str = "pre-process";
 
 #[derive(Debug)]
 pub(crate) struct Message {
@@ -11,7 +11,7 @@ pub(crate) struct Message {
 }
 
 impl Message {
-    pub fn decode(data: &[u8]) -> Result<Self> {
+    pub fn decode(_data: &[u8]) -> Result<Self> {
         todo!()
     }
 

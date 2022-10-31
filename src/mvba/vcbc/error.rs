@@ -1,11 +1,10 @@
-use crate::mvba::proposal::Proposal;
-use blsttc::PublicKeyShare;
+use crate::mvba::{proposal::Proposal, NodeId};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
     #[error("invalid proposer. expected {0:?}, get {1:?}")]
-    InvalidProposer(usize, usize),
+    InvalidProposer(NodeId, NodeId),
     #[error("invalid proposal: {0:?}")]
     InvalidProposal(Proposal),
     #[error("duplicated proposal: {0:?}")]

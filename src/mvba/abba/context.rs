@@ -46,6 +46,6 @@ impl Context {
     }
 
     pub fn cloned_self_key(&self) -> PublicKeyShare {
-        self.broadcaster.borrow().self_key().clone()
+        self.broadcaster.borrow().self_key()
     }
 }

@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Hash32([u8; 32]);
 

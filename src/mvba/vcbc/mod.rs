@@ -11,26 +11,26 @@ use self::error::Result;
 use self::message::Message;
 use self::propose::ProposeState;
 use self::state::State;
-use super::ProposalChecker;
+use super::{NodeId, ProposalChecker};
 use crate::mvba::{broadcaster::Broadcaster, proposal::Proposal};
-use blsttc::{PublicKeySet, PublicKeyShare};
+use blsttc::{PublicKeySet};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub(crate) const MODULE_NAME: &'static str = "vcbc";
+pub(crate) const MODULE_NAME: &str = "vcbc";
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties
 // using verifiable authenticated consistent broadcast.
-pub(crate) struct VCBC {
+pub(crate) struct Vcbc {
     ctx: context::Context,
     state: Box<dyn State>,
 }
 
-impl VCBC {
+impl Vcbc {
     pub fn new(
         parties: PublicKeySet,
-        proposer_index: usize,
+        proposer_id: NodeId,
         number: usize,
         threshold: usize,
         broadcaster: Rc<RefCell<Broadcaster>>,
@@ -40,7 +40,7 @@ impl VCBC {
             parties,
             number,
             threshold,
-            proposer_index,
+            proposer_id,
             broadcaster,
             proposal_checker,
         );
@@ -53,7 +53,7 @@ impl VCBC {
 
     // propose sets the proposal and broadcast propose message.
     pub fn propose(&mut self, proposal: &Proposal) -> Result<()> {
-        debug_assert_eq!(proposal.proposer_index, self.ctx.proposer_index);
+        debug_assert_eq!(proposal.proposer_id, self.ctx.proposer_id);
 
         self.state.set_proposal(proposal, &mut self.ctx)?;
         if let Some(s) = self.state.decide(&mut self.ctx)? {
@@ -62,7 +62,7 @@ impl VCBC {
         Ok(())
     }
 
-    pub fn process_message(&mut self, sender: &PublicKeyShare, message: &[u8]) -> Result<()> {
+    pub fn process_message(&mut self, sender: &NodeId, message: &[u8]) -> Result<()> {
         let msg: Message = bincode::deserialize(message)?;
 
         self.state.process_message(sender, &msg, &mut self.ctx)?;

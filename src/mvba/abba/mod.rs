@@ -8,7 +8,7 @@ mod pre_process;
 
 use blsttc::{PublicKeySet, PublicKeyShare};
 
-use self::error::{Error, Result};
+use self::error::{Result};
 use self::message::Message;
 use self::pre_process::ProposeState;
 use self::state::State;
@@ -16,7 +16,7 @@ use crate::mvba::broadcaster::Broadcaster;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub(crate) const MODULE_NAME: &'static str = "abba";
+pub(crate) const MODULE_NAME: &str = "abba";
 
 // VCBC is a verifiably authenticatedly c-broadcast protocol.
 // Each party $P_i$ c-broadcasts the value that it proposes to all other parties

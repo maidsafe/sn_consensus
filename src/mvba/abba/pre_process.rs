@@ -1,7 +1,7 @@
 use super::context;
 use super::error::Result;
-use super::message;
-use super::message::Message;
+
+
 use super::State;
 
 pub(super) struct ProposeState {
@@ -10,7 +10,7 @@ pub(super) struct ProposeState {
 
 impl ProposeState {
     pub fn new(ctx: context::Context) -> Self {
-        Self{ctx}
+        Self { ctx }
     }
 }
 
@@ -20,7 +20,7 @@ impl State for ProposeState {
     }
 
     fn decide(self: Box<Self>) -> Result<Box<dyn State>> {
-       todo!()
+        todo!()
     }
 
     fn name(&self) -> String {

@@ -1,17 +1,22 @@
-use super::bundle::Bundle;
-use blsttc::{SecretKeyShare, PublicKeyShare};
+use super::{bundle::Bundle, NodeId};
+use blsttc::{PublicKeyShare, SecretKeyShare};
 
+// Broadcaster holds information required to broadcast the messages.
+// If a node is an observer node, it doesn't broadcast messages.
+// For observer node SecretKeyShare and Node ID set to None
 pub struct Broadcaster {
-    id: u32,
+    bundle_id: u32,
     secret_key: SecretKeyShare,
+    node_id: Option<NodeId>,
     bundles: Vec<Bundle>,
 }
 
 impl Broadcaster {
-    pub fn new(id: u32, secret_key: &SecretKeyShare) -> Self {
+    pub fn new(id: u32, secret_key: &SecretKeyShare, node_id: Option<NodeId>) -> Self {
         Self {
-            id,
+            bundle_id: id,
             secret_key: secret_key.clone(),
+            node_id,
             bundles: Vec::new(),
         }
     }
@@ -20,9 +25,13 @@ impl Broadcaster {
         self.secret_key.public_key_share()
     }
 
+    pub fn self_id(&self) -> Option<NodeId> {
+        self.node_id
+    }
+
     pub fn push_message(&mut self, module: &str, message: Vec<u8>) {
         let bdl = Bundle {
-            id: self.id,
+            id: self.bundle_id,
             module: module.to_string(),
             message,
         };

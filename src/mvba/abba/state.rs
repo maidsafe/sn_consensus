@@ -1,10 +1,10 @@
 use blsttc::PublicKeyShare;
 
-use super::error::{Error, Result};
+use super::error::{Result};
 use super::message::Message;
 use super::message_set::MessageSet;
-use super::{context, message};
-use crate::mvba::{ proposal::Proposal};
+use super::{context};
+
 use std::collections::hash_map::Entry;
 
 pub(super) trait State {
@@ -23,7 +23,7 @@ pub(super) trait State {
     // returns the immutable version of context
     fn context(&self) -> &context::Context;
 
-    fn process_message(&mut self, sender: &PublicKeyShare, msg: Message) -> Result<()> {
+    fn process_message(&mut self, _sender: &PublicKeyShare, msg: Message) -> Result<()> {
         match self.context_mut().depot.entry(msg.proposal_id.clone()) {
             Entry::Occupied(mut occ_entry) => occ_entry.get_mut().add_message(msg),
             Entry::Vacant(vac_ntry) => {

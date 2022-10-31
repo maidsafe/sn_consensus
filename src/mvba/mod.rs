@@ -9,4 +9,5 @@ mod doc;
 mod hash;
 mod vcbc;
 
+pub type NodeId = usize;
 pub type ProposalChecker = fn(&proposal::Proposal) -> bool;

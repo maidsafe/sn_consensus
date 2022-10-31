@@ -14,7 +14,7 @@ impl MessageSet {
         }
     }
 
-    pub fn add_message(&mut self, msg: Message) {
+    pub fn add_message(&mut self, _msg: Message) {
         todo!()
     }
 }

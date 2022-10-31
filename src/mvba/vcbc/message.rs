@@ -1,4 +1,3 @@
-use serde::{Serialize, Deserialize};
 use crate::mvba::proposal::Proposal;
 
 

@@ -1,8 +1,9 @@
-use blsttc::PublicKeyShare;
 use super::error::{Error, Result};
 use super::message::Message;
-use super::{context, message};
+use super::{context};
 use crate::mvba::proposal::Proposal;
+use crate::mvba::NodeId;
+
 
 pub(super) trait State {
     // enters to the new state
@@ -12,42 +13,50 @@ pub(super) trait State {
     fn decide(&self, ctx: &mut context::Context) -> Result<Option<Box<dyn State>>>;
 
     // adds echo from the echoer for the context proposal
-    fn add_echo(&mut self, echoer: &PublicKeyShare, ctx: &mut context::Context) {
-        ctx.echos.insert(echoer.clone());
+    fn add_echo(&mut self, echoer: &NodeId, ctx: &mut context::Context) {
+        ctx.echos.insert(*echoer);
     }
 
+    fn name(&self) -> String;
+
     fn set_proposal(&mut self, proposal: &Proposal, ctx: &mut context::Context) -> Result<()> {
-        if proposal.proposer_index != ctx.proposer_index {
+        if proposal.proposer_id != ctx.proposer_id {
             return Err(Error::InvalidProposer(
-                proposal.proposer_index,
-                ctx.proposer_index,
+                ctx.proposer_id,
+                proposal.proposer_id,
             ));
         }
-        if let Some(context_proposal) = ctx.proposal.as_ref() {
-            if context_proposal != proposal {
-                return Err(Error::DuplicatedProposal(proposal.clone()));
+        match ctx.proposal.as_ref() {
+            Some(context_proposal) => {
+                if context_proposal != proposal {
+                    return Err(Error::DuplicatedProposal(proposal.clone()));
+                }
             }
-        }
-        if !(ctx.proposal_checker)(proposal) {
-            return Err(Error::InvalidProposal(proposal.clone()));
-        }
-        ctx.proposal = Some(proposal.clone());
+            None => {
+                if !(ctx.proposal_checker)(proposal) {
+                    return Err(Error::InvalidProposal(proposal.clone()));
+                }
+                ctx.proposal = Some(proposal.clone());
+            }
+        };
 
         Ok(())
     }
 
     fn process_message(
         &mut self,
-        sender: &PublicKeyShare,
+        sender: &NodeId,
         msg: &Message,
         ctx: &mut context::Context,
     ) -> Result<()> {
+        log::debug!("{} processing message: {:?}", self.name(), msg);
+
         match msg {
             Message::Propose(proposal) => {
-                self.set_proposal(&proposal, ctx)?;
+                self.set_proposal(proposal, ctx)?;
             }
             Message::Echo(proposal) => {
-                self.set_proposal(&proposal, ctx)?;
+                self.set_proposal(proposal, ctx)?;
                 self.add_echo(sender, ctx);
             }
             _ => {}
