@@ -2,7 +2,7 @@
 name = "sn_consensus"
 version = "3.1.2"
 description = "Safe Network Membership: Enables nodes to dynamically join and leave a section"
-authors = [ "David Rusu <davidrusu.me@gmail.com>" ]
+authors = ["David Rusu <davidrusu.me@gmail.com>"]
 license = "MIT OR BSD-3-Clause"
 repository = "https://github.com/maidsafe/sn_consensus"
 edition = "2021"
@@ -12,23 +12,14 @@ rand = "0.8"
 bincode = "1.2.1"
 thiserror = "1.0"
 log = "0.4.13"
+tiny-keccak = "2.0.2"
 
-  [dependencies.serde]
-  version = "1"
-  features = [ "derive" ]
+[dependencies.serde]
+version = "1"
+features = ["derive"]
 
-  [dependencies.blsttc]
-  version = "7.0.0"
-
-  [dependencies.ed25519]
-  version = "1.0.0"
-  package = "ed25519-dalek"
-  features = [ "serde" ]
-  optional = true
-
-[features]
-default = [ ]
-bad_crypto = [ ]
+[dependencies.blsttc]
+version = "7.0.0"
 
 [profile.test]
 opt-level = 3

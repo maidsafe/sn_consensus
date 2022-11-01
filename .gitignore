@@ -44,3 +44,6 @@ tmp
 
 # Message Sequence Charts
 *.msc
+
+.vscode
+.todo
