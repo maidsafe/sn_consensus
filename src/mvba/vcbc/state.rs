@@ -1,9 +1,8 @@
+use super::context;
 use super::error::{Error, Result};
 use super::message::Message;
-use super::{context};
 use crate::mvba::proposal::Proposal;
 use crate::mvba::NodeId;
-
 
 pub(super) trait State {
     // enters to the new state
@@ -51,9 +50,6 @@ pub(super) trait State {
     ) -> Result<()> {
         log::debug!("{} processing message: {:?}", self.name(), msg);
 
-        if !ctx.parties.contains(sender) {
-            return Err(Error::InvalidSender(*sender));
-        }
         match msg {
             Message::Propose(proposal) => {
                 self.set_proposal(proposal, ctx)?;
@@ -62,7 +58,6 @@ pub(super) trait State {
                 self.set_proposal(proposal, ctx)?;
                 self.add_echo(sender, ctx);
             }
-            _ => {}
         }
 
         Ok(())

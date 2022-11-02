@@ -29,22 +29,20 @@ pub(crate) struct Vcbc {
 
 impl Vcbc {
     pub fn new(
-        parties: Vec<NodeId>,
-        proposer_id: NodeId,
+        number: usize,
         threshold: usize,
+        proposer_id: NodeId,
         broadcaster: Rc<RefCell<Broadcaster>>,
         proposal_checker: ProposalChecker,
     ) -> Self {
-        let ctx = context::Context::new(
-            parties,
-            threshold,
-            proposer_id,
-            broadcaster,
-            proposal_checker,
-        );
-
         Self {
-            ctx,
+            ctx : context::Context::new(
+                number,
+                threshold,
+                proposer_id,
+                broadcaster,
+                proposal_checker,
+            ),
             state: Box::new(ProposeState),
         }
     }

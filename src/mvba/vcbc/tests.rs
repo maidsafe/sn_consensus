@@ -34,13 +34,7 @@ impl TestData {
             &proposer_key,
             Some(Self::PARTY_X),
         )));
-        let vcbc = Vcbc::new(
-            vec![Self::PARTY_X, Self::PARTY_Y, Self::PARTY_B, Self::PARTY_S],
-            proposer_id,
-            1,
-            broadcaster.clone(),
-            valid_proposal,
-        );
+        let vcbc = Vcbc::new(4, 1, proposer_id, broadcaster.clone(), valid_proposal);
 
         // Creating a random proposal
         let mut rng = rand::thread_rng();
@@ -176,26 +170,5 @@ fn test_duplicated_proposal() {
     assert_eq!(
         t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
         Some(Error::DuplicatedProposal(duplicated_proposal)),
-    );
-}
-
-#[test]
-fn test_byzantine_messages() {
-    let mut t = TestData::new(TestData::PARTY_B);
-
-    let mut byz_proposal = t.proposal.clone();
-    byz_proposal.proposer_id = 66; // unknown proposer
-    let data = bincode::serialize(&Message::Propose(byz_proposal.clone())).unwrap();
-    assert_eq!(
-        t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
-        Some(Error::InvalidProposer(
-            TestData::PARTY_B,
-            byz_proposal.proposer_id
-        ))
-    );
-
-    assert_eq!(
-        t.vcbc.process_message(&66, &t.propose_msg()).err(),
-        Some(Error::InvalidSender(66))
     );
 }

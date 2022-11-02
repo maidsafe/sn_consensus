@@ -8,7 +8,7 @@ mod pre_process;
 
 use blsttc::{PublicKeySet, PublicKeyShare};
 
-use self::error::{Result};
+use self::error::Result;
 use self::message::Message;
 use self::pre_process::ProposeState;
 use self::state::State;
