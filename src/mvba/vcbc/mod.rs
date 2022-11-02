@@ -83,39 +83,34 @@ impl Vcbc {
     pub fn decide(&mut self) -> Result<()> {
         match self.state {
             State::Propose => {
-                match &self.ctx.proposal {
-                    Some(proposal) => {
-                        // Broadcast proposal if this party is the proposer
-                        if Some(proposal.proposer_id) == self.ctx.self_id() {
-                            let msg = Message::Propose(proposal.clone());
-                            self.ctx.broadcast(&msg);
-                        }
-
-                        self.state = State::Echo;
-
-                        let msg = Message::Echo(proposal.clone());
+                if let Some(proposal) = &self.ctx.proposal {
+                    // Broadcast proposal if this party is the proposer
+                    if Some(proposal.proposer_id) == self.ctx.self_id() {
+                        let msg = Message::Propose(proposal.clone());
                         self.ctx.broadcast(&msg);
-
-                        if let Some(id) = &self.ctx.self_id() {
-                            self.process_message(id, msg)
-                        } else {
-                            self.decide()
-                        }
                     }
-                    None => Ok(()),
+
+                    self.state = State::Echo;
+
+                    let msg = Message::Echo(proposal.clone());
+                    self.ctx.broadcast(&msg);
+
+                    if let Some(id) = &self.ctx.self_id() {
+                        return self.process_message(id, msg);
+                    } else {
+                        return self.decide();
+                    }
                 }
             }
             State::Echo => {
                 if self.ctx.echos.len() >= self.ctx.super_majority_num() {
                     self.state = State::Deliver;
                     self.ctx.delivered = true;
-                    Ok(())
-                } else {
-                    Ok(())
                 }
             }
-            State::Deliver => Ok(()),
+            State::Deliver => (),
         }
+        Ok(())
     }
 
     pub fn process_message(&mut self, sender: &NodeId, msg: Message) -> Result<()> {
