@@ -57,12 +57,12 @@ impl TestData {
         }
     }
 
-    pub fn propose_msg(&self) -> Vec<u8> {
-        bincode::serialize(&Message::Propose(self.proposal.clone())).unwrap()
+    pub fn propose_msg(&self) -> Message {
+        Message::Propose(self.proposal.clone())
     }
 
-    pub fn echo_msg(&self) -> Vec<u8> {
-        bincode::serialize(&Message::Echo(self.proposal.clone())).unwrap()
+    pub fn echo_msg(&self) -> Message {
+        Message::Echo(self.proposal.clone())
     }
 
     pub fn is_proposed(&self) -> bool {
@@ -89,7 +89,7 @@ fn test_should_not_propose() {
     let mut t = TestData::new(TestData::PARTY_S);
 
     t.vcbc
-        .process_message(&TestData::PARTY_Y, &t.echo_msg())
+        .process_message(&TestData::PARTY_Y, t.echo_msg())
         .unwrap();
 
     assert!(!t.is_proposed());
@@ -106,10 +106,10 @@ fn test_normal_case() {
 
     t.vcbc.propose(&t.proposal).unwrap();
     t.vcbc
-        .process_message(&TestData::PARTY_Y, &t.echo_msg())
+        .process_message(&TestData::PARTY_Y, t.echo_msg())
         .unwrap();
     t.vcbc
-        .process_message(&TestData::PARTY_S, &t.echo_msg())
+        .process_message(&TestData::PARTY_S, t.echo_msg())
         .unwrap();
 
     assert!(t.vcbc.is_delivered());
@@ -124,10 +124,10 @@ fn test_delayed_propose_message() {
     let mut t = TestData::new(TestData::PARTY_S);
 
     t.vcbc
-        .process_message(&TestData::PARTY_Y, &t.echo_msg())
+        .process_message(&TestData::PARTY_Y, t.echo_msg())
         .unwrap();
     t.vcbc
-        .process_message(&TestData::PARTY_S, &t.echo_msg())
+        .process_message(&TestData::PARTY_S, t.echo_msg())
         .unwrap();
 
     assert!(t.vcbc.is_delivered());
@@ -135,7 +135,7 @@ fn test_delayed_propose_message() {
     // Receiving propose message now
     t.broadcaster.borrow_mut().clear();
     t.vcbc
-        .process_message(&TestData::PARTY_S, &t.propose_msg())
+        .process_message(&TestData::PARTY_S, t.propose_msg())
         .unwrap();
 
     assert!(!t.is_echoed());
@@ -148,7 +148,7 @@ fn test_invalid_proposal() {
 
     assert_eq!(
         t.vcbc
-            .process_message(&TestData::PARTY_B, &t.propose_msg())
+            .process_message(&TestData::PARTY_B, t.propose_msg())
             .err(),
         Some(Error::InvalidProposal(t.proposal)),
     );
@@ -160,7 +160,7 @@ fn test_duplicated_proposal() {
 
     // Party_x receives a proposal from party_b
     t.vcbc
-        .process_message(&TestData::PARTY_B, &t.propose_msg())
+        .process_message(&TestData::PARTY_B, t.propose_msg())
         .unwrap();
 
     // Party_x receives an echo message from from party_s
@@ -171,10 +171,10 @@ fn test_duplicated_proposal() {
         value: (0..100).map(|_| rng.gen_range(0..64)).collect(),
         proof: (0..100).map(|_| rng.gen_range(0..64)).collect(),
     };
-    let data = bincode::serialize(&Message::Propose(duplicated_proposal.clone())).unwrap();
+    let msg = Message::Propose(duplicated_proposal.clone());
 
     assert_eq!(
-        t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
+        t.vcbc.process_message(&TestData::PARTY_B, msg).err(),
         Some(Error::DuplicatedProposal(duplicated_proposal)),
     );
 }
@@ -185,9 +185,9 @@ fn test_byzantine_messages() {
 
     let mut byz_proposal = t.proposal.clone();
     byz_proposal.proposer_id = 66; // unknown proposer
-    let data = bincode::serialize(&Message::Propose(byz_proposal.clone())).unwrap();
+    let msg = Message::Propose(byz_proposal.clone());
     assert_eq!(
-        t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
+        t.vcbc.process_message(&TestData::PARTY_B, msg).err(),
         Some(Error::InvalidProposer(
             TestData::PARTY_B,
             byz_proposal.proposer_id
@@ -195,7 +195,7 @@ fn test_byzantine_messages() {
     );
 
     assert_eq!(
-        t.vcbc.process_message(&66, &t.propose_msg()).err(),
+        t.vcbc.process_message(&66, t.propose_msg()).err(),
         Some(Error::InvalidSender(66))
     );
 }

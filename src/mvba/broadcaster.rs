@@ -48,9 +48,9 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_message(&self, data: &Vec<u8>) -> bool {
+    pub fn has_message(&self, msg: &super::vcbc::message::Message) -> bool {
         for bdl in &self.bundles {
-            if bdl.message.eq(data) {
+            if bdl.message.eq(&bincode::serialize(&msg).unwrap()) {
                 return true;
             }
         }
