@@ -1,9 +1,9 @@
 use blsttc::PublicKeyShare;
 
-use super::error::{Result};
+use super::context;
+use super::error::Result;
 use super::message::Message;
 use super::message_set::MessageSet;
-use super::{context};
 
 use std::collections::hash_map::Entry;
 

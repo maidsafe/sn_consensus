@@ -1,7 +1,6 @@
 use super::context;
 use super::error::Result;
 
-
 use super::State;
 
 pub(super) struct ProposeState {

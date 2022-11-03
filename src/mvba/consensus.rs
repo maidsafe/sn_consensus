@@ -35,15 +35,20 @@ impl Consensus {
         let broadcaster = Broadcaster::new(id, &secret_key, self_id);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
-        let abba = Abba::new(pub_key_set.clone(), number, threshold, broadcaster_rc.clone());
+        let abba = Abba::new(
+            pub_key_set.clone(),
+            number,
+            threshold,
+            broadcaster_rc.clone(),
+        );
         let mut vcbc_map = HashMap::new();
 
         for id in &parties {
             let _pub_key = pub_key_set.public_key_share(id);
             let vcbc = Vcbc::new(
-                parties.clone(),
-                *id,
+                parties.len(),
                 threshold,
+                *id,
                 broadcaster_rc.clone(),
                 proposal_checker,
             );
