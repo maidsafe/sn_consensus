@@ -6,7 +6,7 @@ use blsttc::{PublicKeyShare, SecretKeyShare};
 // For observer node SecretKeyShare and Node ID set to None
 pub struct Broadcaster {
     bundle_id: u32,
-    secret_key: SecretKeyShare,
+    _secret_key: SecretKeyShare,
     node_id: Option<NodeId>,
     bundles: Vec<Bundle>,
 }
@@ -15,14 +15,14 @@ impl Broadcaster {
     pub fn new(id: u32, secret_key: &SecretKeyShare, node_id: Option<NodeId>) -> Self {
         Self {
             bundle_id: id,
-            secret_key: secret_key.clone(),
+            _secret_key: secret_key.clone(),
             node_id,
             bundles: Vec::new(),
         }
     }
 
     pub fn self_key(&self) -> PublicKeyShare {
-        self.secret_key.public_key_share()
+        self._secret_key.public_key_share()
     }
 
     pub fn self_id(&self) -> Option<NodeId> {
@@ -48,9 +48,9 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_message(&self, data: &Vec<u8>) -> bool {
+    pub fn has_message(&self, msg: &super::vcbc::message::Message) -> bool {
         for bdl in &self.bundles {
-            if bdl.message.eq(data) {
+            if bdl.message.eq(&bincode::serialize(&msg).unwrap()) {
                 return true;
             }
         }

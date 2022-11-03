@@ -1,14 +1,16 @@
 use crate::mvba::{
-    abba::Abba, broadcaster::Broadcaster, proposal::Proposal, vcbc::Vcbc, NodeId, ProposalChecker,
+    broadcaster::Broadcaster, proposal::Proposal, vcbc::Vcbc, NodeId, ProposalChecker,
 };
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+use super::bundle::Bundle;
 
 pub struct Consensus {
     _id: u32,
     _number: usize,
     threshold: usize,
-    _abba: Abba,
+    //_abba: Abba,
     vcbc_map: HashMap<NodeId, Vcbc>,
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
@@ -35,12 +37,13 @@ impl Consensus {
         let broadcaster = Broadcaster::new(id, &secret_key, self_id);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
-        let abba = Abba::new(
-            pub_key_set.clone(),
-            number,
-            threshold,
-            broadcaster_rc.clone(),
-        );
+        // TODO: uncomment me
+        // let abba = Abba::new(
+        //     pub_key_set.clone(),
+        //     number,
+        //     threshold,
+        //     broadcaster_rc.clone(),
+        // );
         let mut vcbc_map = HashMap::new();
 
         for id in &parties {
@@ -57,7 +60,6 @@ impl Consensus {
 
         Consensus {
             _id: id,
-            _abba: abba,
             _number: number,
             threshold,
             vcbc_map,
@@ -67,6 +69,8 @@ impl Consensus {
 
     // start the consensus by proposing a proposal and broadcasting it.
     pub fn start(&mut self, proposal: Proposal) -> Vec<Vec<u8>> {
+        log::debug!("starting {:?}", self.broadcaster.borrow().self_key());
+
         match self.broadcaster.borrow().self_id() {
             Some(id) => {
                 let vcbc = self.vcbc_map.get_mut(&id).unwrap(); // TODO: no unwrap
@@ -80,7 +84,7 @@ impl Consensus {
         }
     }
 
-    pub fn process_bundle(&mut self, _data: &[u8]) -> Vec<Vec<u8>> {
+    pub fn process_bundle(&mut self, sender: NodeId, bundle: &Bundle) -> Vec<Vec<u8>> {
         let mut delivered_count = 0;
         for vcbc in self.vcbc_map.values() {
             if vcbc.is_delivered() {
@@ -88,6 +92,9 @@ impl Consensus {
             }
         }
 
+        let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
+        let msg = bincode::deserialize(&bundle.message).unwrap();
+        vcbc.process_message(&sender, &msg).unwrap();
         if delivered_count >= self.super_majority_num() {}
 
         self.broadcaster.borrow_mut().take_bundles()

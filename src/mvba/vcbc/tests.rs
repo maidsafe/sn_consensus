@@ -51,12 +51,12 @@ impl TestData {
         }
     }
 
-    pub fn propose_msg(&self) -> Vec<u8> {
-        bincode::serialize(&Message::Propose(self.proposal.clone())).unwrap()
+    pub fn propose_msg(&self) -> Message {
+        Message::Propose(self.proposal.clone())
     }
 
-    pub fn echo_msg(&self) -> Vec<u8> {
-        bincode::serialize(&Message::Echo(self.proposal.clone())).unwrap()
+    pub fn echo_msg(&self) -> Message {
+        Message::Echo(self.proposal.clone())
     }
 
     pub fn is_proposed(&self) -> bool {
@@ -165,10 +165,10 @@ fn test_duplicated_proposal() {
         value: (0..100).map(|_| rng.gen_range(0..64)).collect(),
         proof: (0..100).map(|_| rng.gen_range(0..64)).collect(),
     };
-    let data = bincode::serialize(&Message::Propose(duplicated_proposal.clone())).unwrap();
+    let msg = Message::Propose(duplicated_proposal.clone());
 
     assert_eq!(
-        t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
+        t.vcbc.process_message(&TestData::PARTY_B, &msg).err(),
         Some(Error::DuplicatedProposal(duplicated_proposal)),
     );
 }

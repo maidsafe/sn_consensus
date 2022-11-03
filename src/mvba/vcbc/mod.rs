@@ -36,7 +36,7 @@ impl Vcbc {
         proposal_checker: ProposalChecker,
     ) -> Self {
         Self {
-            ctx : context::Context::new(
+            ctx: context::Context::new(
                 number,
                 threshold,
                 proposer_id,
@@ -58,10 +58,8 @@ impl Vcbc {
         Ok(())
     }
 
-    pub fn process_message(&mut self, sender: &NodeId, message: &[u8]) -> Result<()> {
-        let msg: Message = bincode::deserialize(message)?;
-
-        self.state.process_message(sender, &msg, &mut self.ctx)?;
+    pub fn process_message(&mut self, sender: &NodeId, msg: &Message) -> Result<()> {
+        self.state.process_message(sender, msg, &mut self.ctx)?;
         if let Some(s) = self.state.decide(&mut self.ctx)? {
             self.state = s;
         }
