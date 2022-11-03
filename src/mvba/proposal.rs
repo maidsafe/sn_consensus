@@ -1,4 +1,4 @@
-use super::hash::Hash32;
+use super::hash::{hash, Hash32};
 
 use serde::{Deserialize, Serialize};
 
@@ -11,12 +11,6 @@ pub struct Proposal {
 
 impl Proposal {
     pub fn hash(&self) -> Hash32 {
-        use tiny_keccak::{Hasher, Sha3};
-
-        let mut sha3 = Sha3::v256();
-        let mut output = [0; 32];
-        sha3.update(&self.value);
-        sha3.finalize(&mut output);
-        Hash32::from(output)
+        hash(&self.value)
     }
 }

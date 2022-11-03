@@ -1,5 +1,8 @@
 use crate::mvba::{
-    broadcaster::Broadcaster, proposal::Proposal, vcbc::Vcbc, NodeId, ProposalChecker,
+    broadcaster::Broadcaster,
+    proposal::Proposal,
+    vcbc::{Vcbc},
+    NodeId, ProposalChecker,
 };
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -7,8 +10,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use super::bundle::Bundle;
 
 pub struct Consensus {
-    _id: u32,
-    _number: usize,
+    self_id: NodeId,
     threshold: usize,
     //_abba: Abba,
     vcbc_map: HashMap<NodeId, Vcbc>,
@@ -17,24 +19,15 @@ pub struct Consensus {
 
 impl Consensus {
     pub fn init(
-        id: u32,
-        secret_key: SecretKeyShare,
+        bundle_id: u32,
+        self_id: NodeId,
+        sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
-        number: usize,
         threshold: usize,
-        proposal_checker: ProposalChecker,
+        _proposal_checker: ProposalChecker,
     ) -> Consensus {
-        let mut self_id = None;
-        for id in &parties {
-            let pub_key_share = pub_key_set.public_key_share(id);
-            if secret_key.public_key_share().eq(&pub_key_share) {
-                self_id = Some(*id);
-                break;
-            }
-        }
-
-        let broadcaster = Broadcaster::new(id, &secret_key, self_id);
+        let broadcaster = Broadcaster::new(bundle_id, &sec_key_share);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
         // TODO: uncomment me
@@ -51,37 +44,35 @@ impl Consensus {
             let vcbc = Vcbc::new(
                 parties.len(),
                 threshold,
+                self_id,
+                "vcbc".to_string(),
                 *id,
+                0,
                 broadcaster_rc.clone(),
-                proposal_checker,
+                sec_key_share.clone(),
             );
             vcbc_map.insert(*id, vcbc).unwrap();
         }
 
         Consensus {
-            _id: id,
-            _number: number,
-            threshold,
+            self_id,
+            threshold: pub_key_set.threshold(),
             vcbc_map,
             broadcaster: broadcaster_rc,
         }
     }
 
     // start the consensus by proposing a proposal and broadcasting it.
-    pub fn start(&mut self, proposal: Proposal) -> Vec<Vec<u8>> {
+    pub fn start(&mut self, _proposal: Proposal) -> Vec<Vec<u8>> {
         log::debug!("starting {:?}", self.broadcaster.borrow().self_key());
 
-        match self.broadcaster.borrow().self_id() {
-            Some(id) => {
-                let vcbc = self.vcbc_map.get_mut(&id).unwrap(); // TODO: no unwrap
-                vcbc.propose(&proposal).unwrap(); // TODO: no unwrap
-                self.broadcaster.borrow_mut().take_bundles()
-            }
+        match self.vcbc_map.get_mut(&self.self_id) {
+            Some(_vcbc) => {}
             None => {
-                log::debug!("we are not member of parties for this round");
-                Vec::new()
+                log::warn!("this node is an observer node")
             }
         }
+        self.broadcaster.borrow_mut().take_bundles()
     }
 
     pub fn process_bundle(&mut self, sender: NodeId, bundle: &Bundle) -> Vec<Vec<u8>> {
@@ -94,7 +85,7 @@ impl Consensus {
 
         let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
         let msg = bincode::deserialize(&bundle.message).unwrap();
-        vcbc.process_message(&sender, &msg).unwrap();
+        vcbc.process_message(sender, msg).unwrap();
         if delivered_count >= self.super_majority_num() {}
 
         self.broadcaster.borrow_mut().take_bundles()
