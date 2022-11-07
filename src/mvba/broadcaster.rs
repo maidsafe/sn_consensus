@@ -25,7 +25,7 @@ impl Broadcaster {
         self._sec_key_share.public_key_share()
     }
 
-    pub fn send(&mut self, module: &str, message: Vec<u8>, _receiver: NodeId) {
+    pub fn send_to(&mut self, module: &str, message: Vec<u8>, _receiver: NodeId) {
         let bdl = Bundle {
             id: self.bundle_id,
             module: module.to_string(),

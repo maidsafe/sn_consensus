@@ -1,4 +1,3 @@
-
 // use crate::mvba::vcbc::error::Error;
 // use blsttc::SecretKeySet;
 // use rand::{random, thread_rng, Rng};

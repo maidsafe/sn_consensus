@@ -1,11 +1,16 @@
+use crate::mvba::{proposal::Proposal, NodeId};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
+    #[error("invalid proposer. expected {0:?}, get {1:?}")]
+    InvalidProposer(NodeId, NodeId),
+    #[error("invalid proposal: {0:?}")]
+    InvalidProposal(Proposal),
+    #[error("duplicated proposal: {0:?}")]
+    DuplicatedProposal(Proposal),
     #[error("encoding/decoding error: {0}")]
     Encoding(String),
-    #[error("Blsttc Error {0}")]
-    Blsttc(#[from] blsttc::error::Error),
 }
 
 impl From<bincode::Error> for Error {

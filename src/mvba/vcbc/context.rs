@@ -10,8 +10,8 @@ use std::{
 };
 
 pub(super) struct Context {
-    pub number: usize,
-    pub threshold: usize,
+    pub number: usize,          // this is same as $n$ in spec
+    pub threshold: usize,       // this is same as $t$ in spec
     pub id: String,             // this is same as $id$ in spec
     pub j: NodeId,              // this is same as $j$ in spec
     pub s: u32,                 // this is same as $s$ in spec
@@ -71,14 +71,11 @@ impl Context {
             log::warn!("ignoring suspicious message: {:?}. ", msg);
         }
 
-        match self.message_log.entry(msg.action.clone()) {
-            Entry::Occupied(mut occ_entry) => occ_entry.get_mut().push((sender, msg)),
-            Entry::Vacant(vac_entry) => {
-                let mut msg_vec = Vec::new();
-                msg_vec.push((sender, msg));
-                vac_entry.insert(msg_vec);
-            }
-        };
+        self.message_log
+            .entry(msg.action.clone())
+            .or_insert(Vec::new())
+            .push((sender, msg));
+
         Ok(())
     }
 }

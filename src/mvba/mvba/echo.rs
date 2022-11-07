@@ -13,7 +13,7 @@ impl State for EchoState {
         ctx.broadcast(&msg);
 
         if let Some(id) = &ctx.self_id() {
-            self.log_message(id, &msg, ctx)?;
+            self.process_message(id, &msg, ctx)?;
         }
 
         match self.decide(ctx)? {

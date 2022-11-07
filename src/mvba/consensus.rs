@@ -1,8 +1,5 @@
 use crate::mvba::{
-    broadcaster::Broadcaster,
-    proposal::Proposal,
-    vcbc::{Vcbc},
-    NodeId, ProposalChecker,
+    broadcaster::Broadcaster, proposal::Proposal, vcbc::Vcbc, NodeId, ProposalChecker,
 };
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -48,8 +45,9 @@ impl Consensus {
                 "vcbc".to_string(),
                 *id,
                 0,
-                broadcaster_rc.clone(),
+                pub_key_set.clone(),
                 sec_key_share.clone(),
+                broadcaster_rc.clone(),
             );
             vcbc_map.insert(*id, vcbc).unwrap();
         }
