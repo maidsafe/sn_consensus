@@ -83,7 +83,8 @@ impl Consensus {
 
         let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
         let msg = bincode::deserialize(&bundle.message).unwrap();
-        vcbc.process_message(sender, msg).unwrap();
+        vcbc.log_message(sender, msg).unwrap();
+        vcbc.decide().unwrap(); // no unwrap
         if delivered_count >= self.super_majority_num() {}
 
         self.broadcaster.borrow_mut().take_bundles()

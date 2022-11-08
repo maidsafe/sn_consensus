@@ -2,7 +2,6 @@ use blsttc::{Signature, SignatureShare};
 
 use crate::mvba::NodeId;
 
-pub(super) const MSG_ACTION_C_BROADCAST: &str = "c-broadcast";
 pub(super) const MSG_ACTION_C_SEND: &str = "c-send";
 pub(super) const MSG_ACTION_C_READY: &str = "c-ready";
 pub(super) const MSG_ACTION_C_FINAL: &str = "c-final";

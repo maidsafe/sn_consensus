@@ -1,4 +1,4 @@
-use super::hash::{hash, Hash32};
+use super::hash::Hash32;
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,6 @@ pub struct Proposal {
 
 impl Proposal {
     pub fn hash(&self) -> Hash32 {
-        hash(&self.value)
+        Hash32::calculate(&self.value)
     }
 }

@@ -52,6 +52,8 @@ impl Broadcaster {
         data
     }
 
+    // TODO: remove me
+    #[allow(dead_code)]
     #[cfg(test)]
     pub fn has_message(&self, msg: &super::vcbc::message::Message) -> bool {
         for bdl in &self.broadcast_bundles {
@@ -62,6 +64,8 @@ impl Broadcaster {
         false
     }
 
+    // TODO: remove me
+    #[allow(dead_code)]
     #[cfg(test)]
     pub fn clear(&mut self) {
         self.broadcast_bundles.clear();
