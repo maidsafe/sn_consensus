@@ -123,7 +123,7 @@ fn test_membership_reject_votes_with_invalid_signatures() -> Result<()> {
     };
     let bytes = vote.to_bytes()?;
     let voter = 0;
-    let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
+    let sig = rng.gen::<SecretKeyShare>().sign(bytes);
     let resp = proc.handle_signed_vote(SignedVote { vote, voter, sig });
     assert!(matches!(resp, Err(Error::InvalidElderSignature)));
     Ok(())

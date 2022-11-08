@@ -43,7 +43,7 @@ impl<T: Proposition> Consensus<T> {
     }
 
     pub fn sign<M: Serialize>(&self, msg: &M) -> Result<SignatureShare> {
-        Ok(self.secret_key.1.sign(&bincode::serialize(msg)?))
+        Ok(self.secret_key.1.sign(bincode::serialize(msg)?))
     }
 
     pub fn id(&self) -> NodeId {

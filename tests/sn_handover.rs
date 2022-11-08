@@ -160,7 +160,7 @@ fn test_handover_reject_votes_with_invalid_signatures() -> Result<()> {
     let gen = proc.gen;
     let voter = 1;
     let bytes = bincode::serialize(&(&ballot, &gen))?;
-    let sig = rng.gen::<SecretKeyShare>().sign(&bytes);
+    let sig = rng.gen::<SecretKeyShare>().sign(bytes);
     let vote = Vote {
         gen,
         ballot,

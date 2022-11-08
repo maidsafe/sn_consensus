@@ -19,7 +19,7 @@ version = "1"
 features = ["derive"]
 
 [dependencies.blsttc]
-version = "7.0.0"
+version = "8.0.0"
 
 [profile.test]
 opt-level = 3
@@ -36,4 +36,4 @@ debug = true
 eyre = "0.6.5"
 quickcheck = "1"
 quickcheck_macros = "1"
-env_logger = "0.8"
+env_logger = "0.9"
