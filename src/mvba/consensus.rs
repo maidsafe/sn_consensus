@@ -4,7 +4,7 @@ use crate::mvba::{
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::bundle::Bundle;
+use super::{bundle::Bundle, vcbc::Tag};
 
 pub struct Consensus {
     self_id: NodeId,
@@ -38,13 +38,12 @@ impl Consensus {
 
         for id in &parties {
             let _pub_key = pub_key_set.public_key_share(id);
+            let tag = Tag::new("vcbc", *id, 0);
             let vcbc = Vcbc::new(
                 parties.len(),
                 threshold,
                 self_id,
-                "vcbc".to_string(),
-                *id,
-                0,
+                tag,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),

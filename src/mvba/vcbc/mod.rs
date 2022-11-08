@@ -33,14 +33,28 @@ enum State {
     Delivered,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Tag {
+    id: String, // this is same as $id$ in spec
+    j: usize,   // this is same as $j$ in spec
+    s: usize,   // this is same as $j$ in spec
+}
+impl Tag {
+    pub fn new(id: &str, j: usize, s: usize) -> Self {
+        Self {
+            id: id.to_string(),
+            j,
+            s,
+        }
+    }
+}
+
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
 pub(crate) struct Vcbc {
     number: usize,                       // this is same as $n$ in spec
     threshold: usize,                    // this is same as $t$ in spec
-    id: String,                          // this is same as $id$ in spec
+    tag: Tag,                            // this is same as $Tag$ in spec
     i: NodeId,                           // this is same as $i$ in spec
-    j: NodeId,                           // this is same as $j$ in spec
-    s: u32,                              // this is same as $s$ in spec
     m_bar: Option<Vec<u8>>,              // this is same as $\bar{m}$ in spec
     u_bar: Option<Signature>,            // this is same as $\bar{\mu}$ in spec
     wd: HashMap<NodeId, SignatureShare>, // this is same as $W_d$ in spec
@@ -55,15 +69,11 @@ pub(crate) struct Vcbc {
 }
 
 impl Vcbc {
-    // TODO: how to fix clippy issue????
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         number: usize,
         threshold: usize,
         i: NodeId,
-        id: String,
-        j: NodeId,
-        s: u32,
+        tag: Tag,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
@@ -71,10 +81,8 @@ impl Vcbc {
         Self {
             number,
             threshold,
-            id,
             i,
-            j,
-            s,
+            tag,
             m_bar: None,
             u_bar: None,
             wd: HashMap::new(),
@@ -94,14 +102,12 @@ impl Vcbc {
     // c_broadcast sends the messages `msg` to all other parties.
     // It also adds the message to message_log and process it.
     pub fn c_broadcast(&mut self, msg: Vec<u8>) -> Result<()> {
-        debug_assert_eq!(self.i, self.j);
+        debug_assert_eq!(self.i, self.tag.j);
 
         // Upon receiving message (ID.j.s, in, c-broadcast, m):
         // send (ID.j.s, c-send, m) to all parties
         let send_msg = Message {
-            id: self.id.clone(),
-            j: self.j,
-            s: self.s,
+            tag: self.tag.clone(),
             action: MSG_ACTION_C_SEND.to_string(),
             m: msg,
             sig: Sig::None,
@@ -112,8 +118,8 @@ impl Vcbc {
 
     // log_message logs (adds) messages into the message_log
     pub fn log_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
-        if msg.id != self.id || msg.j != self.j || msg.s != self.s {
-            log::trace!("ignoring  message: {:?}. ", msg);
+        if msg.tag != self.tag {
+            log::trace!("invalid tag, ignoring message.: {:?}. ", msg);
             return Ok(());
         }
 
@@ -145,7 +151,7 @@ impl Vcbc {
                         let msg_cloned = msgs.clone();
                         for (l, msg) in msg_cloned {
                             // if j = l and m̄ = ⊥ then
-                            if l == self.j && self.m_bar.is_none() {
+                            if l == self.tag.j && self.m_bar.is_none() {
                                 // m̄ ← m
                                 self.m_bar = Some(msg.m);
 
@@ -156,16 +162,14 @@ impl Vcbc {
                                 let sign_bytes = self.sign_bytes();
                                 let s1 = self.sec_key_share.sign(sign_bytes);
                                 let ready_msg = Message {
-                                    id: self.id.clone(),
-                                    j: self.j,
-                                    s: self.s,
+                                    tag: self.tag.clone(),
                                     action: MSG_ACTION_C_READY.to_string(),
                                     m: self.d.as_ref().unwrap().to_bytes(),
                                     sig: Sig::SignatureShare(s1),
                                 };
 
                                 // send (ID.j.s, c-ready, H(m), ν) to Pj
-                                self.send_to(&ready_msg, self.j)?;
+                                self.send_to(&ready_msg, self.tag.j)?;
 
                                 self.state = State::Ready;
                                 return self.decide();
@@ -205,7 +209,7 @@ impl Vcbc {
                                     }
 
                                     // if i = j and νl is a valid S1-signature share then
-                                    if self.i == msg.j && valid_sig {
+                                    if self.i == msg.tag.j && valid_sig {
                                         // Wd ← Wd ∪ {νl}
                                         e.insert(sig_share);
 
@@ -220,9 +224,7 @@ impl Vcbc {
                                                 .combine_signatures(self.wd.iter())?;
 
                                             let final_msg = Message {
-                                                id: self.id.clone(),
-                                                j: self.j,
-                                                s: self.s,
+                                                tag: self.tag.clone(),
                                                 action: MSG_ACTION_C_FINAL.to_string(),
                                                 m: self.d.as_ref().unwrap().to_bytes(),
                                                 sig: Sig::Signature(sig),
@@ -260,9 +262,7 @@ impl Vcbc {
 
     fn sign_bytes(&mut self) -> Vec<u8> {
         let msg = Message {
-            id: self.id.clone(),
-            j: self.j,
-            s: self.s,
+            tag: self.tag.clone(),
             action: MSG_ACTION_C_READY.to_string(),
             m: self.d.as_ref().unwrap().to_bytes(),
             sig: Sig::None,

@@ -1,6 +1,6 @@
 use blsttc::{Signature, SignatureShare};
 
-use crate::mvba::NodeId;
+use super::Tag;
 
 pub(super) const MSG_ACTION_C_SEND: &str = "c-send";
 pub(super) const MSG_ACTION_C_READY: &str = "c-ready";
@@ -15,9 +15,7 @@ pub enum Sig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Message {
-    pub id: String,
-    pub j: NodeId,
-    pub s: u32,
+    pub tag: Tag,
     pub action: String,
     pub m: Vec<u8>, // TODO: use serde trait
     pub sig: Sig,
