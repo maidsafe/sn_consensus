@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_calc() {
-        let buf = hex::decode("12b38977f2d67f06f0c0cd54aaf7324cf4fee184398ea33d295e8d1543c2ee1a")
+        let buf = hex::decode("6F6F129471590D2C91804C812B5750CD44CBDFB7238541C451E1EA2BC0193177")
             .unwrap();
         assert_eq!(
             Hash32::calculate("abcd".as_bytes()).0.to_vec(),
