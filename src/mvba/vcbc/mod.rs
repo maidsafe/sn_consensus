@@ -120,7 +120,7 @@ impl Vcbc {
         log::debug!("{:?} adding message: {:?}", self.state, msg);
         self.message_log
             .entry(msg.action.clone())
-            .or_insert(Vec::new())
+            .or_default()
             .push((sender, msg));
 
         Ok(())
@@ -145,7 +145,7 @@ impl Vcbc {
                         let msg_cloned = msgs.clone();
                         for (l, msg) in msg_cloned {
                             // if j = l and m̄ = ⊥ then
-                            if l == self.j && self.m_bar == None {
+                            if l == self.j && self.m_bar.is_none() {
                                 // m̄ ← m
                                 self.m_bar = Some(msg.m);
 
