@@ -1,28 +1,22 @@
 use super::{bundle::Bundle, NodeId};
-use blsttc::{PublicKeyShare, SecretKeyShare};
+use blsttc::{SecretKeyShare};
 
 // Broadcaster holds information required to broadcast the messages.
 // If a node is an observer node, it should't broadcast messages.
 // TODO: How to find out it is an observer node or not?
 pub struct Broadcaster {
     bundle_id: u32,
-    _sec_key_share: SecretKeyShare,
     broadcast_bundles: Vec<Bundle>,
     send_bundles: Vec<Bundle>,
 }
 
 impl Broadcaster {
-    pub fn new(id: u32, sec_key_share: &SecretKeyShare) -> Self {
+    pub fn new(id: u32, _sec_key_share: &SecretKeyShare) -> Self {
         Self {
             bundle_id: id,
-            _sec_key_share: sec_key_share.clone(),
             broadcast_bundles: Vec::new(),
             send_bundles: Vec::new(),
         }
-    }
-
-    pub fn self_key(&self) -> PublicKeyShare {
-        self._sec_key_share.public_key_share()
     }
 
     pub fn send_to(&mut self, module: &str, message: Vec<u8>, _receiver: NodeId) {

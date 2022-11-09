@@ -37,7 +37,7 @@ enum State {
 pub struct Tag {
     id: String, // this is same as $id$ in spec
     j: usize,   // this is same as $j$ in spec
-    s: usize,   // this is same as $j$ in spec
+    s: usize,   // this is same as $s$ in spec
 }
 impl Tag {
     pub fn new(id: &str, j: usize, s: usize) -> Self {
@@ -52,7 +52,6 @@ impl Tag {
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
 pub(crate) struct Vcbc {
     number: usize,                       // this is same as $n$ in spec
-    threshold: usize,                    // this is same as $t$ in spec
     tag: Tag,                            // this is same as $Tag$ in spec
     i: NodeId,                           // this is same as $i$ in spec
     m_bar: Option<Vec<u8>>,              // this is same as $\bar{m}$ in spec
@@ -71,7 +70,6 @@ pub(crate) struct Vcbc {
 impl Vcbc {
     pub fn new(
         number: usize,
-        threshold: usize,
         i: NodeId,
         tag: Tag,
         pub_key_set: PublicKeySet,
@@ -80,7 +78,6 @@ impl Vcbc {
     ) -> Self {
         Self {
             number,
-            threshold,
             i,
             tag,
             m_bar: None,
@@ -159,7 +156,7 @@ impl Vcbc {
                                 self.d = Some(Hash32::calculate(self.m_bar.as_ref().unwrap()));
 
                                 // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
-                                let sign_bytes = self.sign_bytes();
+                                let sign_bytes = self.bytes_to_sign();
                                 let s1 = self.sec_key_share.sign(sign_bytes);
                                 let ready_msg = Message {
                                     tag: self.tag.clone(),
@@ -194,7 +191,7 @@ impl Vcbc {
                                 );
                                 continue;
                             }
-                            let sign_bytes = self.sign_bytes();
+                            let sign_bytes = self.bytes_to_sign();
 
                             // Upon receiving message (ID.j.s, c-ready, d, νl) from Pl for the first time:
                             if let Vacant(e) = self.wd.entry(l) {
@@ -217,7 +214,7 @@ impl Vcbc {
                                         self.rd += 1;
 
                                         // if rd = n+t+1/2 then
-                                        if self.rd == (self.number + self.threshold + 1) / 2 {
+                                        if self.rd == (self.number + self.threshold() + 1) / 2 {
                                             // combine the shares in Wd to an S1 -threshold signature µ
                                             let sig = self
                                                 .pub_key_set
@@ -260,7 +257,8 @@ impl Vcbc {
 
     // ---- Private methods ---
 
-    fn sign_bytes(&mut self) -> Vec<u8> {
+    // bytes_to_sign generates bytes that should be signed by each party
+    fn bytes_to_sign(&mut self) -> Vec<u8> {
         let msg = Message {
             tag: self.tag.clone(),
             action: MSG_ACTION_C_READY.to_string(),
@@ -283,7 +281,7 @@ impl Vcbc {
                 for (_l, msg) in msg_cloned {
                     if self.d.is_some() {
                         if let Sig::Signature(sig) = &msg.sig {
-                            let sign_bytes = self.sign_bytes();
+                            let sign_bytes = self.bytes_to_sign();
                             let valid_sig = self.pub_key_set.public_key().verify(sig, sign_bytes);
 
                             if valid_sig {
@@ -320,6 +318,11 @@ impl Vcbc {
         let data = bincode::serialize(msg)?;
         self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
         self.log_message(self.i, msg.clone())
+    }
+
+    // threshold is same as $t$ in spec
+    fn threshold(&self) -> usize {
+        self.pub_key_set.threshold()
     }
 }
 

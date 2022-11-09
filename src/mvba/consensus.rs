@@ -21,7 +21,6 @@ impl Consensus {
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
-        threshold: usize,
         _proposal_checker: ProposalChecker,
     ) -> Consensus {
         let broadcaster = Broadcaster::new(bundle_id, &sec_key_share);
@@ -41,7 +40,6 @@ impl Consensus {
             let tag = Tag::new("vcbc", *id, 0);
             let vcbc = Vcbc::new(
                 parties.len(),
-                threshold,
                 self_id,
                 tag,
                 pub_key_set.clone(),
@@ -61,8 +59,6 @@ impl Consensus {
 
     // start the consensus by proposing a proposal and broadcasting it.
     pub fn start(&mut self, _proposal: Proposal) -> Vec<Vec<u8>> {
-        log::debug!("starting {:?}", self.broadcaster.borrow().self_key());
-
         match self.vcbc_map.get_mut(&self.self_id) {
             Some(_vcbc) => {}
             None => {

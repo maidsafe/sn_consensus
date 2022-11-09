@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const HASH32_SIZE: usize = 32;
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Hash32([u8; HASH32_SIZE]);
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -17,14 +18,10 @@ impl Hash32 {
         use tiny_keccak::{Hasher, Sha3};
 
         let mut sha3 = Sha3::v256();
-        let mut output = [0; 32];
+        let mut output = [0; HASH32_SIZE];
         sha3.update(data);
         sha3.finalize(&mut output);
         Hash32::from_bytes(&output).unwrap()
-    }
-
-    fn from_fixed_bytes(val: [u8; 32]) -> Hash32 {
-        Hash32(val)
     }
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, InvalidLength> {
@@ -32,7 +29,7 @@ impl Hash32 {
             expected: HASH32_SIZE,
             found: data.len(),
         })?;
-        Ok(Self::from_fixed_bytes(*bytes))
+        Ok(Self(*bytes))
     }
 
     pub fn as_fixed_bytes(&self) -> &[u8; HASH32_SIZE] {
@@ -41,6 +38,12 @@ impl Hash32 {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_vec()
+    }
+}
+
+impl From<[u8; 32]> for Hash32 {
+    fn from(val: [u8; 32]) -> Self {
+        Self(val)
     }
 }
 
