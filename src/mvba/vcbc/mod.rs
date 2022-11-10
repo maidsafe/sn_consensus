@@ -7,7 +7,7 @@ use super::hash::Hash32;
 use super::NodeId;
 use crate::mvba::broadcaster::Broadcaster;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
-use log::{warn};
+use log::warn;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
@@ -145,9 +145,6 @@ impl Vcbc {
     // decides read messages from the message log and decides what to do based on
     // the current state of the system.
     pub fn decide(&mut self) -> Result<()> {
-        // First we check if the message is c-delivered or not.
-        self.check_is_delivered()?;
-
         match self.state {
             State::Send => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
@@ -186,6 +183,10 @@ impl Vcbc {
                 Ok(())
             }
             State::Ready => {
+                // First we check if the message is c-delivered or not.
+                if self.attempt_to_deliver()? {
+                    return Ok(());
+                }
                 let mut iter = self.ready_messages.iter();
                 for (l, msg) in iter.next() {
                     let (msg_d, sig_share) = match &msg.action {
@@ -250,8 +251,8 @@ impl Vcbc {
                 Ok(())
             }
             State::Final => {
-                // Nothing to do here.
-                // We call check_is_delivered function at the bebging of this function
+                // First we attempt to deliver the message
+                self.attempt_to_deliver()?;
                 Ok(())
             }
             State::Delivered => {
@@ -270,16 +271,9 @@ impl Vcbc {
         Ok(bincode::serialize(&(&self.tag, "c-ready", digest))?)
     }
 
-    fn check_is_delivered(&mut self) -> Result<()> {
-        // TODO: rename to process_deliver_message()->bool
-        // It's delivered, just return here
-        if self.is_delivered() {
-            return Ok(());
-        }
-
+    fn attempt_to_deliver(&mut self) -> Result<bool> {
         // Upon receiving message (ID.j.s, c-final, d, µ):
-        let mut iter = self.final_messages.iter();
-        if let Some((_l, msg)) = iter.next() {
+        for (_l, msg) in self.final_messages.iter() {
             let (msg_d, sig) = match &msg.action {
                 Action::Final(d, sig) => (d, sig),
                 _ => return Err(Error::Generic("invalid final message".to_string())),
@@ -298,13 +292,14 @@ impl Vcbc {
             }
 
             // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1 -signature then
-            if d.eq(msg_d) && self.u_bar.is_none() && valid_sig {
+            if d == msg_d && self.u_bar.is_none() && valid_sig {
                 // µ̄ ← µ
                 self.u_bar = Some(sig.clone());
                 self.state = State::Delivered;
+                return Ok(true);
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.
