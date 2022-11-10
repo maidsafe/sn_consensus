@@ -4,7 +4,7 @@ use crate::mvba::{
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{bundle::Bundle, vcbc::Tag};
+use super::{bundle::Bundle, vcbc::message::Tag};
 
 pub struct Consensus {
     self_id: NodeId,
@@ -23,7 +23,7 @@ impl Consensus {
         parties: Vec<NodeId>,
         _proposal_checker: ProposalChecker,
     ) -> Consensus {
-        let broadcaster = Broadcaster::new(bundle_id, &sec_key_share);
+        let broadcaster = Broadcaster::new(bundle_id, self_id, sec_key_share.clone());
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
 
         // TODO: uncomment me

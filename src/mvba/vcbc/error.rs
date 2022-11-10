@@ -1,15 +1,21 @@
-use crate::mvba::hash;
+use crate::mvba::{hash, NodeId};
 use core::fmt::Debug;
 use thiserror::Error;
 
+use super::message::Message;
+
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("encoding/decoding error")]
+    #[error("encoding/decoding error {0:?}")]
     Encoding(#[from] bincode::Error),
-    #[error("Blsttc Error {0}")]
+    #[error("blsttc Error {0}")]
     Blsttc(#[from] blsttc::error::Error),
-    #[error("Invalid hash length {0}")]
+    #[error("invalid hash length {0}")]
     InvalidHashLength(#[from] hash::InvalidLength),
+    #[error("duplicated message {0} from {1:?}")]
+    DuplicatedMessage(NodeId, Message),
+    #[error("generic error {0}")]
+    Generic(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

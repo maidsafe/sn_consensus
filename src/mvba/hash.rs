@@ -18,10 +18,10 @@ impl Hash32 {
         use tiny_keccak::{Hasher, Sha3};
 
         let mut sha3 = Sha3::v256();
-        let mut output = [0; HASH32_SIZE];
+        let mut hash = [0; HASH32_SIZE];
         sha3.update(data);
-        sha3.finalize(&mut output);
-        Hash32::from_bytes(&output).unwrap()
+        sha3.finalize(&mut hash);
+        Hash32(hash)
     }
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, InvalidLength> {

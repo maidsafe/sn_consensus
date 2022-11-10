@@ -6,22 +6,31 @@ use blsttc::{SecretKeyShare};
 // TODO: How to find out it is an observer node or not?
 pub struct Broadcaster {
     bundle_id: u32,
+    self_id: NodeId,
+    _sec_key_share: SecretKeyShare, // TODO: SecretKeyShare or SecretKey?
     broadcast_bundles: Vec<Bundle>,
     send_bundles: Vec<Bundle>,
 }
 
 impl Broadcaster {
-    pub fn new(id: u32, _sec_key_share: &SecretKeyShare) -> Self {
+    pub fn new(bundle_id: u32, self_id: NodeId, sec_key_share: SecretKeyShare) -> Self {
         Self {
-            bundle_id: id,
+            bundle_id,
+            self_id,
+            _sec_key_share: sec_key_share,
             broadcast_bundles: Vec::new(),
             send_bundles: Vec::new(),
         }
     }
 
+    pub fn self_id(&self) -> NodeId {
+        self.self_id
+    }
+
     pub fn send_to(&mut self, module: &str, message: Vec<u8>, _receiver: NodeId) {
         let bdl = Bundle {
             id: self.bundle_id,
+            sender: self.self_id,
             module: module.to_string(),
             message,
         };
@@ -31,6 +40,7 @@ impl Broadcaster {
     pub fn broadcast(&mut self, module: &str, message: Vec<u8>) {
         let bdl = Bundle {
             id: self.bundle_id,
+            sender: self.self_id,
             module: module.to_string(),
             message,
         };
@@ -46,8 +56,6 @@ impl Broadcaster {
         data
     }
 
-    // TODO: remove me
-    #[allow(dead_code)]
     #[cfg(test)]
     pub fn has_message(&self, msg: &super::vcbc::message::Message) -> bool {
         for bdl in &self.broadcast_bundles {
@@ -58,8 +66,6 @@ impl Broadcaster {
         false
     }
 
-    // TODO: remove me
-    #[allow(dead_code)]
     #[cfg(test)]
     pub fn clear(&mut self) {
         self.broadcast_bundles.clear();
