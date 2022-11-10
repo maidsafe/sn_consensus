@@ -33,10 +33,6 @@ pub struct Message {
     pub action: Action,
 }
 
-pub(super) const MSG_ACTION_C_SEND: &str = "c-send";
-pub(super) const MSG_ACTION_C_READY: &str = "c-ready";
-pub(super) const MSG_ACTION_C_FINAL: &str = "c-final";
-
 impl Message {
     pub fn action_str(&self) -> &str {
         match self.action {

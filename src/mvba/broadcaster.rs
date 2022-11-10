@@ -1,9 +1,7 @@
 use super::{bundle::Bundle, NodeId};
-use blsttc::{SecretKeyShare};
+use blsttc::SecretKeyShare;
 
 // Broadcaster holds information required to broadcast the messages.
-// If a node is an observer node, it should't broadcast messages.
-// TODO: How to find out it is an observer node or not?
 pub struct Broadcaster {
     bundle_id: u32,
     self_id: NodeId,

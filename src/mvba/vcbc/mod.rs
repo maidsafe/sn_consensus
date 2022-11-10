@@ -7,7 +7,7 @@ use super::hash::Hash32;
 use super::NodeId;
 use crate::mvba::broadcaster::Broadcaster;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
-use log::{debug, warn};
+use log::{warn};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
@@ -168,7 +168,7 @@ impl Vcbc {
                         self.d = Some(d.clone());
 
                         // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
-                        let sign_bytes = self.bytes_to_sign()?;
+                        let sign_bytes = self.c_ready_bytes_to_sign(&d)?;
                         let s1 = self.sec_key_share.sign(sign_bytes);
 
                         let ready_msg = Message {
@@ -186,18 +186,20 @@ impl Vcbc {
                 Ok(())
             }
             State::Ready => {
-                let sign_bytes = self.bytes_to_sign()?;
-                let d = match &self.d {
-                    Some(d) => d,
-                    None => return Err(Error::Generic("protocol violated. no digest".to_string())),
-                };
-
-                let mut iter = self.send_messages.iter();
+                let mut iter = self.ready_messages.iter();
                 for (l, msg) in iter.next() {
                     let (msg_d, sig_share) = match &msg.action {
                         Action::Ready(d, sig) => (d, sig),
                         _ => return Err(Error::Generic("invalid ready message".to_string())),
                     };
+
+                    let d = match &self.d {
+                        Some(d) => d,
+                        None => {
+                            return Err(Error::Generic("protocol violated. no digest".to_string()))
+                        }
+                    };
+                    let sign_bytes = self.c_ready_bytes_to_sign(d)?;
 
                     if !d.eq(msg_d) {
                         warn!(
@@ -264,19 +266,8 @@ impl Vcbc {
 
     // bytes_to_sign generates bytes that should be signed by each party.
     // bytes_to_sign is same as serialized of (ID.j.s, c-ready, H(m)) in spec.
-    fn bytes_to_sign(&mut self) -> Result<Vec<u8>> {
-        let d = match &self.d {
-            Some(d) => d,
-            None => return Err(Error::Generic("protocol violated. no digest".to_string())),
-        };
-
-        let mut sign_bytes = Vec::new();
-
-        sign_bytes.append(&mut bincode::serialize(&self.tag)?);
-        sign_bytes.append(&mut bincode::serialize("c-ready")?);
-        sign_bytes.append(&mut bincode::serialize(&d)?);
-
-        Ok(sign_bytes)
+    fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {
+        Ok(bincode::serialize(&(&self.tag, "c-ready", digest))?)
     }
 
     fn check_is_delivered(&mut self) -> Result<()> {
@@ -286,24 +277,31 @@ impl Vcbc {
             return Ok(());
         }
 
-        let sign_bytes = self.bytes_to_sign()?;
-        let mut iter = self.send_messages.iter();
+        // Upon receiving message (ID.j.s, c-final, d, µ):
+        let mut iter = self.final_messages.iter();
         if let Some((_l, msg)) = iter.next() {
-            let (_d, sig) = match &msg.action {
+            let (msg_d, sig) = match &msg.action {
                 Action::Final(d, sig) => (d, sig),
                 _ => return Err(Error::Generic("invalid final message".to_string())),
             };
 
-            if self.d.is_some() {
-                let valid_sig = self.pub_key_set.public_key().verify(sig, sign_bytes);
+            let d = match &self.d {
+                Some(d) => d,
+                None => return Err(Error::Generic("protocol violated. no digest".to_string())),
+            };
 
-                if valid_sig {
-                    debug!("a valid c-final message received: {:?}", msg.clone());
-                    self.u_bar = Some(sig.clone());
-                    self.state = State::Delivered;
+            let sign_bytes = self.c_ready_bytes_to_sign(d)?;
+            let valid_sig = self.pub_key_set.public_key().verify(sig, sign_bytes);
 
-                    return Ok(());
-                }
+            if !valid_sig {
+                warn!("c-ready has has invalid signature share");
+            }
+
+            // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1 -signature then
+            if d.eq(msg_d) && self.u_bar.is_none() && valid_sig {
+                // µ̄ ← µ
+                self.u_bar = Some(sig.clone());
+                self.state = State::Delivered;
             }
         }
         Ok(())
