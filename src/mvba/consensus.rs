@@ -39,7 +39,6 @@ impl Consensus {
             let _pub_key = pub_key_set.public_key_share(id);
             let tag = Tag::new("vcbc", *id, 0);
             let vcbc = Vcbc::new(
-                parties.len(),
                 self_id,
                 tag,
                 pub_key_set.clone(),
@@ -78,8 +77,7 @@ impl Consensus {
 
         let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
         let msg = bincode::deserialize(&bundle.message).unwrap();
-        vcbc.log_message(sender, msg).unwrap();
-        vcbc.decide().unwrap(); // no unwrap
+        vcbc.receive_message(sender, msg).unwrap();
         if delivered_count >= self.super_majority_num() {}
 
         self.broadcaster.borrow_mut().take_bundles()
