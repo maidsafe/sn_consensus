@@ -205,6 +205,15 @@ impl Vcbc {
         self.u_bar.is_some()
     }
 
+    #[allow(dead_code)]
+    pub fn read_delivered(&self) -> Option<(Vec<u8>, Signature)> {
+        if let (Some(m), Some(u)) = (&self.m_bar, &self.u_bar) {
+            Some((m.clone(), u.clone()))
+        } else {
+            None
+        }
+    }
+
     // bytes_to_sign generates bytes that should be signed by each party.
     // bytes_to_sign is same as serialized of (ID.j.s, c-ready, H(m)) in spec.
     fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {

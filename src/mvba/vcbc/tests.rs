@@ -1,3 +1,146 @@
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
+use blsttc::SecretKeySet;
+
+use crate::mvba::broadcaster::Broadcaster;
+use crate::mvba::bundle::Bundle;
+use crate::mvba::hash::Hash32;
+
+use super::{NodeId, Vcbc};
+
+use super::message::{Message, Tag};
+
+struct Net {
+    secret_key_set: SecretKeySet,
+    nodes: BTreeMap<NodeId, Vcbc>,
+    queue: BTreeMap<NodeId, Vec<Bundle>>,
+}
+
+impl Net {
+    fn new(n: usize, tag: Tag) -> Self {
+        // we can tolerate < n/3 faults
+        let faults = n.saturating_sub(1) / 3;
+
+        // we want to require n - f signature shares but
+        // blsttc wants a threshold value where you require t + 1 shares
+        // So we just subtract 1 from n - f.
+        let threshold = (n - faults).saturating_sub(1);
+        let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
+        let public_key_set = secret_key_set.public_keys();
+        let bundle_id = 0; // TODO: what is this?
+
+        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
+            let key_share = secret_key_set.secret_key_share(node_id);
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
+                bundle_id,
+                node_id,
+                key_share.clone(),
+            )));
+            let vcbc = Vcbc::new(
+                node_id,
+                tag.clone(),
+                public_key_set.clone(),
+                key_share,
+                broadcaster,
+            );
+            (node_id, vcbc)
+        }));
+
+        Net {
+            secret_key_set,
+            nodes,
+            queue: Default::default(),
+        }
+    }
+
+    fn node_mut(&mut self, id: NodeId) -> &mut Vcbc {
+        self.nodes.get_mut(&id).unwrap()
+    }
+
+    fn enqueue_bundles_from(&mut self, id: NodeId) {
+        let (send_bundles, bcast_bundles) = {
+            let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
+            let send_bundles = broadcaster.take_send_bundles();
+            let bcast_bundles = broadcaster.take_broadcast_bundles();
+            (send_bundles, bcast_bundles)
+        };
+
+        for (recipient, bundle) in send_bundles {
+            let bundle: Bundle =
+                bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+            self.queue.entry(recipient).or_default().push(bundle);
+        }
+
+        for bundle in bcast_bundles {
+            for recipient in self.nodes.keys() {
+                let bundle: Bundle =
+                    bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+                self.queue.entry(*recipient).or_default().push(bundle);
+            }
+        }
+    }
+
+    fn drain_queue(&mut self) {
+        while !self.queue.is_empty() {
+            for (recipient, queue) in std::mem::take(&mut self.queue) {
+                let recipient_node = self.node_mut(recipient);
+
+                for bundle in queue {
+                    let msg: Message = bincode::deserialize(&bundle.message)
+                        .expect("Failed to deserialize message");
+
+                    recipient_node
+                        .receive_message(bundle.sender, msg)
+                        .expect("Failed to receive msg");
+                }
+
+                self.enqueue_bundles_from(recipient);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_vcbc_happy_path() {
+    let proposer = 1;
+    let tag = Tag::new("happy-path-test", proposer, 0);
+    let mut net = Net::new(7, tag.clone());
+
+    // Node 1 (the proposer) will initiate VCBC by broadcasting a value
+
+    let proposer_node = net.node_mut(proposer);
+    proposer_node.c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec());
+
+    net.enqueue_bundles_from(proposer);
+
+    // Now we roll-out the simulation to completion.
+
+    net.drain_queue();
+
+    // And check that all nodes have delivered the expected value and signature
+
+    let expected_bytes_to_sign: Vec<u8> = bincode::serialize(&(
+        tag,
+        "c-ready",
+        Hash32::calculate("HAPPY-PATH-VALUE".as_bytes()),
+    ))
+    .expect("Failed to serialize");
+
+    let expected_sig = net
+        .secret_key_set
+        .secret_key()
+        .sign(&expected_bytes_to_sign);
+
+    for (_, node) in net.nodes {
+        assert_eq!(
+            node.read_delivered(),
+            Some(("HAPPY-PATH-VALUE".as_bytes().to_vec(), expected_sig.clone()))
+        )
+    }
+}
+
 // use crate::mvba::vcbc::error::Error;
 // use blsttc::SecretKeySet;
 // use rand::{random, thread_rng, Rng};

@@ -7,7 +7,7 @@ pub struct Broadcaster {
     self_id: NodeId,
     _sec_key_share: SecretKeyShare, // TODO: SecretKeyShare or SecretKey?
     broadcast_bundles: Vec<Bundle>,
-    send_bundles: Vec<Bundle>,
+    send_bundles: Vec<(NodeId, Bundle)>,
 }
 
 impl Broadcaster {
@@ -25,14 +25,14 @@ impl Broadcaster {
         self.self_id
     }
 
-    pub fn send_to(&mut self, module: &str, message: Vec<u8>, _receiver: NodeId) {
+    pub fn send_to(&mut self, module: &str, message: Vec<u8>, recipient: NodeId) {
         let bdl = Bundle {
             id: self.bundle_id,
             sender: self.self_id,
             module: module.to_string(),
             message,
         };
-        self.send_bundles.push(bdl);
+        self.send_bundles.push((recipient, bdl));
     }
 
     pub fn broadcast(&mut self, module: &str, message: Vec<u8>) {
@@ -45,12 +45,21 @@ impl Broadcaster {
         self.broadcast_bundles.push(bdl);
     }
 
-    pub fn take_bundles(&mut self) -> Vec<Vec<u8>> {
+    #[allow(dead_code)]
+    pub fn take_broadcast_bundles(&mut self) -> Vec<Vec<u8>> {
         let mut data = Vec::with_capacity(self.broadcast_bundles.len());
-        for bdl in &self.broadcast_bundles {
-            data.push(bincode::serialize(bdl).unwrap())
+        for bdl in std::mem::take(&mut self.broadcast_bundles) {
+            data.push(bincode::serialize(&bdl).unwrap())
         }
-        self.broadcast_bundles.clear();
+        data
+    }
+
+    #[allow(dead_code)]
+    pub fn take_send_bundles(&mut self) -> Vec<(NodeId, Vec<u8>)> {
+        let mut data = Vec::with_capacity(self.send_bundles.len());
+        for (recipient, bdl) in std::mem::take(&mut self.send_bundles) {
+            data.push((recipient, bincode::serialize(&bdl).unwrap()))
+        }
         data
     }
 

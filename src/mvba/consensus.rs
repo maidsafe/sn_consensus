@@ -11,6 +11,7 @@ pub struct Consensus {
     threshold: usize,
     //_abba: Abba,
     vcbc_map: HashMap<NodeId, Vcbc>,
+    #[allow(unused)]
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
@@ -64,7 +65,9 @@ impl Consensus {
                 log::warn!("this node is an observer node")
             }
         }
-        self.broadcaster.borrow_mut().take_bundles()
+        // TODO:
+        // self.broadcaster.borrow_mut().take_bundles()
+        vec![]
     }
 
     pub fn process_bundle(&mut self, sender: NodeId, bundle: &Bundle) -> Vec<Vec<u8>> {
@@ -80,7 +83,9 @@ impl Consensus {
         vcbc.receive_message(sender, msg).unwrap();
         if delivered_count >= self.super_majority_num() {}
 
-        self.broadcaster.borrow_mut().take_bundles()
+        // TODO:
+        // self.broadcaster.borrow_mut().take_bundles()
+        vec![]
     }
 
     fn super_majority_num(&self) -> usize {
