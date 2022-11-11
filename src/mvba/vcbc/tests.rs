@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use blsttc::SecretKeySet;
+use quickcheck_macros::quickcheck;
 
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
@@ -100,6 +101,23 @@ impl Net {
             }
         }
     }
+
+    fn deliver(&mut self, recipient: NodeId, index: usize) {
+        if let Some(msgs) = self.queue.get_mut(&recipient) {
+            if msgs.is_empty() {
+                return;
+            }
+            let index = index % msgs.len();
+
+            let bundle = msgs.swap_remove(index);
+            let msg: Message =
+                bincode::deserialize(&bundle.message).expect("Failed to deserialize message");
+
+            let recipient_node = self.node_mut(recipient);
+            recipient_node.receive_message(bundle.sender, msg);
+            self.enqueue_bundles_from(recipient);
+        }
+    }
 }
 
 #[test]
@@ -137,6 +155,51 @@ fn test_vcbc_happy_path() {
         assert_eq!(
             node.read_delivered(),
             Some(("HAPPY-PATH-VALUE".as_bytes().to_vec(), expected_sig.clone()))
+        )
+    }
+}
+
+#[quickcheck]
+fn prop_vcbc_terminates_under_randomized_msg_delivery(
+    n: usize,
+    proposer: usize,
+    proposal: Vec<u8>,
+    msg_order: Vec<(NodeId, usize)>,
+) {
+    let n = n % 10 + 1; // Large n is wasteful, and n must be > 0
+    let proposer = proposer % n + 1; // NodeId's start at 1
+    let tag = Tag::new("randomized-msgs-prop", proposer, 0);
+    let mut net = Net::new(n, tag.clone());
+
+    // First the proposer will initiate VCBC by broadcasting the proposal:
+    let proposer_node = net.node_mut(proposer);
+    proposer_node.c_broadcast(proposal.clone());
+
+    net.enqueue_bundles_from(proposer);
+
+    // Next we deliver the messages in the order chosen by quickcheck
+    for (recipient, msg_index) in msg_order {
+        net.deliver(recipient, msg_index);
+    }
+
+    // Then we roll-out the simulation to completion.
+    net.drain_queue();
+
+    // And finally, check that all nodes have delivered the expected value and signature
+
+    let expected_bytes_to_sign: Vec<u8> =
+        bincode::serialize(&(tag, "c-ready", Hash32::calculate(&proposal)))
+            .expect("Failed to serialize");
+
+    let expected_sig = net
+        .secret_key_set
+        .secret_key()
+        .sign(&expected_bytes_to_sign);
+
+    for (_, node) in net.nodes {
+        assert_eq!(
+            node.read_delivered(),
+            Some((proposal.clone(), expected_sig.clone()))
         )
     }
 }
