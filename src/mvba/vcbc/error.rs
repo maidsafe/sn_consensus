@@ -2,7 +2,7 @@ use crate::mvba::{hash, NodeId};
 use core::fmt::Debug;
 use thiserror::Error;
 
-use super::message::Message;
+
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -13,7 +13,7 @@ pub enum Error {
     #[error("invalid hash length {0}")]
     InvalidHashLength(#[from] hash::InvalidLength),
     #[error("duplicated message {0} from {1:?}")]
-    DuplicatedMessage(NodeId, Message),
+    DuplicatedMessage(NodeId, String),
     #[error("generic error {0}")]
     Generic(String),
 }
