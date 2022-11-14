@@ -1,56 +1,72 @@
 use super::{bundle::Bundle, NodeId};
-use blsttc::{PublicKeyShare, SecretKeyShare};
+use blsttc::SecretKeyShare;
 
 // Broadcaster holds information required to broadcast the messages.
-// If a node is an observer node, it doesn't broadcast messages.
-// For observer node SecretKeyShare and Node ID set to None
 pub struct Broadcaster {
     bundle_id: u32,
-    secret_key: SecretKeyShare,
-    node_id: Option<NodeId>,
-    bundles: Vec<Bundle>,
+    self_id: NodeId,
+    _sec_key_share: SecretKeyShare, // TODO: SecretKeyShare or SecretKey?
+    broadcast_bundles: Vec<Bundle>,
+    send_bundles: Vec<(NodeId, Bundle)>,
 }
 
 impl Broadcaster {
-    pub fn new(id: u32, secret_key: &SecretKeyShare, node_id: Option<NodeId>) -> Self {
+    pub fn new(bundle_id: u32, self_id: NodeId, sec_key_share: SecretKeyShare) -> Self {
         Self {
-            bundle_id: id,
-            secret_key: secret_key.clone(),
-            node_id,
-            bundles: Vec::new(),
+            bundle_id,
+            self_id,
+            _sec_key_share: sec_key_share,
+            broadcast_bundles: Vec::new(),
+            send_bundles: Vec::new(),
         }
     }
 
-    pub fn self_key(&self) -> PublicKeyShare {
-        self.secret_key.public_key_share()
+    pub fn self_id(&self) -> NodeId {
+        self.self_id
     }
 
-    pub fn self_id(&self) -> Option<NodeId> {
-        self.node_id
-    }
-
-    pub fn push_message(&mut self, module: &str, message: Vec<u8>) {
+    pub fn send_to(&mut self, module: &str, message: Vec<u8>, recipient: NodeId) {
         let bdl = Bundle {
             id: self.bundle_id,
+            sender: self.self_id,
             module: module.to_string(),
             message,
         };
-        self.bundles.push(bdl);
+        self.send_bundles.push((recipient, bdl));
     }
 
-    pub fn take_bundles(&mut self) -> Vec<Vec<u8>> {
-        let mut data = Vec::with_capacity(self.bundles.len());
-        for bdl in &self.bundles {
-            data.push(bincode::serialize(bdl).unwrap())
+    pub fn broadcast(&mut self, module: &str, message: Vec<u8>) {
+        let bdl = Bundle {
+            id: self.bundle_id,
+            sender: self.self_id,
+            module: module.to_string(),
+            message,
+        };
+        self.broadcast_bundles.push(bdl);
+    }
+
+    #[allow(dead_code)]
+    pub fn take_broadcast_bundles(&mut self) -> Vec<Vec<u8>> {
+        let mut data = Vec::with_capacity(self.broadcast_bundles.len());
+        for bdl in std::mem::take(&mut self.broadcast_bundles) {
+            data.push(bincode::serialize(&bdl).unwrap())
         }
-        self.bundles.clear();
+        data
+    }
+
+    #[allow(dead_code)]
+    pub fn take_send_bundles(&mut self) -> Vec<(NodeId, Vec<u8>)> {
+        let mut data = Vec::with_capacity(self.send_bundles.len());
+        for (recipient, bdl) in std::mem::take(&mut self.send_bundles) {
+            data.push((recipient, bincode::serialize(&bdl).unwrap()))
+        }
         data
     }
 
     #[cfg(test)]
-    pub fn has_message(&self, data: &Vec<u8>) -> bool {
-        for bdl in &self.bundles {
-            if bdl.message.eq(data) {
+    pub fn has_broadcast_message(&self, msg: &super::vcbc::message::Message) -> bool {
+        for bdl in &self.broadcast_bundles {
+            if bdl.message.eq(&bincode::serialize(&msg).unwrap()) {
                 return true;
             }
         }
@@ -58,7 +74,12 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn clear(&mut self) {
-        self.bundles.clear();
+    pub fn has_send_message(&self, to: &NodeId, msg: &super::vcbc::message::Message) -> bool {
+        for (receiver, bdl) in &self.send_bundles {
+            if bdl.message.eq(&bincode::serialize(&msg).unwrap()) {
+                return receiver == to;
+            }
+        }
+        false
     }
 }

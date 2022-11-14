@@ -1,174 +1,379 @@
-use super::*;
-use crate::mvba::vcbc::error::Error;
-use blsttc::SecretKeySet;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
+use blsttc::{SecretKeySet, SignatureShare};
+use quickcheck_macros::quickcheck;
+
+use crate::mvba::broadcaster::Broadcaster;
+use crate::mvba::bundle::Bundle;
+use crate::mvba::hash::Hash32;
+
+use super::{NodeId, Vcbc};
+
+use super::message::{Action, Message, Tag};
+
+struct Net {
+    secret_key_set: SecretKeySet,
+    nodes: BTreeMap<NodeId, Vcbc>,
+    queue: BTreeMap<NodeId, Vec<Bundle>>,
+}
+
+impl Net {
+    fn new(n: usize, tag: Tag) -> Self {
+        // we can tolerate < n/3 faults
+        let faults = n.saturating_sub(1) / 3;
+
+        // we want to require n - f signature shares but
+        // blsttc wants a threshold value where you require t + 1 shares
+        // So we just subtract 1 from n - f.
+        let threshold = (n - faults).saturating_sub(1);
+        let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
+        let public_key_set = secret_key_set.public_keys();
+        let bundle_id = 0; // TODO: what is this?
+
+        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
+            let key_share = secret_key_set.secret_key_share(node_id);
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
+                bundle_id,
+                node_id,
+                key_share.clone(),
+            )));
+            let vcbc = Vcbc::new(
+                node_id,
+                tag.clone(),
+                public_key_set.clone(),
+                key_share,
+                broadcaster,
+            );
+            (node_id, vcbc)
+        }));
+
+        Net {
+            secret_key_set,
+            nodes,
+            queue: Default::default(),
+        }
+    }
+
+    fn node_mut(&mut self, id: NodeId) -> &mut Vcbc {
+        self.nodes.get_mut(&id).unwrap()
+    }
+
+    fn enqueue_bundles_from(&mut self, id: NodeId) {
+        let (send_bundles, bcast_bundles) = {
+            let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
+            let send_bundles = broadcaster.take_send_bundles();
+            let bcast_bundles = broadcaster.take_broadcast_bundles();
+            (send_bundles, bcast_bundles)
+        };
+
+        for (recipient, bundle) in send_bundles {
+            let bundle: Bundle =
+                bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+            self.queue.entry(recipient).or_default().push(bundle);
+        }
+
+        for bundle in bcast_bundles {
+            for recipient in self.nodes.keys() {
+                let bundle: Bundle =
+                    bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+                self.queue.entry(*recipient).or_default().push(bundle);
+            }
+        }
+    }
+
+    fn drain_queue(&mut self) {
+        while !self.queue.is_empty() {
+            for (recipient, queue) in std::mem::take(&mut self.queue) {
+                let recipient_node = self.node_mut(recipient);
+
+                for bundle in queue {
+                    let msg: Message = bincode::deserialize(&bundle.message)
+                        .expect("Failed to deserialize message");
+
+                    recipient_node
+                        .receive_message(bundle.sender, msg)
+                        .expect("Failed to receive msg");
+                }
+
+                self.enqueue_bundles_from(recipient);
+            }
+        }
+    }
+
+    fn deliver(&mut self, recipient: NodeId, index: usize) {
+        if let Some(msgs) = self.queue.get_mut(&recipient) {
+            if msgs.is_empty() {
+                return;
+            }
+            let index = index % msgs.len();
+
+            let bundle = msgs.swap_remove(index);
+            let msg: Message =
+                bincode::deserialize(&bundle.message).expect("Failed to deserialize message");
+
+            let recipient_node = self.node_mut(recipient);
+            recipient_node.receive_message(bundle.sender, msg).expect("Failed to receive message");
+            self.enqueue_bundles_from(recipient);
+        }
+    }
+}
+
+#[test]
+fn test_vcbc_happy_path() {
+    let proposer = 1;
+    let tag = Tag::new("happy-path-test", proposer, 0);
+    let mut net = Net::new(7, tag.clone());
+
+    // Node 1 (the proposer) will initiate VCBC by broadcasting a value
+
+    let proposer_node = net.node_mut(proposer);
+    proposer_node.c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec()).expect("Failed to c-broadcast");
+
+    net.enqueue_bundles_from(proposer);
+
+    // Now we roll-out the simulation to completion.
+
+    net.drain_queue();
+
+    // And check that all nodes have delivered the expected value and signature
+
+    let expected_bytes_to_sign: Vec<u8> = bincode::serialize(&(
+        tag,
+        "c-ready",
+        Hash32::calculate("HAPPY-PATH-VALUE".as_bytes()),
+    ))
+    .expect("Failed to serialize");
+
+    let expected_sig = net
+        .secret_key_set
+        .secret_key()
+        .sign(&expected_bytes_to_sign);
+
+    for (_, node) in net.nodes {
+        assert_eq!(
+            node.read_delivered(),
+            Some(("HAPPY-PATH-VALUE".as_bytes().to_vec(), expected_sig.clone()))
+        )
+    }
+}
+
+#[quickcheck]
+fn prop_vcbc_terminates_under_randomized_msg_delivery(
+    n: usize,
+    proposer: usize,
+    proposal: Vec<u8>,
+    msg_order: Vec<(NodeId, usize)>,
+) {
+    let n = n % 10 + 1; // Large n is wasteful, and n must be > 0
+    let proposer = proposer % n + 1; // NodeId's start at 1
+    let tag = Tag::new("randomized-msgs-prop", proposer, 0);
+    let mut net = Net::new(n, tag.clone());
+
+    // First the proposer will initiate VCBC by broadcasting the proposal:
+    let proposer_node = net.node_mut(proposer);
+    proposer_node.c_broadcast(proposal.clone()).expect("Failed to c-broadcast");
+
+    net.enqueue_bundles_from(proposer);
+
+    // Next we deliver the messages in the order chosen by quickcheck
+    for (recipient, msg_index) in msg_order {
+        net.deliver(recipient, msg_index);
+    }
+
+    // Then we roll-out the simulation to completion.
+    net.drain_queue();
+
+    // And finally, check that all nodes have delivered the expected value and signature
+
+    let expected_bytes_to_sign: Vec<u8> =
+        bincode::serialize(&(tag, "c-ready", Hash32::calculate(&proposal)))
+            .expect("Failed to serialize");
+
+    let expected_sig = net
+        .secret_key_set
+        .secret_key()
+        .sign(&expected_bytes_to_sign);
+
+    for (_, node) in net.nodes {
+        assert_eq!(
+            node.read_delivered(),
+            Some((proposal.clone(), expected_sig.clone()))
+        )
+    }
+}
+
+// --------------------------------------
+// Testing one peers in faulty situations
+
 use rand::{random, thread_rng, Rng};
 
-struct TestData {
+struct TestNet {
+    sec_key_set: SecretKeySet,
     vcbc: Vcbc,
+    m: Vec<u8>,
     broadcaster: Rc<RefCell<Broadcaster>>,
-    proposal: Proposal,
 }
 
-fn valid_proposal(_: &Proposal) -> bool {
-    true
-}
-
-fn invalid_proposal(_: &Proposal) -> bool {
-    false
-}
-
-impl TestData {
+impl TestNet {
     const PARTY_X: NodeId = 0;
     const PARTY_Y: NodeId = 1;
     const PARTY_B: NodeId = 2;
     const PARTY_S: NodeId = 3;
 
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
-    // The VCBC test instance is created for party X.
-    pub fn new(proposer_id: NodeId) -> Self {
+    // The VCBC test instance creates for party `i`, `tag.ID` sets to `test`
+    // and `tag.s` sets to `0`.
+    pub fn new(i: NodeId, j: NodeId) -> Self {
         let mut rng = thread_rng();
-        let sec_key_set = SecretKeySet::random(4, &mut rng);
-        let proposer_key = sec_key_set.secret_key_share(proposer_id);
+        let sec_key_set = SecretKeySet::random(2, &mut rng);
+        let sec_key_share = sec_key_set.secret_key_share(i);
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
             random(),
-            &proposer_key,
-            Some(Self::PARTY_X),
+            i,
+            sec_key_share.clone(),
         )));
-        let vcbc = Vcbc::new(4, 1, proposer_id, broadcaster.clone(), valid_proposal);
+        let tag = Tag::new("test", j, 0);
+        let vcbc = Vcbc::new(
+            i,
+            tag,
+            sec_key_set.public_keys(),
+            sec_key_share,
+            broadcaster.clone(),
+        );
 
         // Creating a random proposal
         let mut rng = rand::thread_rng();
-        let proposal = Proposal {
-            proposer_id,
-            value: (0..100).map(|_| rng.gen_range(0..64)).collect(),
-            proof: (0..100).map(|_| rng.gen_range(0..64)).collect(),
-        };
+        let m = (0..100).map(|_| rng.gen_range(0..64)).collect();
 
         Self {
+            sec_key_set,
             vcbc,
+            m,
             broadcaster,
-            proposal,
         }
     }
 
-    pub fn propose_msg(&self) -> Vec<u8> {
-        bincode::serialize(&Message::Propose(self.proposal.clone())).unwrap()
+    pub fn make_send_msg(&self, m: &[u8]) -> Message {
+        Message {
+            tag: self.vcbc.tag.clone(),
+            action: Action::Send(m.to_vec()),
+        }
     }
 
-    pub fn echo_msg(&self) -> Vec<u8> {
-        bincode::serialize(&Message::Echo(self.proposal.clone())).unwrap()
+    pub fn make_ready_msg(&self, d: &Hash32, peer_id: &NodeId) -> Message {
+        let sig_share = self.sig_share(d, peer_id);
+        Message {
+            tag: self.vcbc.tag.clone(),
+            action: Action::Ready(d.clone(), sig_share),
+        }
     }
 
-    pub fn is_proposed(&self) -> bool {
-        self.broadcaster.borrow().has_message(&self.propose_msg())
+    pub fn make_final_msg(&self, d: &Hash32, peer_ids: Vec<NodeId>) -> Message {
+        let mut sig_shares = Vec::new();
+        for peer_id in peer_ids {
+            let sig_share = self.sig_share(d, &peer_id);
+            sig_shares.push((peer_id, sig_share));
+        }
+
+        let sig = self
+            .sec_key_set
+            .public_keys()
+            .combine_signatures(sig_shares)
+            .unwrap();
+
+        Message {
+            tag: self.vcbc.tag.clone(),
+            action: Action::Final(d.clone(), sig),
+        }
     }
-    pub fn is_echoed(&self) -> bool {
-        self.broadcaster.borrow().has_message(&self.echo_msg())
+
+    pub fn is_broadcasted(&self, msg: &Message) -> bool {
+        self.broadcaster.borrow().has_broadcast_message(msg)
+    }
+
+    pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
+        self.broadcaster.borrow().has_send_message(to, msg)
+    }
+
+    pub fn m(&self) -> Vec<u8> {
+        self.m.clone()
+    }
+
+    pub fn d(&self) -> Hash32 {
+        Hash32::calculate(&self.m)
+    }
+
+    fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
+        let sign_bytes = bincode::serialize(&(&self.vcbc.tag, "c-ready", digest)).unwrap();
+        let sec_key_share = self.sec_key_set.secret_key_share(id);
+
+
+        sec_key_share.sign(sign_bytes)
     }
 }
 
 #[test]
-fn test_should_propose() {
-    let mut t = TestData::new(TestData::PARTY_X);
+fn test_should_c_send() {
+    let i = TestNet::PARTY_S;
+    let j = TestNet::PARTY_S; // i and j are same
+    let mut t = TestNet::new(i, j);
 
-    t.vcbc.propose(&t.proposal).unwrap();
+    t.vcbc.c_broadcast(t.m.clone()).unwrap();
 
-    assert!(t.is_proposed());
-    assert!(t.is_echoed());
-    assert!(t.vcbc.ctx.echos.contains(&TestData::PARTY_X));
+    let send_msg = t.make_send_msg(&t.m());
+    assert!(t.is_broadcasted(&send_msg));
 }
 
 #[test]
-fn test_should_not_propose() {
-    let mut t = TestData::new(TestData::PARTY_S);
+fn test_should_c_ready() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_S;
+    let mut t = TestNet::new(i, j);
+
+    let send_msg = t.make_send_msg(&t.m());
+    t.vcbc.receive_message(j, send_msg).unwrap();
+
+    let ready_msg_x = t.make_ready_msg(&t.d(), &i);
+    assert!(t.is_send_to(&j, &ready_msg_x));
+}
+
+#[test]
+fn test_normal_case_operation() {
+    let i = TestNet::PARTY_S;
+    let j = TestNet::PARTY_S; // i and j are same
+    let mut t = TestNet::new(i, j);
+
+    t.vcbc.c_broadcast(t.m.clone()).unwrap();
+
+    let ready_msg_x = t.make_ready_msg(&t.d(), &TestNet::PARTY_X);
+    let ready_msg_y = t.make_ready_msg(&t.d(), &TestNet::PARTY_Y);
 
     t.vcbc
-        .process_message(&TestData::PARTY_Y, &t.echo_msg())
+        .receive_message(TestNet::PARTY_X, ready_msg_x)
         .unwrap();
-
-    assert!(!t.is_proposed());
-    assert!(t.is_echoed());
-}
-
-#[test]
-fn test_normal_case() {
-    let mut t = TestData::new(TestData::PARTY_X);
-
-    assert!(!t.vcbc.is_delivered());
-    assert_eq!(t.vcbc.ctx.proposal, None);
-    assert!(t.vcbc.ctx.echos.is_empty());
-
-    t.vcbc.propose(&t.proposal).unwrap();
     t.vcbc
-        .process_message(&TestData::PARTY_Y, &t.echo_msg())
-        .unwrap();
-    t.vcbc
-        .process_message(&TestData::PARTY_S, &t.echo_msg())
+        .receive_message(TestNet::PARTY_Y, ready_msg_y)
         .unwrap();
 
     assert!(t.vcbc.is_delivered());
-    assert_eq!(t.vcbc.ctx.proposal, Some(t.proposal.clone()));
-    assert!(&t.vcbc.ctx.echos.contains(&TestData::PARTY_X));
-    assert!(&t.vcbc.ctx.echos.contains(&TestData::PARTY_Y));
-    assert!(&t.vcbc.ctx.echos.contains(&TestData::PARTY_S));
 }
 
 #[test]
-fn test_delayed_propose_message() {
-    let mut t = TestData::new(TestData::PARTY_S);
+fn test_final_message_first() {
+    let i = TestNet::PARTY_B;
+    let j = TestNet::PARTY_S;
+    let mut t = TestNet::new(i, j);
 
-    t.vcbc
-        .process_message(&TestData::PARTY_Y, &t.echo_msg())
-        .unwrap();
-    t.vcbc
-        .process_message(&TestData::PARTY_S, &t.echo_msg())
-        .unwrap();
+    let send_msg = t.make_send_msg(&t.m());
+    let final_msg = t.make_final_msg(
+        &t.d(),
+        [TestNet::PARTY_X, TestNet::PARTY_Y, TestNet::PARTY_S].to_vec(),
+    );
+
+    t.vcbc.receive_message(TestNet::PARTY_S, final_msg).unwrap();
+    t.vcbc.receive_message(TestNet::PARTY_S, send_msg).unwrap();
 
     assert!(t.vcbc.is_delivered());
-
-    // Receiving propose message now
-    t.broadcaster.borrow_mut().clear();
-    t.vcbc
-        .process_message(&TestData::PARTY_S, &t.propose_msg())
-        .unwrap();
-
-    assert!(!t.is_echoed());
-}
-
-#[test]
-fn test_invalid_proposal() {
-    let mut t = TestData::new(TestData::PARTY_B);
-    t.vcbc.ctx.proposal_checker = invalid_proposal;
-
-    assert_eq!(
-        t.vcbc
-            .process_message(&TestData::PARTY_B, &t.propose_msg())
-            .err(),
-        Some(Error::InvalidProposal(t.proposal)),
-    );
-}
-
-#[test]
-fn test_duplicated_proposal() {
-    let mut t = TestData::new(TestData::PARTY_B);
-
-    // Party_x receives a proposal from party_b
-    t.vcbc
-        .process_message(&TestData::PARTY_B, &t.propose_msg())
-        .unwrap();
-
-    // Party_x receives an echo message from from party_s
-    // that echoes different proposal
-    let mut rng = rand::thread_rng();
-    let duplicated_proposal = Proposal {
-        proposer_id: t.proposal.proposer_id,
-        value: (0..100).map(|_| rng.gen_range(0..64)).collect(),
-        proof: (0..100).map(|_| rng.gen_range(0..64)).collect(),
-    };
-    let data = bincode::serialize(&Message::Propose(duplicated_proposal.clone())).unwrap();
-
-    assert_eq!(
-        t.vcbc.process_message(&TestData::PARTY_B, &data).err(),
-        Some(Error::DuplicatedProposal(duplicated_proposal)),
-    );
 }
