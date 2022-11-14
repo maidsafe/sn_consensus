@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.1.4](https://github.com/maidsafe/sn_consensus/compare/v3.1.3...v3.1.4) (2022-11-14)
+
+
+### Bug Fixes
+
+* add comment noting that threshold should match n+t+1/2 ([3007d7b](https://github.com/maidsafe/sn_consensus/commit/3007d7bdcf3186fce5ecb0484b9cc033095eb264))
+
 ### [3.1.3](https://github.com/maidsafe/sn_consensus/compare/v3.1.2...v3.1.3) (2022-11-08)
 
 ### [3.1.2](https://github.com/maidsafe/sn_consensus/compare/v3.1.1...v3.1.2) (2022-07-20)
