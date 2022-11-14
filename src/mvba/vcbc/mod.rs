@@ -152,7 +152,8 @@ impl Vcbc {
                         //  rd ← rd + 1
                         self.rd += 1;
 
-                        // if rd = n+t+1/2 then
+                        // self.threshold() MUST be same as n+t+1/2
+                        // spec: if rd = n+t+1/2 then
                         if self.rd > self.threshold() {
                             // combine the shares in Wd to an S1 -threshold signature µ
                             let sig = self.pub_key_set.combine_signatures(self.wd.iter())?;
