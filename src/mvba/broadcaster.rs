@@ -64,7 +64,7 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_message(&self, msg: &super::vcbc::message::Message) -> bool {
+    pub fn has_broadcast_message(&self, msg: &super::vcbc::message::Message) -> bool {
         for bdl in &self.broadcast_bundles {
             if bdl.message.eq(&bincode::serialize(&msg).unwrap()) {
                 return true;
@@ -74,7 +74,12 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn clear(&mut self) {
-        self.broadcast_bundles.clear();
+    pub fn has_send_message(&self, to: &NodeId, msg: &super::vcbc::message::Message) -> bool {
+        for (receiver, bdl) in &self.send_bundles {
+            if bdl.message.eq(&bincode::serialize(&msg).unwrap()) {
+                return receiver == to;
+            }
+        }
+        false
     }
 }

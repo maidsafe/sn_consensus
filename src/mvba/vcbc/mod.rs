@@ -40,7 +40,7 @@ fn try_insert(map: &mut HashMap<NodeId, Message>, k: NodeId, v: Message) -> Resu
         e.insert(v);
         Ok(())
     } else {
-        Err(Error::DuplicatedMessage(k, v))
+        Err(Error::DuplicatedMessage(k, v.action_str().to_string()))
     }
 }
 
@@ -147,7 +147,7 @@ impl Vcbc {
                     // if i = j and νl is a valid S1-signature share then
                     if self.i == msg.tag.j && valid_sig {
                         // Wd ← Wd ∪ {νl}
-                        e.insert(sig_share.clone());
+                        e.insert(sig_share);
 
                         //  rd ← rd + 1
                         self.rd += 1;
