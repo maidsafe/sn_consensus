@@ -314,6 +314,23 @@ impl TestNet {
     }
 }
 
+
+#[test]
+fn test_ignore_messages_with_wrong_tag() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_B;
+    let mut t = TestNet::new(i, j);
+
+    let mut msg = t.make_send_msg(&t.m);
+    msg.tag.id = "another-id".to_string();
+
+    t.vcbc.receive_message(TestNet::PARTY_B, msg).unwrap();
+
+
+    let ready_msg_x = t.make_ready_msg(&t.d(), &i);
+    assert!(!t.is_send_to(&j, &ready_msg_x));
+}
+
 #[test]
 fn test_should_c_send() {
     let i = TestNet::PARTY_S;
@@ -376,4 +393,37 @@ fn test_final_message_first() {
     t.vcbc.receive_message(TestNet::PARTY_S, send_msg).unwrap();
 
     assert!(t.vcbc.is_delivered());
+}
+
+#[test]
+fn test_invalid_digest() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    t.vcbc.c_broadcast(t.m.clone()).unwrap();
+
+    let invalid_digest = Hash32::calculate(&"invalid-data".as_bytes());
+    let ready_msg_x = t.make_ready_msg(&invalid_digest, &i);
+    assert!(t.vcbc.receive_message(TestNet::PARTY_B, ready_msg_x).is_err());
+}
+
+
+#[test]
+fn test_invalid_sig_share() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    t.vcbc.c_broadcast(t.m.clone()).unwrap();
+
+    let sig_share = t.sec_key_set.secret_key_share(TestNet::PARTY_B).sign("invalid_message".as_bytes());
+    let ready_msg_x = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Ready(t.d().clone(), sig_share),
+    };
+
+    t.vcbc.receive_message(TestNet::PARTY_B, ready_msg_x).unwrap();
+
+    assert!(!t.vcbc.wd.contains_key(&TestNet::PARTY_B));
 }

@@ -25,9 +25,9 @@ pub(crate) struct Vcbc {
     rd: usize,                           // this is same as $r_d$ in spec
     d: Option<Hash32>,                   // Memorizing the message digest
     pub_key_set: PublicKeySet,
+    sec_key_share: SecretKeyShare,
     final_messages: HashMap<NodeId, Message>,
     broadcaster: Rc<RefCell<Broadcaster>>,
-    sec_key_share: SecretKeyShare,
 }
 
 /// Tries to insert a key-value pair into the map.
@@ -83,17 +83,17 @@ impl Vcbc {
             tag: self.tag.clone(),
             action: Action::Send(m),
         };
-        self.broadcast(&send_msg)
+        self.broadcast(send_msg)
     }
 
-    // log_message logs (adds) messages into the message_log
+    // receive_message process the received message 'msg` from `sender`
     pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
         if msg.tag != self.tag {
             log::trace!("invalid tag, ignoring message.: {:?}. ", msg);
             return Ok(());
         }
 
-        log::debug!("received {} message: {:?}", msg.action_str(), msg);
+        log::debug!("received {} message: {:?} from {}", msg.action_str(), msg, sender);
         match msg.action.clone() {
             Action::Send(m) => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
@@ -115,7 +115,7 @@ impl Vcbc {
                     };
 
                     // send (ID.j.s, c-ready, H(m), ν) to Pj
-                    self.send_to(&ready_msg, self.tag.j)?;
+                    self.send_to(ready_msg, self.tag.j)?;
                 }
             }
             Action::Ready(msg_d, sig_share) => {
@@ -164,7 +164,7 @@ impl Vcbc {
                             };
 
                             // send (ID.j.s, c-final, d, µ) to all parties
-                            self.broadcast(&final_msg)?;
+                            self.broadcast(final_msg)?;
                         }
                     }
                 }
@@ -187,7 +187,7 @@ impl Vcbc {
                     warn!("c-ready has has invalid signature share");
                 }
 
-                // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1 -signature then
+                // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1-signature then
                 if d == &msg_d && self.u_bar.is_none() && valid_sig {
                     // µ̄ ← µ
                     self.u_bar = Some(sig);
@@ -215,18 +215,19 @@ impl Vcbc {
         }
     }
 
-    // bytes_to_sign generates bytes that should be signed by each party.
-    // bytes_to_sign is same as serialized of (ID.j.s, c-ready, H(m)) in spec.
+    // c_ready_bytes_to_sign generates bytes that should be signed by each party
+    // as a wittiness of receiving the message.
+    // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec.
     fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {
         Ok(bincode::serialize(&(&self.tag, "c-ready", digest))?)
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
-    fn send_to(&mut self, msg: &self::Message, to: NodeId) -> Result<()> {
-        let data = bincode::serialize(msg).unwrap();
+    fn send_to(&mut self, msg: self::Message, to: NodeId) -> Result<()> {
+        let data = bincode::serialize(&msg).unwrap();
         if to == self.i {
-            self.receive_message(self.i, msg.clone())?;
+            self.receive_message(self.i, msg)?;
         } else {
             self.broadcaster.borrow_mut().send_to(MODULE_NAME, data, to);
         }
@@ -235,10 +236,10 @@ impl Vcbc {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, msg: &self::Message) -> Result<()> {
-        let data = bincode::serialize(msg)?;
+    fn broadcast(&mut self, msg: self::Message) -> Result<()> {
+        let data = bincode::serialize(&msg)?;
         self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
-        self.receive_message(self.i, msg.clone())?;
+        self.receive_message(self.i, msg)?;
         Ok(())
     }
 

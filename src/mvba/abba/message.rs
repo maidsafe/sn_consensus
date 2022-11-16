@@ -1,21 +1,22 @@
-use super::error::Result;
-use crate::mvba::hash::Hash32;
+use blsttc::{Signature, SignatureShare};
 
-pub(super) const MSG_TAG_PRE_PROCESS: &str = "pre-process";
 
-#[derive(Debug)]
-pub(crate) struct Message {
-    pub proposal_id: Hash32,
-    pub tag: String,
-    pub value: u8,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum Action {
+    PreProcess(bool, SignatureShare),
+
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Message {
+    pub id: String,
+    pub action: Action,
 }
 
 impl Message {
-    pub fn decode(_data: &[u8]) -> Result<Self> {
-        todo!()
-    }
-
-    pub fn bytes(&self) -> Result<Vec<u8>> {
-        todo!()
+    pub fn action_str(&self) -> &str {
+        match self.action {
+            Action::PreProcess(_,_) => "pre-process",
+        }
     }
 }
