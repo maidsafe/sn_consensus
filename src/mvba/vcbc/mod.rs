@@ -219,7 +219,7 @@ impl Vcbc {
     // as a wittiness of receiving the message.
     // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec.
     fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.tag, "c-ready", digest))?)
+        Ok(bincode::serialize(&(self.tag.clone(), "c-ready", digest.clone()))?)
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.

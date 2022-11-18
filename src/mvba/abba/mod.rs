@@ -1,12 +1,13 @@
 pub(super) mod message;
 
 mod error;
-use blsttc::{PublicKeySet, PublicKeyShare, SecretKeyShare};
+use blsttc::{PublicKeySet, PublicKeyShare, SecretKeyShare, Signature, SignatureShare};
 use log::warn;
 
 use self::error::{Error, Result};
-use self::message::{Action, Message};
+use self::message::{Action, Message, PreVoteAction, PreVoteValue};
 use super::NodeId;
+use crate::mvba::abba::message::{MainVoteAction, MainVoteValue};
 use crate::mvba::broadcaster::Broadcaster;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -23,7 +24,7 @@ pub(crate) struct Abba {
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
-    pre_process_messages: HashMap<NodeId, Message>,
+    round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>,
 }
 
 impl Abba {
@@ -43,19 +44,23 @@ impl Abba {
             pub_key_set,
             sec_key_share,
             broadcaster,
-            pre_process_messages: HashMap::new(),
+            round_pre_votes: Vec::new(),
         }
     }
 
-    /// TODO: rename it to start or move it to new()???
-    ///
-    pub fn broadcast_pre_processing(&mut self) -> Result<()> {
-        let sign_bytes = self.s0_bytes_to_sign(self.vi)?;
-        // Generate an S0 -signature share on the message (ID, pre-process, Vi )
-        let s0_sig_share = self.sec_key_share.sign(sign_bytes);
+    pub fn pre_vote(&mut self, value: PreVoteValue, justification: Signature) -> Result<()> {
+        // Produce an S-signature share on the message: (ID, pre-vote, r, b).
+        let sign_bytes = self.pre_vote_bytes_to_sign(&value)?;
+        let sig_share = self.sec_key_share.sign(sign_bytes);
+        let action = PreVoteAction {
+            round: self.r,
+            value,
+            justification,
+            sig_share,
+        };
         let msg = Message {
             id: self.id.clone(),
-            action: Action::PreProcess(self.vi, s0_sig_share),
+            action: Action::PreVote(action),
         };
         // and send to all parties the message (ID, pre-process, Vi , signature share).
         self.broadcast(msg)
@@ -74,15 +79,55 @@ impl Abba {
         self.add_message(&sender, &msg)?;
 
         match &msg.action {
-            Action::PreProcess(v, s0_sig_share) => {
-                // self.threshold() MUST be same as 2t + 1
-                // Collect 2t + 1 proper pre-processing messages.
-                if self.pre_process_messages.len() >= self.threshold() {
-                    if self.r == 1 {
-                        // If r = 1, let b be the simple majority of the received pre-processing votes.
-                    }
+            Action::PreVote(action) => {
+                let pre_votes = self
+                    .round_pre_votes
+                    .get(action.round)
+                    .expect("messages for this round is not set");
+
+                if pre_votes.len() > self.threshold() {
+                    // TODO:?????????????????????????????????
+                    // Always all are one or zero!!!!!
+                    let one_count = pre_votes
+                        .iter()
+                        .filter(|(_, a)| a.value == PreVoteValue::One)
+                        .count();
+                    let majority_votes: HashMap<&usize, &PreVoteAction> =
+                        if one_count > self.threshold() {
+                            pre_votes
+                                .iter()
+                                .filter(|(_, a)| a.value == PreVoteValue::One)
+                                .collect()
+                        } else {
+                            pre_votes
+                                .iter()
+                                .filter(|(_, a)| a.value == PreVoteValue::Zero)
+                                .collect()
+                        };
+
+                    let sig_share: HashMap<&&NodeId, &SignatureShare> = majority_votes
+                        .iter()
+                        .map(|(n, a)| (n, &a.sig_share))
+                        .collect();
+                    let sig = self.pub_key_set.combine_signatures(sig_share)?;
+
+                    let v = MainVoteValue::One;
+                    let sign_bytes = self.main_vote_bytes_to_sign(&v)?;
+                    let sig_share = self.sec_key_share.sign(sign_bytes);
+
+                    let main_vote_message = Message {
+                        id: self.id.clone(),
+                        action: Action::MainVote(MainVoteAction {
+                            round: self.r,
+                            value: v, // TODO: ???
+                            justification: sig,
+                            sig_share,
+                        }),
+                    };
                 }
             }
+
+            Action::MainVote(action) => {}
         }
 
         Ok(())
@@ -94,15 +139,23 @@ impl Abba {
 
     fn add_message(&mut self, sender: &NodeId, msg: &Message) -> Result<()> {
         match &msg.action {
-            Action::PreProcess(v, s0_sig_share) => {
-                if self.pre_process_messages.contains_key(&sender) {
+            Action::PreVote(action) => {
+                // make sure we have the round messages
+                while self.round_pre_votes.len() < action.round {
+                    self.round_pre_votes.push(HashMap::new());
+                }
+                // TODO, @D_Rusu, please how to not unwrap here?
+                let pre_votes = self.round_pre_votes.get_mut(action.round).unwrap();
+
+                if pre_votes.contains_key(&sender) {
                     return Err(Error::InvalidMessage(
                         "duplicated pre-process message from {:sender}".to_string(),
                     ));
                 }
 
-                self.pre_process_messages.insert(sender.clone(), msg.clone());
+                pre_votes.insert(sender.clone(), action.clone());
             }
+            Action::MainVote(action) => {}
         }
         Ok(())
     }
@@ -115,18 +168,26 @@ impl Abba {
         }
 
         match &msg.action {
-            Action::PreProcess(v, s0_sig_share) => {
-                let sign_bytes = self.s0_bytes_to_sign(*v)?;
+            Action::PreVote(action) => {
+                let sign_bytes = self.pre_vote_bytes_to_sign(&action.value)?;
                 if !self
                     .pub_key_set
                     .public_key_share(sender)
-                    .verify(&s0_sig_share, &sign_bytes)
+                    .verify(&action.sig_share, &sign_bytes)
                 {
                     return Err(Error::InvalidMessage(
-                        "invalid s0-signature share".to_string(),
+                        "pre-vot has an invalid signature share".to_string(),
                     ));
                 }
+
+                if action.round == 1 {
+                    // TODO:?
+                    // Do we need to keep the justification and init-value as member of abba
+                    // and here we compare both values?
+                } else {
+                }
             }
+            Action::MainVote(action) => {}
         }
 
         Ok(())
@@ -141,10 +202,26 @@ impl Abba {
         Ok(())
     }
 
-    // s0_bytes_to_sign generates bytes for S0-signature share.
-    // s0_bytes_to_sign is same as serialized of $(ID, pre-process, V_i)$ in spec.
-    fn s0_bytes_to_sign(&self, v: bool) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.id, "pre-process", v))?)
+    // pre_vote_bytes_to_sign generates bytes for Pre-Vote signature share.
+    // pre_vote_bytes_to_sign is same as serialized of $(ID, pre-vote, r, b)$ in spec.
+    fn pre_vote_bytes_to_sign(&self, v: &PreVoteValue) -> Result<Vec<u8>> {
+        Ok(bincode::serialize(&(
+            self.id.clone(),
+            "pre-vote",
+            self.r,
+            v.clone(),
+        ))?)
+    }
+
+    // main_vote_bytes_to_sign generates bytes for Main-Vote signature share.
+    // main_vote_bytes_to_sign is same as serialized of $(ID, main-vote, r, v)$ in spec.
+    fn main_vote_bytes_to_sign(&self, v: &MainVoteValue) -> Result<Vec<u8>> {
+        Ok(bincode::serialize(&(
+            self.id.clone(),
+            "main-vote",
+            self.r,
+            v.clone(),
+        ))?)
     }
 
     // threshold is same as $t$ in spec
