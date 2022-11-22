@@ -17,7 +17,7 @@ pub enum PreVoteValue {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteVoteJustification {
-    // In round r = 1, justification is the validity of the proposed data
+    // In round r = 1, justification is the validity of the subject data
     RoundOneJustification(Hash32, Signature),
     // In Round r > 1, justification is either hard,...
     HardJustification(Signature),

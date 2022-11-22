@@ -23,8 +23,8 @@ pub(crate) const MODULE_NAME: &str = "abba";
 pub(crate) struct Abba {
     id: String, // this is same as $ID$ in spec
     i: NodeId,  // this is same as $i$ in spec
-    vi: bool,   // this is same as $V_i$ in spec
     r: usize,   // this is same as $r$ in spec
+    subject: Hash32,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
@@ -36,7 +36,7 @@ impl Abba {
     pub fn new(
         id: String,
         i: NodeId,
-        vi: bool,
+        subject: Hash32,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
@@ -44,8 +44,8 @@ impl Abba {
         Self {
             id,
             i,
-            vi,
             r: 1,
+            subject,
             pub_key_set,
             sec_key_share,
             broadcaster,
@@ -54,17 +54,15 @@ impl Abba {
         }
     }
 
-    pub fn pre_vote(
-        &mut self,
-        value: PreVoteValue,
-        proposal_hash: Hash32,
-        signature: Signature,
-    ) -> Result<()> {
+    /// pre_vote starts the abba by broadcasting a pre-vote message.
+    /// `value` is the initial value and should  set to One
+    /// `proof` is the subject signature
+    pub fn pre_vote(&mut self, value: PreVoteValue, proof: Signature) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
         let sign_bytes = self.pre_vote_bytes_to_sign(&value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
         let justification =
-            PreVoteVoteJustification::RoundOneJustification(proposal_hash, signature);
+            PreVoteVoteJustification::RoundOneJustification(self.subject.clone(), proof);
         let action = PreVoteAction {
             round: self.r,
             value,
@@ -314,9 +312,10 @@ impl Abba {
                 let pre_votes = self.round_pre_votes.get_mut(action.round).unwrap();
 
                 if pre_votes.contains_key(&sender) {
-                    return Err(Error::InvalidMessage(
-                        "duplicated pre-process message from {:sender}".to_string(),
-                    ));
+                    return Err(Error::InvalidMessage(format!(
+                        "duplicated pre-process message from {}",
+                        sender
+                    )));
                 }
 
                 pre_votes.insert(sender.clone(), action.clone());
@@ -328,9 +327,10 @@ impl Abba {
 
     fn check_message(&self, sender: &NodeId, msg: &Message) -> Result<()> {
         if msg.id != self.id {
-            return Err(Error::InvalidMessage(
-                "invalid ID. expected: {self.id}, got {msg.id}".to_string(),
-            ));
+            return Err(Error::InvalidMessage(format!(
+                "invalid ID. expected: {}, got {}",
+                self.id, msg.id
+            )));
         }
 
         match &msg.action {
@@ -341,16 +341,36 @@ impl Abba {
                     .public_key_share(sender)
                     .verify(&action.sig_share, &sign_bytes)
                 {
-                    return Err(Error::InvalidMessage(
-                        "pre-vot has an invalid signature share".to_string(),
-                    ));
+                    return Err(Error::InvalidMessage("invalid signature share".to_string()));
                 }
 
-                if action.round == 1 {
-                    // TODO:?
-                    // Do we need to keep the justification and init-value as member of abba
-                    // and here we compare both values?
-                } else {
+                match &action.justification {
+                    PreVoteVoteJustification::RoundOneJustification(subject, proof) => {
+                        if action.round != 1 {
+                            return Err(Error::InvalidMessage(format!(
+                                "invalid round. expected 1, got {}",
+                                action.round
+                            )));
+                        }
+
+                        if subject != &self.subject {
+                            return Err(Error::InvalidMessage(format!(
+                                "invalid subject. expected {}, got {}",
+                                self.subject, subject
+                            )));
+                        }
+
+                        if !self
+                            .pub_key_set
+                            .public_key()
+                            .verify(&proof, &subject.to_bytes())
+                        {
+                            return Err(Error::InvalidMessage("invalid proof".to_string()));
+                        }
+                    }
+                    _ => {
+                        todo!()
+                    }
                 }
             }
             Action::MainVote(action) => {}
