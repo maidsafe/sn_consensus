@@ -93,7 +93,12 @@ impl Vcbc {
             return Ok(());
         }
 
-        log::debug!("received {} message: {:?} from {}", msg.action_str(), msg, sender);
+        log::debug!(
+            "received {} message: {:?} from {}",
+            msg.action_str(),
+            msg,
+            sender
+        );
         match msg.action.clone() {
             Action::Send(m) => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
@@ -154,7 +159,7 @@ impl Vcbc {
 
                         // self.threshold() MUST be same as n+t+1/2
                         // spec: if rd = n+t+1/2 then
-                        if self.rd > self.threshold() {
+                        if self.rd >= self.threshold() {
                             // combine the shares in Wd to an S1 -threshold signature µ
                             let sig = self.pub_key_set.combine_signatures(self.wd.iter())?;
 
@@ -219,7 +224,11 @@ impl Vcbc {
     // as a wittiness of receiving the message.
     // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec.
     fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(self.tag.clone(), "c-ready", digest.clone()))?)
+        Ok(bincode::serialize(&(
+            self.tag.clone(),
+            "c-ready",
+            digest.clone(),
+        ))?)
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.
@@ -245,7 +254,7 @@ impl Vcbc {
 
     // threshold is same as $t$ in spec
     fn threshold(&self) -> usize {
-        self.pub_key_set.threshold()
+        self.pub_key_set.threshold() + 1
     }
 }
 

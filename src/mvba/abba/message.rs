@@ -1,36 +1,41 @@
 use blsttc::{Signature, SignatureShare};
-use serde::{Serialize, Deserialize};
-
-
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteValue {
     One,
     Zero,
-    Abstain
+    Abstain,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq )]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteValue {
     One,
     Zero,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum MainVoteJustification {
+    // The justification consists of the justifications for the two conflicting pre-votes.
+    AbstainJustification(Signature, Signature),
+    // The justification  is a valid S-threshold signature on value b ∈ {0, 1}
+    NoAbstainJustification(Signature),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreVoteAction {
     pub round: usize,
     pub value: PreVoteValue,
-    pub justification: Signature,
     pub sig_share: SignatureShare,
+    pub justification: Signature,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MainVoteAction {
     pub round: usize,
     pub value: MainVoteValue,
-    pub justification: Signature,
     pub sig_share: SignatureShare,
+    pub justification: MainVoteJustification,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

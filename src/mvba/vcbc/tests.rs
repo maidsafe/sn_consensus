@@ -114,7 +114,9 @@ impl Net {
                 bincode::deserialize(&bundle.message).expect("Failed to deserialize message");
 
             let recipient_node = self.node_mut(recipient);
-            recipient_node.receive_message(bundle.sender, msg).expect("Failed to receive message");
+            recipient_node
+                .receive_message(bundle.sender, msg)
+                .expect("Failed to receive message");
             self.enqueue_bundles_from(recipient);
         }
     }
@@ -129,7 +131,9 @@ fn test_vcbc_happy_path() {
     // Node 1 (the proposer) will initiate VCBC by broadcasting a value
 
     let proposer_node = net.node_mut(proposer);
-    proposer_node.c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec()).expect("Failed to c-broadcast");
+    proposer_node
+        .c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec())
+        .expect("Failed to c-broadcast");
 
     net.enqueue_bundles_from(proposer);
 
@@ -173,7 +177,9 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 
     // First the proposer will initiate VCBC by broadcasting the proposal:
     let proposer_node = net.node_mut(proposer);
-    proposer_node.c_broadcast(proposal.clone()).expect("Failed to c-broadcast");
+    proposer_node
+        .c_broadcast(proposal.clone())
+        .expect("Failed to c-broadcast");
 
     net.enqueue_bundles_from(proposer);
 
@@ -309,11 +315,9 @@ impl TestNet {
         let sign_bytes = bincode::serialize(&(&self.vcbc.tag, "c-ready", digest)).unwrap();
         let sec_key_share = self.sec_key_set.secret_key_share(id);
 
-
         sec_key_share.sign(sign_bytes)
     }
 }
-
 
 #[test]
 fn test_ignore_messages_with_wrong_tag() {
@@ -325,7 +329,6 @@ fn test_ignore_messages_with_wrong_tag() {
     msg.tag.id = "another-id".to_string();
 
     t.vcbc.receive_message(TestNet::PARTY_B, msg).unwrap();
-
 
     let ready_msg_x = t.make_ready_msg(&t.d(), &i);
     assert!(!t.is_send_to(&j, &ready_msg_x));
@@ -405,9 +408,11 @@ fn test_invalid_digest() {
 
     let invalid_digest = Hash32::calculate(&"invalid-data".as_bytes());
     let ready_msg_x = t.make_ready_msg(&invalid_digest, &i);
-    assert!(t.vcbc.receive_message(TestNet::PARTY_B, ready_msg_x).is_err());
+    assert!(t
+        .vcbc
+        .receive_message(TestNet::PARTY_B, ready_msg_x)
+        .is_err());
 }
-
 
 #[test]
 fn test_invalid_sig_share() {
@@ -417,13 +422,18 @@ fn test_invalid_sig_share() {
 
     t.vcbc.c_broadcast(t.m.clone()).unwrap();
 
-    let sig_share = t.sec_key_set.secret_key_share(TestNet::PARTY_B).sign("invalid_message".as_bytes());
+    let sig_share = t
+        .sec_key_set
+        .secret_key_share(TestNet::PARTY_B)
+        .sign("invalid_message".as_bytes());
     let ready_msg_x = Message {
         tag: t.vcbc.tag.clone(),
         action: Action::Ready(t.d().clone(), sig_share),
     };
 
-    t.vcbc.receive_message(TestNet::PARTY_B, ready_msg_x).unwrap();
+    t.vcbc
+        .receive_message(TestNet::PARTY_B, ready_msg_x)
+        .unwrap();
 
     assert!(!t.vcbc.wd.contains_key(&TestNet::PARTY_B));
 }

@@ -2,8 +2,6 @@ use crate::mvba::{hash, NodeId};
 use core::fmt::Debug;
 use thiserror::Error;
 
-
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("encoding/decoding error {0:?}")]

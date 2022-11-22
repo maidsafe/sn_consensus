@@ -5,9 +5,9 @@ use blsttc::{PublicKeySet, PublicKeyShare, SecretKeyShare, Signature, SignatureS
 use log::warn;
 
 use self::error::{Error, Result};
-use self::message::{Action, Message, PreVoteAction, PreVoteValue};
+use self::message::{Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteValue};
 use super::NodeId;
-use crate::mvba::abba::message::{MainVoteAction, MainVoteValue};
+use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -25,6 +25,7 @@ pub(crate) struct Abba {
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
     round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>,
+    round_main_votes: Vec<HashMap<NodeId, MainVoteAction>>,
 }
 
 impl Abba {
@@ -45,6 +46,7 @@ impl Abba {
             sec_key_share,
             broadcaster,
             round_pre_votes: Vec::new(),
+            round_main_votes: Vec::new(),
         }
     }
 
@@ -80,54 +82,148 @@ impl Abba {
 
         match &msg.action {
             Action::PreVote(action) => {
+                if self.r == 1 {
+                    // For the first round
+                } else {
+                    // For round > 1
+
+                    let main_votes = self
+                        .round_main_votes
+                        .get(self.r - 1)
+                        .expect("main-votes for this round is not set");
+
+                    if main_votes.len() == self.threshold() {
+                        // Always all are one or zero!!!!!
+                        let one_count = main_votes
+                            .iter()
+                            .filter(|(_, a)| a.value == MainVoteValue::One)
+                            .count();
+                        let majority_votes: HashMap<&usize, &MainVoteAction> =
+                            if one_count > self.threshold() {
+                                main_votes
+                                    .iter()
+                                    .filter(|(_, a)| a.value == MainVoteValue::One)
+                                    .collect()
+                            } else {
+                                main_votes
+                                    .iter()
+                                    .filter(|(_, a)| a.value == MainVoteValue::Zero)
+                                    .collect()
+                            };
+
+                        let sig_share: HashMap<&&NodeId, &SignatureShare> = majority_votes
+                            .iter()
+                            .map(|(n, a)| (n, &a.sig_share))
+                            .collect();
+                        let sig = self.pub_key_set.combine_signatures(sig_share)?;
+
+                        let pre_vote_value = PreVoteValue::One;
+                        let sign_bytes = self.pre_vote_bytes_to_sign(&pre_vote_value)?;
+                        let sig_share = self.sec_key_share.sign(sign_bytes);
+
+                        let pre_vote_message = Message {
+                            id: self.id.clone(),
+                            action: Action::PreVote(PreVoteAction {
+                                round: self.r,
+                                value: pre_vote_value,
+                                justification: sig,
+                                sig_share,
+                            }),
+                        };
+                    }
+                }
+            }
+
+            Action::MainVote(action) => {
                 let pre_votes = self
                     .round_pre_votes
                     .get(action.round)
                     .expect("messages for this round is not set");
 
-                if pre_votes.len() > self.threshold() {
-                    // TODO:?????????????????????????????????
-                    // Always all are one or zero!!!!!
+                // Collect n − t valid and properly justified round-r pre-vote messages.
+                if pre_votes.len() == self.threshold() {
+                    // How many votes are zero?
+                    let zero_count = pre_votes
+                        .iter()
+                        .filter(|(_, a)| a.value == PreVoteValue::Zero)
+                        .count();
+
+                    // How many votes are one?
                     let one_count = pre_votes
                         .iter()
                         .filter(|(_, a)| a.value == PreVoteValue::One)
                         .count();
-                    let majority_votes: HashMap<&usize, &PreVoteAction> =
-                        if one_count > self.threshold() {
-                            pre_votes
-                                .iter()
-                                .filter(|(_, a)| a.value == PreVoteValue::One)
-                                .collect()
-                        } else {
-                            pre_votes
-                                .iter()
-                                .filter(|(_, a)| a.value == PreVoteValue::Zero)
-                                .collect()
-                        };
 
-                    let sig_share: HashMap<&&NodeId, &SignatureShare> = majority_votes
-                        .iter()
-                        .map(|(n, a)| (n, &a.sig_share))
-                        .collect();
-                    let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                    let (main_vote_value, justification) = if zero_count == self.threshold() {
+                        // All votes are zero:
+                        //   - value:  zero
+                        //   - justification: combination of all pre-votes S-Signature shares
+                        let sig_share: HashMap<&NodeId, &SignatureShare> =
+                            pre_votes.iter().map(|(n, a)| (n, &a.sig_share)).collect();
+                        let sig = self.pub_key_set.combine_signatures(sig_share)?;
 
-                    let v = MainVoteValue::One;
-                    let sign_bytes = self.main_vote_bytes_to_sign(&v)?;
+                        (
+                            MainVoteValue::Zero,
+                            MainVoteJustification::NoAbstainJustification(sig),
+                        )
+                    } else if one_count == self.threshold() {
+                        // All votes are one:
+                        //   - value:  one
+                        //   - justification: combination of all pre-votes S-Signature shares
+                        let sig_share: HashMap<&NodeId, &SignatureShare> =
+                            pre_votes.iter().map(|(n, a)| (n, &a.sig_share)).collect();
+                        let sig = self.pub_key_set.combine_signatures(sig_share)?;
+
+                        (
+                            MainVoteValue::One,
+                            MainVoteJustification::NoAbstainJustification(sig),
+                        )
+                    } else {
+                        // there is a pre-vote for 0 and a pre-vote for 1 (conflicts):
+                        //   - value:  abstain
+                        //   - justification: two pre-votes S-Signature for zero and one
+
+                        // TODO: unstable rust!
+                        // let sig0 = pre_votes
+                        //     .drain_filter(|_k, v| v.value == PreVoteValue::One)
+                        //     .into_iter()
+                        //     .last()
+                        //     .unwrap()
+                        //     .1
+                        //     .justification;
+
+                        // let sig1 = pre_votes
+                        //     .drain_filter(|_k, v| v.value == PreVoteValue::Zero)
+                        //     .into_iter()
+                        //     .last()
+                        //     .unwrap()
+                        //     .1
+                        //     .justification;
+
+                        // (
+                        //     MainVoteValue::Abstain,
+                        //     MainVoteJustification::AbstainJustification(sig0, sig1),
+                        // )
+
+                        todo!()
+                    };
+
+                    let sign_bytes = self.main_vote_bytes_to_sign(&main_vote_value)?;
                     let sig_share = self.sec_key_share.sign(sign_bytes);
 
                     let main_vote_message = Message {
                         id: self.id.clone(),
                         action: Action::MainVote(MainVoteAction {
                             round: self.r,
-                            value: v, // TODO: ???
-                            justification: sig,
+                            value: main_vote_value,
                             sig_share,
+                            justification: justification,
                         }),
                     };
+
+                    self.r += 1;
                 }
             }
-
-            Action::MainVote(action) => {}
         }
 
         Ok(())
@@ -226,7 +322,7 @@ impl Abba {
 
     // threshold is same as $t$ in spec
     fn threshold(&self) -> usize {
-        self.pub_key_set.threshold()
+        self.pub_key_set.threshold() + 1
     }
 
     fn get_pre_process_simple_majority_value(&self) -> bool {
