@@ -5,7 +5,11 @@ use blsttc::{PublicKeySet, PublicKeyShare, SecretKeyShare, Signature, SignatureS
 use log::warn;
 
 use self::error::{Error, Result};
-use self::message::{Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteValue};
+use self::message::{
+    Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteValue,
+    PreVoteVoteJustification,
+};
+use super::hash::Hash32;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
@@ -50,10 +54,17 @@ impl Abba {
         }
     }
 
-    pub fn pre_vote(&mut self, value: PreVoteValue, justification: Signature) -> Result<()> {
+    pub fn pre_vote(
+        &mut self,
+        value: PreVoteValue,
+        proposal_hash: Hash32,
+        signature: Signature,
+    ) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
         let sign_bytes = self.pre_vote_bytes_to_sign(&value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
+        let justification =
+            PreVoteVoteJustification::RoundOneJustification(proposal_hash, signature);
         let action = PreVoteAction {
             round: self.r,
             value,
@@ -93,11 +104,70 @@ impl Abba {
                         .expect("main-votes for this round is not set");
 
                     if main_votes.len() == self.threshold() {
-                        // Always all are one or zero!!!!!
+                        // How many votes are zero?
+                        let zero_count = main_votes
+                            .iter()
+                            .filter(|(_, a)| a.value == MainVoteValue::Zero)
+                            .count();
+
+                        // How many votes are one?
                         let one_count = main_votes
                             .iter()
                             .filter(|(_, a)| a.value == MainVoteValue::One)
                             .count();
+
+                        // How many votes are abstain?
+                        let abstain_count = main_votes
+                            .iter()
+                            .filter(|(_, a)| a.value == MainVoteValue::Abstain)
+                            .count();
+
+                        let (value, justification) =
+                            if zero_count == self.threshold() {
+                                let sig =
+                                    match &main_votes.iter().last().unwrap().1.justification {
+                                        MainVoteJustification::NoAbstainJustification(sig) => sig,
+                                        _ => return Err(Error::Generic(
+                                            "protocol violated, invalid main-vote justification"
+                                                .to_string(),
+                                        )),
+                                    };
+                                (
+                                    PreVoteValue::Zero,
+                                    PreVoteVoteJustification::HardJustification(sig.clone()),
+                                )
+                            } else if one_count == self.threshold() {
+                                let sig =
+                                    match &main_votes.iter().last().unwrap().1.justification {
+                                        MainVoteJustification::NoAbstainJustification(sig) => sig,
+                                        _ => return Err(Error::Generic(
+                                            "protocol violated, invalid main-vote justification"
+                                                .to_string(),
+                                        )),
+                                    };
+                                (
+                                    PreVoteValue::One,
+                                    PreVoteVoteJustification::HardJustification(sig.clone()),
+                                )
+                            } else if abstain_count == self.threshold() {
+                                let sig =
+                                    match &main_votes.iter().last().unwrap().1.justification {
+                                        MainVoteJustification::NoAbstainJustification(sig) => sig,
+                                        _ => return Err(Error::Generic(
+                                            "protocol violated, invalid main-vote justification"
+                                                .to_string(),
+                                        )),
+                                    };
+                                (
+                                    PreVoteValue::One,
+                                    PreVoteVoteJustification::HardJustification(sig.clone()),
+                                )
+                            } else {
+                                return Err(Error::Generic(
+                                    "protocol violated, no pre-vote majority".to_string(),
+                                ));
+                            };
+
                         let majority_votes: HashMap<&usize, &MainVoteAction> =
                             if one_count > self.threshold() {
                                 main_votes
@@ -125,8 +195,8 @@ impl Abba {
                             id: self.id.clone(),
                             action: Action::PreVote(PreVoteAction {
                                 round: self.r,
-                                value: pre_vote_value,
-                                justification: sig,
+                                value,
+                                justification,
                                 sig_share,
                             }),
                         };
@@ -154,7 +224,7 @@ impl Abba {
                         .filter(|(_, a)| a.value == PreVoteValue::One)
                         .count();
 
-                    let (main_vote_value, justification) = if zero_count == self.threshold() {
+                    let (value, justification) = if zero_count == self.threshold() {
                         // All votes are zero:
                         //   - value:  zero
                         //   - justification: combination of all pre-votes S-Signature shares
@@ -208,14 +278,14 @@ impl Abba {
                         todo!()
                     };
 
-                    let sign_bytes = self.main_vote_bytes_to_sign(&main_vote_value)?;
+                    let sign_bytes = self.main_vote_bytes_to_sign(&value)?;
                     let sig_share = self.sec_key_share.sign(sign_bytes);
 
                     let main_vote_message = Message {
                         id: self.id.clone(),
                         action: Action::MainVote(MainVoteAction {
                             round: self.r,
-                            value: main_vote_value,
+                            value,
                             sig_share,
                             justification: justification,
                         }),

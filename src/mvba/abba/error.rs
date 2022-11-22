@@ -6,8 +6,10 @@ pub enum Error {
     Encoding(#[from] bincode::Error),
     #[error("blsttc Error {0}")]
     Blsttc(#[from] blsttc::error::Error),
-    #[error("invalid message")]
+    #[error("invalid message {0}")]
     InvalidMessage(String),
+    #[error("generic error {0}")]
+    Generic(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

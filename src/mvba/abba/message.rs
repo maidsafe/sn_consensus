@@ -1,6 +1,8 @@
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
+use crate::mvba::hash::Hash32;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteValue {
     One,
@@ -12,6 +14,15 @@ pub enum MainVoteValue {
 pub enum PreVoteValue {
     One,
     Zero,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum PreVoteVoteJustification {
+    // In round r = 1, justification is the validity of the proposed data
+    RoundOneJustification(Hash32, Signature),
+    // In Round r > 1, justification is either hard,...
+    HardJustification(Signature),
+    // ... or soft (refer to the spec)
+    SoftJustification(Signature),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -27,7 +38,7 @@ pub struct PreVoteAction {
     pub round: usize,
     pub value: PreVoteValue,
     pub sig_share: SignatureShare,
-    pub justification: Signature,
+    pub justification: PreVoteVoteJustification,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
