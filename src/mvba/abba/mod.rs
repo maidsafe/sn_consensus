@@ -90,7 +90,7 @@ impl Abba {
         self.add_message(&sender, &msg)?;
 
         match &msg.action {
-            Action::PreVote(action) => {
+            Action::MainVote(_) => {
                 if self.r == 1 {
                     // For the first round
                 } else {
@@ -198,14 +198,16 @@ impl Abba {
                                 sig_share,
                             }),
                         };
+
+                        self.broadcast(pre_vote_message)?;
                     }
                 }
             }
 
-            Action::MainVote(action) => {
+            Action::PreVote(_) => {
                 let pre_votes = self
                     .round_pre_votes
-                    .get(action.round)
+                    .get(self.r - 1)
                     .expect("messages for this round is not set");
 
                 // Collect n − t valid and properly justified round-r pre-vote messages.
@@ -289,6 +291,8 @@ impl Abba {
                         }),
                     };
 
+                    self.broadcast(main_vote_message)?;
+
                     self.r += 1;
                 }
             }
@@ -309,7 +313,7 @@ impl Abba {
                     self.round_pre_votes.push(HashMap::new());
                 }
                 // TODO, @D_Rusu, please how to not unwrap here?
-                let pre_votes = self.round_pre_votes.get_mut(action.round).unwrap();
+                let pre_votes = self.round_pre_votes.get_mut(action.round - 1).unwrap();
 
                 if pre_votes.contains_key(&sender) {
                     return Err(Error::InvalidMessage(format!(
@@ -366,6 +370,12 @@ impl Abba {
                             .verify(&proof, &subject.to_bytes())
                         {
                             return Err(Error::InvalidMessage("invalid proof".to_string()));
+                        }
+
+                        // A weaker validity:an honest party may only decide on a value
+                        // for which it has the accompanying validating data.
+                        if action.value != PreVoteValue::One {
+                            return Err(Error::InvalidMessage("invalid value".to_string()));
                         }
                     }
                     _ => {
