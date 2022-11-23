@@ -16,7 +16,7 @@ pub enum PreVoteValue {
     Zero,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub enum PreVoteVoteJustification {
+pub enum PreVoteJustification {
     // In round r = 1, justification is the validity of the subject data
     RoundOneJustification(Hash32, Signature),
     // In Round r > 1, justification is either hard,...
@@ -38,7 +38,7 @@ pub struct PreVoteAction {
     pub round: usize,
     pub value: PreVoteValue,
     pub sig_share: SignatureShare,
-    pub justification: PreVoteVoteJustification,
+    pub justification: PreVoteJustification,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

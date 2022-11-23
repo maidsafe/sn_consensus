@@ -1,17 +1,13 @@
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::rc::Rc;
-
-use blsttc::{SecretKeySet, SignatureShare};
-use quickcheck_macros::quickcheck;
-
+use super::message::{Action, Message, Tag};
+use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
-
-use super::{NodeId, Vcbc};
-
-use super::message::{Action, Message, Tag};
+use blsttc::{SecretKeySet, SignatureShare};
+use quickcheck_macros::quickcheck;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
 
 struct Net {
     secret_key_set: SecretKeySet,
@@ -250,7 +246,6 @@ impl TestNet {
         );
 
         // Creating a random proposal
-        let mut rng = rand::thread_rng();
         let m = (0..100).map(|_| rng.gen_range(0..64)).collect();
 
         Self {
@@ -296,11 +291,15 @@ impl TestNet {
     }
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
-        self.broadcaster.borrow().has_broadcast_message(msg)
+        self.broadcaster
+            .borrow()
+            .has_broadcast_message(&bincode::serialize(msg).unwrap())
     }
 
     pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
-        self.broadcaster.borrow().has_send_message(to, msg)
+        self.broadcaster
+            .borrow()
+            .has_send_message(to, &bincode::serialize(msg).unwrap())
     }
 
     pub fn m(&self) -> Vec<u8> {

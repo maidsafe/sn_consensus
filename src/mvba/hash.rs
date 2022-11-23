@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -47,6 +49,16 @@ impl From<[u8; 32]> for Hash32 {
     }
 }
 
+impl Display for Hash32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for v in self.0 {
+            f.write_str(&format!("{:02x}", v))?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,14 +70,10 @@ mod tests {
 
     #[test]
     fn test_calc() {
-        let buf = ([
-            0x6F, 0x6F, 0x12, 0x94, 0x71, 0x59, 0x0D, 0x2C, 0x91, 0x80, 0x4C, 0x81, 0x2B, 0x57,
-            0x50, 0xCD, 0x44, 0xCB, 0xDF, 0xB7, 0x23, 0x85, 0x41, 0xC4, 0x51, 0xE1, 0xEA, 0x2B,
-            0xC0, 0x19, 0x31, 0x77,
-        ]);
+        let hash = Hash32::calculate("abcd".as_bytes());
         assert_eq!(
-            Hash32::calculate("abcd".as_bytes()).0.to_vec(),
-            buf.to_vec()
+            format!("{}", hash),
+            "6f6f129471590d2c91804c812b5750cd44cbdfb7238541c451e1ea2bc0193177"
         );
     }
 }
