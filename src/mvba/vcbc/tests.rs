@@ -405,7 +405,7 @@ fn test_invalid_digest() {
 
     t.vcbc.c_broadcast(t.m.clone()).unwrap();
 
-    let invalid_digest = Hash32::calculate(&"invalid-data".as_bytes());
+    let invalid_digest = Hash32::calculate("invalid-data".as_bytes());
     let ready_msg_x = t.make_ready_msg(&invalid_digest, &i);
     assert!(t
         .vcbc
@@ -427,7 +427,7 @@ fn test_invalid_sig_share() {
         .sign("invalid_message".as_bytes());
     let ready_msg_x = Message {
         tag: t.vcbc.tag.clone(),
-        action: Action::Ready(t.d().clone(), sig_share),
+        action: Action::Ready(t.d(), sig_share),
     };
 
     t.vcbc
