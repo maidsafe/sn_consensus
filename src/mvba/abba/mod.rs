@@ -413,7 +413,7 @@ impl Abba {
                             self.pre_vote_bytes_to_sign(action.round - 1, &action.value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
-                                "invalid soft-vote justification".to_string(),
+                                "invalid hard-vote justification".to_string(),
                             ));
                         }
                     }
