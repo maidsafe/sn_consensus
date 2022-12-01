@@ -218,7 +218,7 @@ impl Abba {
                 }
                 // Let's check pre-votes:
 
-                // HECK FOR DECISION. Collect n −t valid and properly justified main-votes of round r .
+                // CHECK FOR DECISION. Collect n −t valid and properly justified main-votes of round r .
                 // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
                 let mut decided_value = None;
                 let pre_votes = match self.get_pre_votes_by_round(self.r) {
