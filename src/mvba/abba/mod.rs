@@ -408,7 +408,7 @@ impl Abba {
                         }
                     }
                     PreVoteJustification::HardJustification(sig) => {
-                        // Soft pre-vote justification is the S-threshold signature for `(ID, pre-vote, r − 1, b)`
+                        // Hard pre-vote justification is the S-threshold signature for `(ID, pre-vote, r − 1, b)`
                         let sign_bytes =
                             self.pre_vote_bytes_to_sign(action.round - 1, &action.value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
