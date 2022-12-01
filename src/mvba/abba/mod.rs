@@ -373,6 +373,10 @@ impl Abba {
                                 action.round
                             )));
                         }
+
+                        if action.value != PreVoteValue::Zero {
+                            return Err(Error::InvalidMessage("initial value should be zero".to_string()));
+                        }
                     }
                     PreVoteJustification::RoundOneJustification(c_final) => {
                         if action.round != 1 {
@@ -391,15 +395,15 @@ impl Abba {
 
                         match &c_final.action {
                             crate::mvba::vcbc::message::Action::Final(digest, sig) => {
-                                let sign_bytes =
-                                    crate::mvba::vcbc::c_ready_bytes_to_sign(&c_final.tag, *digest)?;
+                                let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
+                                    &c_final.tag,
+                                    *digest,
+                                )?;
 
-                                if !self
-                                    .pub_key_set
-                                    .public_key()
-                                    .verify(&sig, &sign_bytes)
-                                {
-                                    return Err(Error::InvalidMessage("invalid signature for the VCBC proposal".to_string()));
+                                if !self.pub_key_set.public_key().verify(&sig, &sign_bytes) {
+                                    return Err(Error::InvalidMessage(
+                                        "invalid signature for the VCBC proposal".to_string(),
+                                    ));
                                 }
                             }
                             _ => {
@@ -413,7 +417,7 @@ impl Abba {
                         // A weaker validity: an honest party may only decide on a value
                         // for which it has the accompanying validating data.
                         if action.value != PreVoteValue::One {
-                            return Err(Error::InvalidMessage("invalid value".to_string()));
+                            return Err(Error::InvalidMessage("initial value should be one".to_string()));
                         }
                     }
                     PreVoteJustification::HardJustification(sig) => {
