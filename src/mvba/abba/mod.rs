@@ -166,19 +166,9 @@ impl Abba {
                             )
                         } else if abstain_count == self.threshold() {
                             // if all main-votes are abstain,
-                            let sig = match &main_votes.iter().last().unwrap().1.justification {
-                                MainVoteJustification::AbstainJustification(_, _) => {
-                                    let sig_share: HashMap<&NodeId, &SignatureShare> =
-                                        main_votes.iter().map(|(n, a)| (n, &a.sig_share)).collect();
-                                    self.pub_key_set.combine_signatures(sig_share)?
-                                }
-                                _ => {
-                                    return Err(Error::Generic(
-                                        "protocol violated, invalid main-vote justification"
-                                            .to_string(),
-                                    ))
-                                }
-                            };
+                            let sig_share: HashMap<&NodeId, &SignatureShare> =
+                                main_votes.iter().map(|(n, a)| (n, &a.sig_share)).collect();
+                            let sig = self.pub_key_set.combine_signatures(sig_share)?
                             // soft pre-vote for 1
                             // Coin value bias to 1 in weaker validity mode.
                             (
