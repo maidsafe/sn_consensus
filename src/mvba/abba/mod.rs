@@ -423,7 +423,7 @@ impl Abba {
                             self.main_vote_bytes_to_sign(self.r - 1, &MainVoteValue::Abstain)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
-                                "invalid hard-vote justification".to_string(),
+                                "invalid soft-vote justification".to_string(),
                             ));
                         }
                     }
