@@ -257,7 +257,7 @@ impl Abba {
                             MainVoteValue::One,
                             MainVoteJustification::NoAbstainJustification(sig),
                         )
-                    } else {
+                    } else if let (Some(one_vote), Some(zero_vote)) = (pre_votes.iter().find(|(_,v)| v.value == Zero), pre_votes.iter().find(|(_,v)| v.value == One)) {
                         // there is a pre-vote for 0 and a pre-vote for 1 (conflicts):
                         //   - value:  abstain
                         //   - justification: justifications for the two conflicting pre-votes
