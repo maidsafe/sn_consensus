@@ -261,7 +261,7 @@ fn test_pre_vote_round_1_invalid_c_final_signature() {
 }
 
 #[test]
-fn test_pre_vote_round_1_invalid_value() {
+fn test_pre_vote_round_1_invalid_value_one() {
     let i = TestNet::PARTY_X;
     let mut t = TestNet::new(i);
 
@@ -270,7 +270,20 @@ fn test_pre_vote_round_1_invalid_value() {
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-    if msg == *"invalid value"));
+    if msg == "initial value should be one"));
+}
+
+#[test]
+fn test_pre_vote_round_1_invalid_value_zero() {
+    let i = TestNet::PARTY_X;
+    let mut t = TestNet::new(i);
+
+    let just = PreVoteJustification::RoundOneNoJustification;
+    let msg = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
+
+    let result = t.abba.receive_message(TestNet::PARTY_B, msg);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+    if msg == "initial value should be zero"));
 }
 
 #[test]
