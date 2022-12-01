@@ -149,7 +149,7 @@ impl Abba {
                                 PreVoteValue::Zero,
                                 PreVoteJustification::HardJustification(sig.clone()),
                             )
-                        } else if one_count > 1 {
+                        } else if one_count > 0 {
                             // if there is a main-vote for 1,
                             let sig = match &main_votes.iter().last().unwrap().1.justification {
                                 MainVoteJustification::NoAbstainJustification(sig) => sig,
