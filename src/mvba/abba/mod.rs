@@ -116,10 +116,9 @@ impl Abba {
 
                     if main_votes.len() == self.threshold() {
                         // How many votes are 0?
-                        let zero_count = main_votes
+                        let zero_vote = main_votes
                             .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::Zero)
-                            .count();
+                            .find(|(_, a)| a.value == MainVoteValue::Zero);
 
                         // How many votes are 1?
                         let one_count = main_votes
