@@ -97,7 +97,7 @@ impl Abba {
 
         match &msg.action {
             Action::MainVote(action) => {
-                if action.round != self.r - 1 {
+                if action.round + 1 != self.r {
                     return Ok(());
                 }
                 // 1. PRE-VOTE step.
