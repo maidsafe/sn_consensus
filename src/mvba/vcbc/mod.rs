@@ -1,5 +1,5 @@
 mod error;
-pub(super) mod message;
+pub(crate) mod message;
 
 use self::error::{Error, Result};
 use self::message::{Action, Message, Tag};
@@ -14,6 +14,16 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub(crate) const MODULE_NAME: &str = "vcbc";
+
+// c_ready_bytes_to_sign generates bytes that should be signed by each party
+// as a wittiness of receiving the message.
+// c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec.
+pub fn c_ready_bytes_to_sign(
+    tag: &Tag,
+    digest: Hash32,
+) -> std::result::Result<Vec<u8>, bincode::Error> {
+    bincode::serialize(&(tag, "c-ready", digest))
+}
 
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
 pub(crate) struct Vcbc {
@@ -111,7 +121,7 @@ impl Vcbc {
                     self.d = Some(d.clone());
 
                     // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
-                    let sign_bytes = self.c_ready_bytes_to_sign(&d)?;
+                    let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
                     let s1 = self.sec_key_share.sign(sign_bytes);
 
                     let ready_msg = Message {
@@ -124,13 +134,13 @@ impl Vcbc {
                 }
             }
             Action::Ready(msg_d, sig_share) => {
-                let d = match &self.d {
+                let d = match self.d {
                     Some(d) => d,
                     None => return Err(Error::Generic("protocol violated. no digest".to_string())),
                 };
-                let sign_bytes = self.c_ready_bytes_to_sign(d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
 
-                if d != &msg_d {
+                if d != msg_d {
                     warn!(
                         "c-ready has unknown digest. expected {:?}, got {:?}",
                         d, msg_d
@@ -176,7 +186,7 @@ impl Vcbc {
             }
             Action::Final(msg_d, sig) => {
                 // Upon receiving message (ID.j.s, c-final, d, µ):
-                let d = match &self.d {
+                let d = match self.d {
                     Some(d) => d,
                     None => {
                         warn!("received c-final before receiving s-send, logging message");
@@ -185,7 +195,7 @@ impl Vcbc {
                     }
                 };
 
-                let sign_bytes = self.c_ready_bytes_to_sign(d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
 
                 if !valid_sig {
@@ -193,7 +203,7 @@ impl Vcbc {
                 }
 
                 // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1-signature then
-                if d == &msg_d && self.u_bar.is_none() && valid_sig {
+                if d == msg_d && self.u_bar.is_none() && valid_sig {
                     // µ̄ ← µ
                     self.u_bar = Some(sig);
                 }
@@ -218,17 +228,6 @@ impl Vcbc {
         } else {
             None
         }
-    }
-
-    // c_ready_bytes_to_sign generates bytes that should be signed by each party
-    // as a wittiness of receiving the message.
-    // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec.
-    fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            self.tag.clone(),
-            "c-ready",
-            digest.clone(),
-        ))?)
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.

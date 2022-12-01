@@ -4,7 +4,7 @@ pub(super) mod message;
 
 mod error;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
-use log::{debug};
+use log::debug;
 
 use self::error::{Error, Result};
 use self::message::{
@@ -27,7 +27,7 @@ pub(crate) struct Abba {
     i: NodeId,                   // this is same as $i$ in spec
     r: usize,                    // this is same as $r$ in spec
     decided_value: Option<bool>, // TODO: should be boolean?
-    subject: Hash32,
+    tag: crate::mvba::vcbc::message::Tag,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
@@ -39,7 +39,7 @@ impl Abba {
     pub fn new(
         id: String,
         i: NodeId,
-        subject: Hash32,
+        tag: crate::mvba::vcbc::message::Tag,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
@@ -49,7 +49,7 @@ impl Abba {
             i,
             r: 1,
             decided_value: None,
-            subject,
+            tag,
             pub_key_set,
             sec_key_share,
             broadcaster,
@@ -58,15 +58,22 @@ impl Abba {
         }
     }
 
-    /// pre_vote starts the abba by broadcasting a pre-vote message.
-    /// `value` is the initial value and should  set to One
-    /// `proof` is the subject signature
-    pub fn pre_vote(&mut self, value: PreVoteValue, proof: Signature) -> Result<()> {
+    /// pre_vote_zero starts the abba by broadcasting a pre-vote message with value 0.
+    pub fn pre_vote_zero(&mut self) -> Result<()> {
+        let justification = PreVoteJustification::RoundOneNoJustification;
+        self.pre_vote(PreVoteValue::Zero, justification)
+    }
+
+    /// pre_vote_one starts the abba by broadcasting a pre-vote message with value 1.
+    pub fn pre_vote_one(&mut self, c_final: crate::mvba::vcbc::message::Message) -> Result<()> {
+        let justification = PreVoteJustification::RoundOneJustification(c_final);
+        self.pre_vote(PreVoteValue::One, justification)
+    }
+
+    fn pre_vote(&mut self, value: PreVoteValue, justification: PreVoteJustification) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
         let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
-        let justification =
-            PreVoteJustification::RoundOneJustification(self.subject.clone(), proof);
         let action = PreVoteAction {
             round: self.r,
             value,
@@ -367,7 +374,7 @@ impl Abba {
                             )));
                         }
                     }
-                    PreVoteJustification::RoundOneJustification(subject, proof) => {
+                    PreVoteJustification::RoundOneJustification(c_final) => {
                         if action.round != 1 {
                             return Err(Error::InvalidMessage(format!(
                                 "invalid round. expected 1, got {}",
@@ -375,19 +382,32 @@ impl Abba {
                             )));
                         }
 
-                        if subject != &self.subject {
+                        if self.tag != c_final.tag {
                             return Err(Error::InvalidMessage(format!(
-                                "invalid subject. expected {}, got {}",
-                                self.subject, subject
+                                "invalid tag. expected {:?}, got {:?}",
+                                self.tag, c_final.tag
                             )));
                         }
 
-                        if !self
-                            .pub_key_set
-                            .public_key()
-                            .verify(proof, &subject.to_bytes())
-                        {
-                            return Err(Error::InvalidMessage("invalid proof".to_string()));
+                        match &c_final.action {
+                            crate::mvba::vcbc::message::Action::Final(digest, sig) => {
+                                let sign_bytes =
+                                    crate::mvba::vcbc::c_ready_bytes_to_sign(&c_final.tag, *digest)?;
+
+                                if !self
+                                    .pub_key_set
+                                    .public_key()
+                                    .verify(&sig, &sign_bytes)
+                                {
+                                    return Err(Error::InvalidMessage("invalid signature for the VCBC proposal".to_string()));
+                                }
+                            }
+                            _ => {
+                                return Err(Error::InvalidMessage(format!(
+                                    "invalid action. expected c_final, got {:?}",
+                                    c_final.action_str()
+                                )));
+                            }
                         }
 
                         // A weaker validity: an honest party may only decide on a value
@@ -452,14 +472,14 @@ impl Abba {
                         }
 
                         match just_1 {
-                            PreVoteJustification::RoundOneJustification(subject, proof) => {
-                                if !self
-                                    .pub_key_set
-                                    .public_key()
-                                    .verify(proof, &subject.to_bytes())
-                                {
-                                    return Err(Error::InvalidMessage("invalid proof".to_string()));
-                                }
+                            PreVoteJustification::RoundOneJustification(c_final) => {
+                                // if !self
+                                //     .pub_key_set
+                                //     .public_key()
+                                //     .verify(proof, &subject.to_bytes())
+                                // {
+                                //     return Err(Error::InvalidMessage("invalid proof".to_string()));
+                                // }
                             }
                             _ => {
                                 return Err(Error::InvalidMessage(format!(

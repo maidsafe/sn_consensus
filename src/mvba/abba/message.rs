@@ -2,13 +2,13 @@ use crate::mvba::hash::Hash32;
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteValue {
     One,
     Zero,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteValue {
     One,
     Zero,
@@ -20,7 +20,8 @@ pub enum PreVoteJustification {
     // Round one, without the justification. The initial value should set to zero
     RoundOneNoJustification,
     // Round one, with the justification. The initial value should set to one
-    RoundOneJustification(Hash32, Signature),
+    // The justification is `c-final` message of the VCBC protocol.
+    RoundOneJustification(crate::mvba::vcbc::message::Message),
     // In Round r > 1, justification is either hard,...
     HardJustification(Signature),
     // ... or soft (refer to the spec)
