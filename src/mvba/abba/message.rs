@@ -1,4 +1,3 @@
-
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
@@ -18,22 +17,22 @@ pub enum MainVoteValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteJustification {
     // Round one, without the justification. The initial value should set to zero
-    RoundOneNoJustification,
+    FirstRoundZero,
     // Round one, with the justification. The initial value should set to one
     // The justification is `c-final` message of the VCBC protocol.
-    RoundOneJustification(crate::mvba::vcbc::message::Message),
+    FirstRoundOne(crate::mvba::vcbc::message::Message),
     // In Round r > 1, justification is either hard,...
-    HardJustification(Signature),
+    Hard(Signature),
     // ... or soft (refer to the spec)
-    SoftJustification(Signature),
+    Soft(Signature),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteJustification {
     // The justification consists of the justifications for the two conflicting pre-votes.
-    AbstainJustification(PreVoteJustification, PreVoteJustification),
+    Abstain(Box<PreVoteJustification>, Box<PreVoteJustification>),
     // The justification  is a valid S-threshold signature on value b ∈ {0, 1}
-    NoAbstainJustification(Signature),
+    NoAbstain(Signature),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -54,8 +53,8 @@ pub struct MainVoteAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Action {
-    PreVote(PreVoteAction),
-    MainVote(MainVoteAction),
+    PreVote(Box<PreVoteAction>),
+    MainVote(Box<MainVoteAction>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

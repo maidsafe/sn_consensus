@@ -4,12 +4,16 @@ use crate::mvba::{
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{bundle::Bundle, vcbc::message::Tag};
+use super::{
+    abba::{self, Abba},
+    bundle::Bundle,
+    vcbc::{self, message::Tag},
+};
 
 pub struct Consensus {
     self_id: NodeId,
     threshold: usize,
-    //_abba: Abba,
+    abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
     #[allow(unused)]
     broadcaster: Rc<RefCell<Broadcaster>>,
@@ -34,25 +38,36 @@ impl Consensus {
         //     threshold,
         //     broadcaster_rc.clone(),
         // );
+        let mut abba_map = HashMap::new();
         let mut vcbc_map = HashMap::new();
 
         for id in &parties {
-            let _pub_key = pub_key_set.public_key_share(id);
             let tag = Tag::new("vcbc", *id, 0);
             let vcbc = Vcbc::new(
+                self_id,
+                tag.clone(),
+                pub_key_set.clone(),
+                sec_key_share.clone(),
+                broadcaster_rc.clone(),
+            );
+            vcbc_map.insert(*id, vcbc).unwrap();
+
+            let abba = Abba::new(
+                format!("{}", id),
                 self_id,
                 tag,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),
             );
-            vcbc_map.insert(*id, vcbc).unwrap();
+            abba_map.insert(*id, abba).unwrap();
         }
 
         Consensus {
             self_id,
             threshold: pub_key_set.threshold(),
             vcbc_map,
+            abba_map,
             broadcaster: broadcaster_rc,
         }
     }
@@ -65,8 +80,26 @@ impl Consensus {
                 log::warn!("this node is an observer node")
             }
         }
+
         // TODO:
         // self.broadcaster.borrow_mut().take_bundles()
+
+        // TODO: fixme
+        // just fixing cargo clippy issees
+        match self.abba_map.get_mut(&self.self_id) {
+            Some(abba) => {
+                let c_final = vcbc::message::Message {
+                    tag: vcbc::message::Tag::new("id", 0, 0),
+                    action: vcbc::message::Action::Send(vec![]),
+                };
+                abba.pre_vote_one(c_final).unwrap();
+                abba.pre_vote_zero().unwrap();
+                abba.is_decided();
+            }
+            None => {
+                log::warn!("this node is an observer node")
+            }
+        }
         vec![]
     }
 
@@ -78,11 +111,23 @@ impl Consensus {
             }
         }
 
-        let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
-        let msg = bincode::deserialize(&bundle.message).unwrap();
-        vcbc.receive_message(sender, msg).unwrap();
-        if delivered_count >= self.super_majority_num() {}
-
+        match bundle.module.as_ref() {
+            vcbc::MODULE_NAME => {
+                let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
+                let msg = bincode::deserialize(&bundle.message).unwrap();
+                vcbc.receive_message(sender, msg).unwrap();
+                if delivered_count >= self.super_majority_num() {}
+            }
+            abba::MODULE_NAME => {
+                let abba = self.abba_map.get_mut(&sender).unwrap();
+                let msg = bincode::deserialize(&bundle.message).unwrap();
+                abba.receive_message(sender, msg).unwrap();
+                if delivered_count >= self.super_majority_num() {}
+            }
+            _ => {
+                //
+            }
+        }
         // TODO:
         // self.broadcaster.borrow_mut().take_bundles()
         vec![]
