@@ -1,4 +1,4 @@
-use crate::mvba::hash::Hash32;
+
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
@@ -36,7 +36,7 @@ pub enum MainVoteJustification {
     NoAbstainJustification(Signature),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PreVoteAction {
     pub round: usize,
     pub value: PreVoteValue,
@@ -44,7 +44,7 @@ pub struct PreVoteAction {
     pub sig_share: SignatureShare,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct MainVoteAction {
     pub round: usize,
     pub value: MainVoteValue,
@@ -52,7 +52,7 @@ pub struct MainVoteAction {
     pub sig_share: SignatureShare,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Action {
     PreVote(PreVoteAction),
     MainVote(MainVoteAction),

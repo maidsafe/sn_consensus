@@ -8,7 +8,7 @@ use super::{
 };
 use crate::mvba::hash::Hash32;
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
-use blsttc::{SecretKey, SecretKeySet, Signature};
+use blsttc::{SecretKey, SecretKeySet};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -211,6 +211,33 @@ fn test_pre_vote_invalid_sig_share() {
 }
 
 #[test]
+fn test_double_pre_vote() {
+    let i = TestNet::PARTY_X;
+    let mut t = TestNet::new(i);
+
+    let just_0 = PreVoteJustification::RoundOneNoJustification;
+    let pre_vote_1 = t.make_pre_vote_msg(1, PreVoteValue::Zero, &just_0, &TestNet::PARTY_B);
+
+    let just_1 = PreVoteJustification::RoundOneJustification(t.c_final.clone());
+    let pre_vote_2 = t.make_pre_vote_msg(1, PreVoteValue::One, &just_1, &TestNet::PARTY_B);
+
+    t.abba
+        .receive_message(TestNet::PARTY_B, pre_vote_1.clone())
+        .unwrap();
+
+    // Repeating the message, should not return any error
+    t.abba
+        .receive_message(TestNet::PARTY_B, pre_vote_1)
+        .unwrap();
+
+    let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_2);
+    println!("{:?}", result);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+        if msg == format!(
+            "double pre-vote detected from {:?}", &TestNet::PARTY_B)));
+}
+
+#[test]
 fn test_pre_vote_round_1_invalid_round() {
     let i = TestNet::PARTY_X;
     let mut t = TestNet::new(i);
@@ -243,21 +270,19 @@ fn test_pre_vote_round_1_invalid_c_final_signature() {
     let mut t = TestNet::new(i);
 
     let sign_bytes =
-        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.tag.clone(), t.proposal_digest.clone())
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.tag.clone(), t.proposal_digest)
             .unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
     let invalid_c_final = crate::mvba::vcbc::message::Message {
         tag: t.c_final.tag.clone(),
         action: crate::mvba::vcbc::message::Action::Final(t.proposal_digest, invalid_sig),
     };
-    let just = PreVoteJustification::RoundOneJustification(invalid_c_final.clone());
+    let just = PreVoteJustification::RoundOneJustification(invalid_c_final);
     let msg = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-    if msg == format!(
-        "invalid signature for the VCBC proposal",
-    )));
+    if msg == "invalid signature for the VCBC proposal".to_string()));
 }
 
 #[test]

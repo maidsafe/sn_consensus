@@ -3,7 +3,7 @@
 pub(super) mod message;
 
 mod error;
-use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
 use log::debug;
 
 use self::error::{Error, Result};
@@ -11,7 +11,7 @@ use self::message::{
     Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteJustification,
     PreVoteValue,
 };
-use super::hash::Hash32;
+
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
@@ -259,7 +259,7 @@ impl Abba {
                             MainVoteValue::One,
                             MainVoteJustification::NoAbstainJustification(sig),
                         )
-                    } else if let (Some(one_vote), Some(zero_vote)) = (
+                    } else if let (Some(zero_vote), Some(one_vote)) = (
                         pre_votes.values().find(|a| a.value == PreVoteValue::Zero),
                         pre_votes.values().find(|a| a.value == PreVoteValue::One),
                     ) {
@@ -312,7 +312,13 @@ impl Abba {
         match &msg.action {
             Action::PreVote(action) => {
                 let pre_votes = self.get_mut_pre_votes_by_round(action.round);
-                if pre_votes.contains_key(sender) {
+                if let Some(exist) = pre_votes.get(sender) {
+                    if exist != action {
+                        return Err(Error::InvalidMessage(format!(
+                            "double pre-vote detected from {:?}",
+                            sender
+                        )));
+                    }
                     return Ok(false);
                 }
 
@@ -320,7 +326,13 @@ impl Abba {
             }
             Action::MainVote(action) => {
                 let main_votes = self.get_mut_main_votes_by_round(action.round);
-                if main_votes.contains_key(sender) {
+                if let Some(exist) = main_votes.get(sender) {
+                    if exist != action {
+                        return Err(Error::InvalidMessage(format!(
+                            "double main-vote detected from {:?}",
+                            sender
+                        )));
+                    }
                     return Ok(false);
                 }
 
@@ -387,7 +399,7 @@ impl Abba {
                                     *digest,
                                 )?;
 
-                                if !self.pub_key_set.public_key().verify(&sig, &sign_bytes) {
+                                if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                                     return Err(Error::InvalidMessage(
                                         "invalid signature for the VCBC proposal".to_string(),
                                     ));
@@ -465,7 +477,7 @@ impl Abba {
                         }
 
                         match just_1 {
-                            PreVoteJustification::RoundOneJustification(c_final) => {
+                            PreVoteJustification::RoundOneJustification(_c_final) => {
                                 // if !self
                                 //     .pub_key_set
                                 //     .public_key()

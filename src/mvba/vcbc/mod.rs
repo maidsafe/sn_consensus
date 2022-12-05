@@ -118,7 +118,7 @@ impl Vcbc {
                     self.m_bar = Some(m.clone());
 
                     let d = Hash32::calculate(&m);
-                    self.d = Some(d.clone());
+                    self.d = Some(d);
 
                     // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
                     let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
@@ -175,7 +175,7 @@ impl Vcbc {
 
                             let final_msg = Message {
                                 tag: self.tag.clone(),
-                                action: Action::Final(d.clone(), sig),
+                                action: Action::Final(d, sig),
                             };
 
                             // send (ID.j.s, c-final, d, µ) to all parties

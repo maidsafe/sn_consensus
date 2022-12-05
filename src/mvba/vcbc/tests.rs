@@ -267,7 +267,7 @@ impl TestNet {
         let sig_share = self.sig_share(d, peer_id);
         Message {
             tag: self.vcbc.tag.clone(),
-            action: Action::Ready(d.clone(), sig_share),
+            action: Action::Ready(*d, sig_share),
         }
     }
 
@@ -286,7 +286,7 @@ impl TestNet {
 
         Message {
             tag: self.vcbc.tag.clone(),
-            action: Action::Final(d.clone(), sig),
+            action: Action::Final(*d, sig),
         }
     }
 

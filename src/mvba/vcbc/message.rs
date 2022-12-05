@@ -1,5 +1,5 @@
-use blsttc::{Signature, SignatureShare};
 use crate::mvba::hash::Hash32;
+use blsttc::{Signature, SignatureShare};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Tag {
