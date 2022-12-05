@@ -186,6 +186,31 @@ fn test_ignore_messages_with_wrong_id() {
 }
 
 #[test]
+fn test_absent_vote_round_one_invalid_justification() {
+    let i = TestNet::PARTY_X;
+    let mut t = TestNet::new(i);
+
+    let sign_bytes =
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.tag.clone(), t.proposal_digest)
+            .unwrap();
+    let invalid_sig = SecretKey::random().sign(sign_bytes);
+    let invalid_c_final = crate::mvba::vcbc::message::Message {
+        tag: t.c_final.tag.clone(),
+        action: crate::mvba::vcbc::message::Action::Final(t.proposal_digest, invalid_sig),
+    };
+
+    let just_0 = PreVoteJustification::FirstRoundZero;
+    let just_1 = PreVoteJustification::FirstRoundOne(invalid_c_final);
+    let just = MainVoteJustification::Abstain(Box::new(just_0), Box::new(just_1));
+
+    let main_vote_b = t.make_main_vote_msg(1, MainVoteValue::One, &just, &TestNet::PARTY_B);
+
+    let result = t.abba.receive_message(TestNet::PARTY_B, main_vote_b);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+        if msg == "invalid signature for the VCBC proposal"));
+}
+
+#[test]
 fn test_pre_vote_invalid_sig_share() {
     let i = TestNet::PARTY_X;
     let mut t = TestNet::new(i);

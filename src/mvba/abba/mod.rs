@@ -462,15 +462,26 @@ impl Abba {
                         }
 
                         match just_1.as_ref() {
-                            PreVoteJustification::FirstRoundOne(_c_final) => {
-                                // if !self
-                                //     .pub_key_set
-                                //     .public_key()
-                                //     .verify(proof, &subject.to_bytes())
-                                // {
-                                //     return Err(Error::InvalidMessage("invalid proof".to_string()));
-                                // }
-                            }
+                            PreVoteJustification::FirstRoundOne(c_final) => match &c_final.action {
+                                crate::mvba::vcbc::message::Action::Final(digest, sig) => {
+                                    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
+                                        &c_final.tag,
+                                        *digest,
+                                    )?;
+
+                                    if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                                        return Err(Error::InvalidMessage(
+                                            "invalid signature for the VCBC proposal".to_string(),
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(Error::InvalidMessage(format!(
+                                        "invalid action. expected c_final, got {:?}",
+                                        c_final.action_str()
+                                    )));
+                                }
+                            },
                             _ => {
                                 return Err(Error::InvalidMessage(format!(
                                     "invalid justification for value 1 in round 1: {:?}",
