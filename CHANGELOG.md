@@ -26,6 +26,30 @@ All notable changes to this project will be documented in this file. See [standa
 * using c-final message for the first round ([1b566f0](https://github.com/maidsafe/sn_consensus/commit/1b566f040cce7ced125dd0efeff8b24445810354))
 * weaker validity and justification for main votes ([bb0484d](https://github.com/maidsafe/sn_consensus/commit/bb0484d284f9d0daee74303c467de79c8ff55b17))
 
+## [3.2.0](https://github.com/maidsafe/sn_consensus/compare/v3.1.4...v3.2.0) (2022-12-07)
+
+
+### Features
+
+* agreement in two-round with weaker validity assumption ([a887138](https://github.com/maidsafe/sn_consensus/commit/a8871388f373e9ac40d2e5d8af1a496dc825513c))
+* implementing abba, implementing pre-vote phase (WIP) ([f7f57ac](https://github.com/maidsafe/sn_consensus/commit/f7f57ac548f8881f3be186bf7e80ffaac6f52fe9))
+* implementing abba, pre-procesing phase (WIP) ([ce2ba78](https://github.com/maidsafe/sn_consensus/commit/ce2ba78ff4b94cbe156b6a0eeaaf67214cd2accb))
+* implementing main-vote justification ([e30b04a](https://github.com/maidsafe/sn_consensus/commit/e30b04afb5123dfd5365edd783569721a5a04580))
+* implementing pre-vote justification (r==1) ([1b035e8](https://github.com/maidsafe/sn_consensus/commit/1b035e8d7779a7c0d451749301e8fb044b0367c0))
+* implementing pre-vote justification (r>1) ([48a20f4](https://github.com/maidsafe/sn_consensus/commit/48a20f490317e6cd0b629676ed45413d5608536c))
+
+
+### Bug Fixes
+
+* an issue on getting round votes ([5632f2c](https://github.com/maidsafe/sn_consensus/commit/5632f2c8e1a35f655f123f3a794417a543e1ff4b))
+* check the zero value ([c02469c](https://github.com/maidsafe/sn_consensus/commit/c02469cccc509f5d421d7ec08acece8b8a04fd4f))
+* fixing a broken test (still one test is failing) ([95f4603](https://github.com/maidsafe/sn_consensus/commit/95f460305c2bb2c7d66c20e9df5fef14fe9a5e93))
+* fixing a broken tests and add new test for double vote ([bada652](https://github.com/maidsafe/sn_consensus/commit/bada652939b94a0bfd5d6da49c98ff6c5da91d7f))
+* fixing linting issues ([9236913](https://github.com/maidsafe/sn_consensus/commit/92369135468737163320f21b89d441989a7094ea))
+* make sure the absent value set correct and fixing 'CHECK FOR DECISION' stage ([e93d7d0](https://github.com/maidsafe/sn_consensus/commit/e93d7d000d6d3f98879acdd3595c98d3b8f1e0d2))
+* using c-final message for the first round ([1b566f0](https://github.com/maidsafe/sn_consensus/commit/1b566f040cce7ced125dd0efeff8b24445810354))
+* weaker validity and justification for main votes ([bb0484d](https://github.com/maidsafe/sn_consensus/commit/bb0484d284f9d0daee74303c467de79c8ff55b17))
+
 ### [3.1.4](https://github.com/maidsafe/sn_consensus/compare/v3.1.3...v3.1.4) (2022-11-14)
 
 
