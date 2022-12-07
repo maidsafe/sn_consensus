@@ -1,5 +1,5 @@
 mod error;
-pub(super) mod message;
+pub(crate) mod message;
 
 use self::error::{Error, Result};
 use self::message::{Action, Message, Tag};
@@ -15,6 +15,16 @@ use std::rc::Rc;
 
 pub(crate) const MODULE_NAME: &str = "vcbc";
 
+// c_ready_bytes_to_sign generates bytes that should be signed by each party
+// as a wittiness of receiving the message.
+// c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec.
+pub fn c_ready_bytes_to_sign(
+    tag: &Tag,
+    digest: Hash32,
+) -> std::result::Result<Vec<u8>, bincode::Error> {
+    bincode::serialize(&(tag, "c-ready", digest))
+}
+
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
 pub(crate) struct Vcbc {
     tag: Tag,                            // this is same as $Tag$ in spec
@@ -25,9 +35,9 @@ pub(crate) struct Vcbc {
     rd: usize,                           // this is same as $r_d$ in spec
     d: Option<Hash32>,                   // Memorizing the message digest
     pub_key_set: PublicKeySet,
+    sec_key_share: SecretKeyShare,
     final_messages: HashMap<NodeId, Message>,
     broadcaster: Rc<RefCell<Broadcaster>>,
-    sec_key_share: SecretKeyShare,
 }
 
 /// Tries to insert a key-value pair into the map.
@@ -83,17 +93,22 @@ impl Vcbc {
             tag: self.tag.clone(),
             action: Action::Send(m),
         };
-        self.broadcast(&send_msg)
+        self.broadcast(send_msg)
     }
 
-    // log_message logs (adds) messages into the message_log
+    // receive_message process the received message 'msg` from `sender`
     pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
         if msg.tag != self.tag {
             log::trace!("invalid tag, ignoring message.: {:?}. ", msg);
             return Ok(());
         }
 
-        log::debug!("received {} message: {:?}", msg.action_str(), msg);
+        log::debug!(
+            "received {} message: {:?} from {}",
+            msg.action_str(),
+            msg,
+            sender
+        );
         match msg.action.clone() {
             Action::Send(m) => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
@@ -103,10 +118,10 @@ impl Vcbc {
                     self.m_bar = Some(m.clone());
 
                     let d = Hash32::calculate(&m);
-                    self.d = Some(d.clone());
+                    self.d = Some(d);
 
                     // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
-                    let sign_bytes = self.c_ready_bytes_to_sign(&d)?;
+                    let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
                     let s1 = self.sec_key_share.sign(sign_bytes);
 
                     let ready_msg = Message {
@@ -115,17 +130,17 @@ impl Vcbc {
                     };
 
                     // send (ID.j.s, c-ready, H(m), ν) to Pj
-                    self.send_to(&ready_msg, self.tag.j)?;
+                    self.send_to(ready_msg, self.tag.j)?;
                 }
             }
             Action::Ready(msg_d, sig_share) => {
-                let d = match &self.d {
+                let d = match self.d {
                     Some(d) => d,
                     None => return Err(Error::Generic("protocol violated. no digest".to_string())),
                 };
-                let sign_bytes = self.c_ready_bytes_to_sign(d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
 
-                if d != &msg_d {
+                if d != msg_d {
                     warn!(
                         "c-ready has unknown digest. expected {:?}, got {:?}",
                         d, msg_d
@@ -154,24 +169,24 @@ impl Vcbc {
 
                         // self.threshold() MUST be same as n+t+1/2
                         // spec: if rd = n+t+1/2 then
-                        if self.rd > self.threshold() {
+                        if self.rd >= self.threshold() {
                             // combine the shares in Wd to an S1 -threshold signature µ
                             let sig = self.pub_key_set.combine_signatures(self.wd.iter())?;
 
                             let final_msg = Message {
                                 tag: self.tag.clone(),
-                                action: Action::Final(d.clone(), sig),
+                                action: Action::Final(d, sig),
                             };
 
                             // send (ID.j.s, c-final, d, µ) to all parties
-                            self.broadcast(&final_msg)?;
+                            self.broadcast(final_msg)?;
                         }
                     }
                 }
             }
             Action::Final(msg_d, sig) => {
                 // Upon receiving message (ID.j.s, c-final, d, µ):
-                let d = match &self.d {
+                let d = match self.d {
                     Some(d) => d,
                     None => {
                         warn!("received c-final before receiving s-send, logging message");
@@ -180,15 +195,15 @@ impl Vcbc {
                     }
                 };
 
-                let sign_bytes = self.c_ready_bytes_to_sign(d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag, d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
 
                 if !valid_sig {
                     warn!("c-ready has has invalid signature share");
                 }
 
-                // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1 -signature then
-                if d == &msg_d && self.u_bar.is_none() && valid_sig {
+                // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1-signature then
+                if d == msg_d && self.u_bar.is_none() && valid_sig {
                     // µ̄ ← µ
                     self.u_bar = Some(sig);
                 }
@@ -215,18 +230,12 @@ impl Vcbc {
         }
     }
 
-    // bytes_to_sign generates bytes that should be signed by each party.
-    // bytes_to_sign is same as serialized of (ID.j.s, c-ready, H(m)) in spec.
-    fn c_ready_bytes_to_sign(&self, digest: &Hash32) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.tag, "c-ready", digest))?)
-    }
-
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
-    fn send_to(&mut self, msg: &self::Message, to: NodeId) -> Result<()> {
-        let data = bincode::serialize(msg).unwrap();
+    fn send_to(&mut self, msg: self::Message, to: NodeId) -> Result<()> {
+        let data = bincode::serialize(&msg).unwrap();
         if to == self.i {
-            self.receive_message(self.i, msg.clone())?;
+            self.receive_message(self.i, msg)?;
         } else {
             self.broadcaster.borrow_mut().send_to(MODULE_NAME, data, to);
         }
@@ -235,16 +244,16 @@ impl Vcbc {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, msg: &self::Message) -> Result<()> {
-        let data = bincode::serialize(msg)?;
+    fn broadcast(&mut self, msg: self::Message) -> Result<()> {
+        let data = bincode::serialize(&msg)?;
         self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
-        self.receive_message(self.i, msg.clone())?;
+        self.receive_message(self.i, msg)?;
         Ok(())
     }
 
     // threshold is same as $t$ in spec
     fn threshold(&self) -> usize {
-        self.pub_key_set.threshold()
+        self.pub_key_set.threshold() + 1
     }
 }
 
