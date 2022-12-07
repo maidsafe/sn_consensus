@@ -442,7 +442,10 @@ impl Abba {
                         } else if action.value == MainVoteValue::One {
                             PreVoteValue::One
                         } else {
-                            return Err(Error::InvalidMessage("no-abstain justifications should come with no-abstain value".to_string()));
+                            return Err(Error::InvalidMessage(
+                                "no-abstain justifications should come with no-abstain value"
+                                    .to_string(),
+                            ));
                         };
                         // valid S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes =
