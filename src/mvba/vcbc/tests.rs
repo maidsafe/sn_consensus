@@ -139,12 +139,9 @@ fn test_vcbc_happy_path() {
 
     // And check that all nodes have delivered the expected value and signature
 
-    let expected_bytes_to_sign: Vec<u8> = bincode::serialize(&(
-        tag,
-        "c-ready",
-        Hash32::calculate("HAPPY-PATH-VALUE".as_bytes()),
-    ))
-    .expect("Failed to serialize");
+    let expected_bytes_to_sign: Vec<u8> =
+        bincode::serialize(&(tag, "c-ready", Hash32::calculate("HAPPY-PATH-VALUE")))
+            .expect("Failed to serialize");
 
     let expected_sig = net
         .secret_key_set
@@ -405,7 +402,7 @@ fn test_invalid_digest() {
 
     t.vcbc.c_broadcast(t.m.clone()).unwrap();
 
-    let invalid_digest = Hash32::calculate("invalid-data".as_bytes());
+    let invalid_digest = Hash32::calculate("invalid-data");
     let ready_msg_x = t.make_ready_msg(&invalid_digest, &i);
     assert!(t
         .vcbc

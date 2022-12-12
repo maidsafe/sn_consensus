@@ -6,11 +6,11 @@ use super::{
     },
     Abba,
 };
-use crate::mvba::hash::Hash32;
-use crate::mvba::{broadcaster::Broadcaster, NodeId};
+use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
+use crate::mvba::{hash::Hash32, vcbc::message::Tag};
 use blsttc::{SecretKey, SecretKeySet};
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::BTreeMap};
 
 use rand::{random, thread_rng};
 
@@ -559,4 +559,149 @@ fn test_normal_case_two_rounds() {
 
     assert!(t.abba.is_decided());
     assert_eq!(t.abba.decided_value, Some(true));
+}
+
+struct Net {
+    secret_key_set: SecretKeySet,
+    tag: Tag,
+    nodes: BTreeMap<NodeId, Abba>,
+    queue: BTreeMap<NodeId, Vec<Bundle>>,
+}
+
+impl Net {
+    fn new(n: usize, tag: Tag) -> Self {
+        // we can tolerate < n/3 faults
+        let faults = n.saturating_sub(1) / 3;
+
+        // we want to require n - f signature shares but
+        // blsttc wants a threshold value where you require t + 1 shares
+        // So we just subtract 1 from n - f.
+        let threshold = (n - faults).saturating_sub(1);
+        let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
+        let public_key_set = secret_key_set.public_keys();
+        let bundle_id = 0; // TODO: what is this?
+
+        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
+            let key_share = secret_key_set.secret_key_share(node_id);
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
+                bundle_id,
+                node_id,
+                key_share.clone(),
+            )));
+            let vcbc = Abba::new(
+                tag.id.clone(),
+                node_id,
+                tag.clone(),
+                public_key_set.clone(),
+                key_share,
+                broadcaster,
+            );
+            (node_id, vcbc)
+        }));
+
+        Net {
+            secret_key_set,
+            tag,
+            nodes,
+            queue: Default::default(),
+        }
+    }
+
+    fn node_mut(&mut self, id: NodeId) -> &mut Abba {
+        self.nodes.get_mut(&id).unwrap()
+    }
+
+    fn enqueue_bundles_from(&mut self, id: NodeId) {
+        let (send_bundles, bcast_bundles) = {
+            let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
+            let send_bundles = broadcaster.take_send_bundles();
+            let bcast_bundles = broadcaster.take_broadcast_bundles();
+            (send_bundles, bcast_bundles)
+        };
+
+        for (recipient, bundle) in send_bundles {
+            let bundle: Bundle =
+                bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+            self.queue.entry(recipient).or_default().push(bundle);
+        }
+
+        for bundle in bcast_bundles {
+            for recipient in self.nodes.keys() {
+                let bundle: Bundle =
+                    bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+                self.queue.entry(*recipient).or_default().push(bundle);
+            }
+        }
+    }
+
+    fn drain_queue(&mut self) {
+        while !self.queue.is_empty() {
+            for (recipient, queue) in std::mem::take(&mut self.queue) {
+                let recipient_node = self.node_mut(recipient);
+
+                for bundle in queue {
+                    let msg: Message = bincode::deserialize(&bundle.message)
+                        .expect("Failed to deserialize message");
+
+                    println!("Handling message: {msg:?}");
+                    recipient_node
+                        .receive_message(bundle.sender, msg)
+                        .expect("Failed to receive msg");
+                }
+
+                self.enqueue_bundles_from(recipient);
+            }
+        }
+    }
+
+    #[allow(unused)]
+    fn deliver(&mut self, recipient: NodeId, index: usize) {
+        if let Some(msgs) = self.queue.get_mut(&recipient) {
+            if msgs.is_empty() {
+                return;
+            }
+            let index = index % msgs.len();
+
+            let bundle = msgs.swap_remove(index);
+            let msg: Message =
+                bincode::deserialize(&bundle.message).expect("Failed to deserialize message");
+
+            let recipient_node = self.node_mut(recipient);
+            recipient_node
+                .receive_message(bundle.sender, msg)
+                .expect("Failed to receive message");
+            self.enqueue_bundles_from(recipient);
+        }
+    }
+}
+
+#[test]
+fn test_net_happy_path() {
+    let proposer = 1;
+    let mut net = Net::new(3, Tag::new("happy-path", proposer, 0));
+
+    let proposal_digest = Hash32::calculate("test-data".as_bytes());
+    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&net.tag, proposal_digest).unwrap();
+    let c_final_sig = net.secret_key_set.secret_key().sign(sign_bytes);
+    let c_final = crate::mvba::vcbc::message::Message {
+        tag: net.tag.clone(),
+        action: crate::mvba::vcbc::message::Action::Final(proposal_digest, c_final_sig),
+    };
+
+    // All nodes pre-vote one
+
+    for id in Vec::from_iter(net.nodes.keys().copied()) {
+        net.node_mut(id)
+            .pre_vote_one(c_final.clone())
+            .expect("Failed to pre-vote");
+
+        net.enqueue_bundles_from(id);
+    }
+
+    net.drain_queue();
+
+    for (id, node) in net.nodes {
+        println!("Checking {id}");
+        assert_eq!(node.decided_value, Some(true));
+    }
 }
