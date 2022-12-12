@@ -1,6 +1,8 @@
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
+use crate::mvba::vcbc::message::Tag;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteValue {
     One,
@@ -59,7 +61,7 @@ pub enum Action {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub id: String,
+    pub tag: Tag,
     pub action: Action,
 }
 

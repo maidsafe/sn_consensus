@@ -6,8 +6,8 @@ use super::{
     },
     Abba,
 };
-use crate::mvba::hash::Hash32;
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
+use crate::mvba::{hash::Hash32, vcbc::message::Tag};
 use blsttc::{SecretKey, SecretKeySet};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -52,9 +52,8 @@ impl TestNet {
             sec_key_share.clone(),
         )));
         let abba = Abba::new(
-            "test".to_string(),
-            i,
             tag,
+            i,
             sec_key_set.public_keys(),
             sec_key_share,
             broadcaster.clone(),
@@ -79,7 +78,7 @@ impl TestNet {
         let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
-            id: self.abba.id.clone(),
+            tag: self.abba.tag.clone(),
             action: Action::PreVote(Box::new(PreVoteAction {
                 round,
                 value,
@@ -99,7 +98,7 @@ impl TestNet {
         let sign_bytes = self.abba.main_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
-            id: self.abba.id.clone(),
+            tag: self.abba.tag.clone(),
             action: Action::MainVote(Box::new(MainVoteAction {
                 round,
                 value,
@@ -175,18 +174,17 @@ fn test_should_publish_main_vote_message() {
 }
 
 #[test]
-fn test_ignore_messages_with_wrong_id() {
+fn test_ignore_messages_with_wrong_tag() {
     let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
 
     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
     let mut pre_vote_x = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
-    pre_vote_x.id = "another-id".to_string();
+    pre_vote_x.tag = Tag::new("bad tag", 0, 0);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid ID. expected: {}, got another-id", t.abba.id)));
+    assert!(matches!(result, Err(Error::InvalidMessage(_))));
 }
 
 #[test]
@@ -227,7 +225,7 @@ fn test_pre_vote_invalid_sig_share() {
         .secret_key_share(TestNet::PARTY_B)
         .sign("invalid-msg");
     let msg = Message {
-        id: t.abba.id.clone(),
+        tag: t.abba.tag.clone(),
         action: Action::PreVote(Box::new(PreVoteAction {
             round: 1,
             justification: just,

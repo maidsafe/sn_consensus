@@ -53,9 +53,8 @@ impl Consensus {
             vcbc_map.insert(*id, vcbc).unwrap();
 
             let abba = Abba::new(
-                format!("{}", id),
-                self_id,
                 tag,
+                self_id,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),

@@ -8,6 +8,7 @@ use self::message::{
     Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteJustification,
     PreVoteValue,
 };
+use super::vcbc::message::Tag;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
@@ -21,11 +22,10 @@ pub(crate) const MODULE_NAME: &str = "abba";
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
-    id: String,                  // this is same as $ID$ in spec
-    i: NodeId,                   // this is same as $i$ in spec
-    r: usize,                    // this is same as $r$ in spec
+    tag: Tag,                    // this takes the place of $ID$ in spec
+    id: NodeId,                  // this is same as $i$ in spec
+    round: usize,                // this is same as $r$ in spec
     decided_value: Option<bool>, // TODO: should be boolean?
-    tag: crate::mvba::vcbc::message::Tag,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
@@ -35,19 +35,17 @@ pub(crate) struct Abba {
 
 impl Abba {
     pub fn new(
-        id: String,
-        i: NodeId,
         tag: crate::mvba::vcbc::message::Tag,
+        id: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            id,
-            i,
-            r: 1,
-            decided_value: None,
             tag,
+            id,
+            round: 1,
+            decided_value: None,
             pub_key_set,
             sec_key_share,
             broadcaster,
@@ -70,16 +68,16 @@ impl Abba {
 
     fn pre_vote(&mut self, value: PreVoteValue, justification: PreVoteJustification) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
-        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
+        let sign_bytes = self.pre_vote_bytes_to_sign(self.round, &value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
         let action = PreVoteAction {
-            round: self.r,
+            round: self.round,
             value,
             justification,
             sig_share,
         };
         let msg = Message {
-            id: self.id.clone(),
+            tag: self.tag.clone(),
             action: Action::PreVote(Box::new(action)),
         };
         // and send to all parties the message (ID, pre-process, Vi , signature share).
@@ -102,19 +100,19 @@ impl Abba {
 
         match &msg.action {
             Action::MainVote(action) => {
-                if action.round + 1 != self.r {
+                if action.round + 1 != self.round {
                     return Ok(());
                 }
                 // 1. PRE-VOTE step.
                 // Note: In weaker validity mode, round 1 comes with the external justification.
 
                 // if r > 1, ...
-                if self.r > 1 {
+                if self.round > 1 {
                     // select n − t properly justified main-votes from round r − 1
-                    let main_votes = match self.get_main_votes_by_round(self.r - 1) {
+                    let main_votes = match self.get_main_votes_by_round(self.round - 1) {
                         Some(v) => v,
                         None => {
-                            debug!("no main-votes for this round: {}", self.r);
+                            debug!("no main-votes for this round: {}", self.round);
                             return Ok(());
                         }
                     };
@@ -181,14 +179,14 @@ impl Abba {
                             };
 
                         // Produce an S-signature share on the message `(ID, pre-vote, r, b)`
-                        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
+                        let sign_bytes = self.pre_vote_bytes_to_sign(self.round, &value)?;
                         let sig_share = self.sec_key_share.sign(sign_bytes);
 
                         // Send to all parties the message `(ID, pre-vote, r, b, justification, signature share)`
                         let pre_vote_message = Message {
-                            id: self.id.clone(),
+                            tag: self.tag.clone(),
                             action: Action::PreVote(Box::new(PreVoteAction {
-                                round: self.r,
+                                round: self.round,
                                 value,
                                 justification,
                                 sig_share,
@@ -202,15 +200,15 @@ impl Abba {
             }
 
             Action::PreVote(action) => {
-                if action.round != self.r {
+                if action.round != self.round {
                     return Ok(());
                 }
 
                 // 2. MAIN-VOTE. Collect n − t valid and properly justified round-r pre-vote messages.
-                let pre_votes = match self.get_pre_votes_by_round(self.r) {
+                let pre_votes = match self.get_pre_votes_by_round(self.round) {
                     Some(v) => v,
                     None => {
-                        debug!("no pre-votes for this round: {}", self.r);
+                        debug!("no pre-votes for this round: {}", self.round);
                         return Ok(());
                     }
                 };
@@ -262,14 +260,14 @@ impl Abba {
                     };
 
                     // Produce an S-signature share on the message `(ID, main-vote, r, v)`
-                    let sign_bytes = self.main_vote_bytes_to_sign(self.r, &value)?;
+                    let sign_bytes = self.main_vote_bytes_to_sign(self.round, &value)?;
                     let sig_share = self.sec_key_share.sign(sign_bytes);
 
                     // send to all parties the message: `(ID, main-vote, r, v, justification, signature share)`
                     let main_vote_message = Message {
-                        id: self.id.clone(),
+                        tag: self.tag.clone(),
                         action: Action::MainVote(Box::new(MainVoteAction {
-                            round: self.r,
+                            round: self.round,
                             value,
                             justification: just,
                             sig_share,
@@ -277,7 +275,7 @@ impl Abba {
                     };
 
                     self.broadcast(main_vote_message)?;
-                    self.r += 1;
+                    self.round += 1;
                 }
             }
         }
@@ -324,10 +322,10 @@ impl Abba {
     }
 
     fn check_message(&mut self, sender: &NodeId, msg: &Message) -> Result<()> {
-        if msg.id != self.id {
+        if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid ID. expected: {}, got {}",
-                self.id, msg.id
+                "invalid tag. expected: {:?}, got {:?}",
+                self.tag, msg.tag
             )));
         }
 
@@ -415,7 +413,7 @@ impl Abba {
                     PreVoteJustification::Soft(sig) => {
                         // Soft pre-vote justification is the S-threshold signature for `(ID, main-vote, r − 1, abstain)`
                         let sign_bytes =
-                            self.main_vote_bytes_to_sign(self.r - 1, &MainVoteValue::Abstain)?;
+                            self.main_vote_bytes_to_sign(self.round - 1, &MainVoteValue::Abstain)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid soft-vote justification".to_string(),
@@ -514,30 +512,20 @@ impl Abba {
     fn broadcast(&mut self, msg: self::Message) -> Result<()> {
         let data = bincode::serialize(&msg)?;
         self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
-        self.receive_message(self.i, msg)?;
+        self.receive_message(self.id, msg)?;
         Ok(())
     }
 
     // pre_vote_bytes_to_sign generates bytes for Pre-Vote signature share.
     // pre_vote_bytes_to_sign is same as serialized of $(ID, pre-vote, r, b)$ in spec.
     fn pre_vote_bytes_to_sign(&self, round: usize, v: &PreVoteValue) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            self.id.clone(),
-            "pre-vote",
-            round,
-            v,
-        ))?)
+        Ok(bincode::serialize(&(&self.tag, "pre-vote", round, v))?)
     }
 
     // main_vote_bytes_to_sign generates bytes for Main-Vote signature share.
     // main_vote_bytes_to_sign is same as serialized of $(ID, main-vote, r, v)$ in spec.
     fn main_vote_bytes_to_sign(&self, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            self.id.clone(),
-            "main-vote",
-            round,
-            v,
-        ))?)
+        Ok(bincode::serialize(&(&self.tag, "main-vote", round, v))?)
     }
 
     // threshold return the threshold of the public key set.
