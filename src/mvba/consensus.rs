@@ -1,6 +1,4 @@
-use crate::mvba::{
-    broadcaster::Broadcaster, proposal::Proposal, vcbc::Vcbc, NodeId, ProposalChecker,
-};
+use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -26,7 +24,7 @@ impl Consensus {
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
-        _proposal_checker: ProposalChecker,
+        message_validity: MessageValidity,
     ) -> Consensus {
         let broadcaster = Broadcaster::new(bundle_id, self_id, sec_key_share.clone());
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
@@ -48,6 +46,7 @@ impl Consensus {
                 tag.clone(),
                 pub_key_set.clone(),
                 sec_key_share.clone(),
+                message_validity,
                 broadcaster_rc.clone(),
             );
             vcbc_map.insert(*id, vcbc).unwrap();
@@ -72,8 +71,8 @@ impl Consensus {
         }
     }
 
-    // start the consensus by proposing a proposal and broadcasting it.
-    pub fn start(&mut self, _proposal: Proposal) -> Vec<Vec<u8>> {
+    /// starts the consensus by broadcasting the `m`.
+    pub fn start(&mut self, m: &[u8]) -> Vec<Vec<u8>> {
         match self.vcbc_map.get_mut(&self.self_id) {
             Some(_vcbc) => {}
             None => {

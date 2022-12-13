@@ -12,6 +12,8 @@ pub enum Error {
     InvalidHashLength(#[from] hash::InvalidLength),
     #[error("duplicated message {0} from {1:?}")]
     DuplicatedMessage(NodeId, String),
+    #[error("invalid proposed message")]
+    InvalidMessage,
     #[error("generic error {0}")]
     Generic(String),
 }

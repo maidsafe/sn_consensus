@@ -1,4 +1,4 @@
-use crate::mvba::hash::Hash32;
+use crate::mvba::{hash::Hash32, Proposal};
 use blsttc::{Signature, SignatureShare};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -20,8 +20,7 @@ impl Tag {
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Action {
-    // TODO: use serde trait
-    Send(Vec<u8>),                 // this is same as $c-send$ in spec
+    Send(Proposal),                // this is same as $c-send$ in spec
     Ready(Hash32, SignatureShare), // this is same as $c-ready$ in spec
     Final(Hash32, Signature),      // this is same as $c-final$ in spec
 }
