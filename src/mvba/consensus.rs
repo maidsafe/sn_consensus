@@ -72,7 +72,7 @@ impl Consensus {
     }
 
     /// starts the consensus by broadcasting the `m`.
-    pub fn start(&mut self, _m: &[u8]) -> Vec<Vec<u8>> {
+    pub fn start(&mut self, _proposal: Proposal) -> Vec<Vec<u8>> {
         match self.vcbc_map.get_mut(&self.self_id) {
             Some(_vcbc) => {}
             None => {
