@@ -4,7 +4,7 @@ pub(crate) mod message;
 use self::error::{Error, Result};
 use self::message::{Action, Message, Tag};
 use super::hash::Hash32;
-use super::NodeId;
+use super::{NodeId, MessageValidity, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 use log::warn;
@@ -37,6 +37,7 @@ pub(crate) struct Vcbc {
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     final_messages: HashMap<NodeId, Message>,
+    message_validity: MessageValidity,
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
@@ -60,6 +61,7 @@ impl Vcbc {
         tag: Tag,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
+        message_validity: MessageValidity,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         debug_assert_eq!(i, broadcaster.borrow().self_id());
@@ -75,16 +77,14 @@ impl Vcbc {
             final_messages: HashMap::new(),
             pub_key_set,
             sec_key_share,
+            message_validity,
             broadcaster,
         }
     }
 
-    // TODO: remove me
-    #[allow(dead_code)]
-
-    // c_broadcast sends the messages `m` to all other parties.
-    // It also adds the message to message_log and process it.
-    pub fn c_broadcast(&mut self, m: Vec<u8>) -> Result<()> {
+    /// c_broadcast sends the messages `m` to all other parties.
+    /// It also adds the message to message_log and process it.
+    pub fn c_broadcast(&mut self, m: Proposal) -> Result<()> {
         debug_assert_eq!(self.i, self.tag.j);
 
         // Upon receiving message (ID.j.s, in, c-broadcast, m):
@@ -96,7 +96,7 @@ impl Vcbc {
         self.broadcast(send_msg)
     }
 
-    // receive_message process the received message 'msg` from `sender`
+    /// receive_message process the received message 'msg` from `sender`
     pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
         if msg.tag != self.tag {
             log::trace!("invalid tag, ignoring message.: {:?}. ", msg);
@@ -114,6 +114,9 @@ impl Vcbc {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
                 // if j = l and m̄ = ⊥ then
                 if sender == self.tag.j && self.m_bar.is_none() {
+                    if !(self.message_validity)(sender, &m) {
+                        return Err(Error::InvalidMessage);
+                    }
                     // m̄ ← m
                     self.m_bar = Some(m.clone());
 

@@ -1,13 +1,23 @@
 use super::message::{Action, Message, Tag};
+use super::Error;
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
+use crate::mvba::Proposal;
 use blsttc::{SecretKeySet, SignatureShare};
 use quickcheck_macros::quickcheck;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+
+fn valid_proposal(_: NodeId, _: &Proposal) -> bool {
+    true
+}
+
+fn invalid_proposal(_: NodeId, _: &Proposal) -> bool {
+    false
+}
 
 struct Net {
     secret_key_set: SecretKeySet,
@@ -40,6 +50,7 @@ impl Net {
                 tag.clone(),
                 public_key_set.clone(),
                 key_share,
+                valid_proposal,
                 broadcaster,
             );
             (node_id, vcbc)
@@ -242,6 +253,7 @@ impl TestNet {
             tag,
             sec_key_set.public_keys(),
             sec_key_share,
+            valid_proposal,
             broadcaster.clone(),
         );
 
@@ -331,6 +343,19 @@ fn test_ignore_messages_with_wrong_tag() {
 
     let ready_msg_x = t.make_ready_msg(&t.d(), &i);
     assert!(!t.is_send_to(&j, &ready_msg_x));
+}
+
+#[test]
+fn test_invalid_message() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_B;
+    let mut t = TestNet::new(i, j);
+    t.vcbc.message_validity = invalid_proposal;
+
+    let msg = t.make_send_msg(&t.m);
+
+    let result = t.vcbc.receive_message(TestNet::PARTY_B, msg);
+    assert!(matches!(result, Err(Error::InvalidMessage)));
 }
 
 #[test]
