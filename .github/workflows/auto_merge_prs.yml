@@ -1,7 +1,6 @@
 # auto merge workflow.
 #
 # Auto merge PR if commit msg begins with `chore(release):`,
-# or if it has been raised by Dependabot.
 # Uses https://github.com/ridedott/merge-me-action.
 
 name: Merge Version Change and Dependabot PRs automatically
