@@ -1,7 +1,6 @@
 # auto merge workflow.
 #
 # Auto merge PR if commit msg begins with `chore(release):`,
-# or if it has been raised by Dependabot.
 # Uses https://github.com/ridedott/merge-me-action.
 
 name: Merge Version Change and Dependabot PRs automatically
@@ -30,10 +29,4 @@ jobs:
       with:
         GITHUB_LOGIN: dirvine
         GITHUB_TOKEN: ${{ secrets.MERGE_BUMP_BRANCH_TOKEN }}
-        MERGE_METHOD: REBASE
-
-    - name: Dependabot Merge
-      uses: ridedott/merge-me-action@master
-      with:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         MERGE_METHOD: REBASE
