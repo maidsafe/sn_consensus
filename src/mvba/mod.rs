@@ -1,16 +1,14 @@
 pub mod consensus;
+pub mod hash;
 
 pub(crate) mod proposal;
 
 mod abba;
 mod broadcaster;
 mod bundle;
-mod hash;
 mod vcbc;
 
 pub type NodeId = usize;
-
-
 
 /// A proposed data with the proof inside. It is the same as $(w, π)$ in the spec.
 pub type Proposal = Vec<u8>;
