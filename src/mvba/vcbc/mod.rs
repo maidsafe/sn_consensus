@@ -4,7 +4,7 @@ pub(crate) mod message;
 use self::error::{Error, Result};
 use self::message::{Action, Message, Tag};
 use super::hash::Hash32;
-use super::{NodeId, MessageValidity, Proposal};
+use super::{MessageValidity, NodeId, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 use log::warn;
@@ -82,6 +82,8 @@ impl Vcbc {
         }
     }
 
+    // TODO: remove me
+    #[allow(dead_code)]
     /// c_broadcast sends the messages `m` to all other parties.
     /// It also adds the message to message_log and process it.
     pub fn c_broadcast(&mut self, m: Proposal) -> Result<()> {
