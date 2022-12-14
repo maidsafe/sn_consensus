@@ -8,3 +8,9 @@ pub struct Bundle {
     pub module: String,   // TODO: use enum
     pub message: Vec<u8>, // TODO: use enum
 }
+
+/// Ongoing messages definition
+pub enum Outgoing {
+    Gossip(Bundle),
+    Direct(NodeId, Bundle)
+}

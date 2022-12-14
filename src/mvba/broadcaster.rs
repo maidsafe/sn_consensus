@@ -1,23 +1,21 @@
-use super::{bundle::Bundle, NodeId};
-use blsttc::SecretKeyShare;
+use super::{
+    bundle::{Bundle, Outgoing},
+    NodeId,
+};
 
 // Broadcaster holds information required to broadcast the messages.
 pub struct Broadcaster {
     bundle_id: u32,
     self_id: NodeId,
-    _sec_key_share: SecretKeyShare, // TODO: SecretKeyShare or SecretKey?
-    broadcast_bundles: Vec<Bundle>,
-    send_bundles: Vec<(NodeId, Bundle)>,
+    outgoings: Vec<Outgoing>,
 }
 
 impl Broadcaster {
-    pub fn new(bundle_id: u32, self_id: NodeId, sec_key_share: SecretKeyShare) -> Self {
+    pub fn new(bundle_id: u32, self_id: NodeId) -> Self {
         Self {
             bundle_id,
             self_id,
-            _sec_key_share: sec_key_share,
-            broadcast_bundles: Vec::new(),
-            send_bundles: Vec::new(),
+            outgoings: Vec::new(),
         }
     }
 
@@ -32,7 +30,7 @@ impl Broadcaster {
             module: module.to_string(),
             message,
         };
-        self.send_bundles.push((recipient, bdl));
+        self.outgoings.push(Outgoing::Direct(recipient, bdl));
     }
 
     pub fn broadcast(&mut self, module: &str, message: Vec<u8>) {
@@ -42,42 +40,57 @@ impl Broadcaster {
             module: module.to_string(),
             message,
         };
-        self.broadcast_bundles.push(bdl);
+        self.outgoings.push(Outgoing::Gossip(bdl));
     }
 
-    #[allow(dead_code)]
-    pub fn take_broadcast_bundles(&mut self) -> Vec<Vec<u8>> {
-        let mut data = Vec::with_capacity(self.broadcast_bundles.len());
-        for bdl in std::mem::take(&mut self.broadcast_bundles) {
-            data.push(bincode::serialize(&bdl).unwrap())
-        }
-        data
+    pub fn take_outgoings(&mut self) -> Vec<Outgoing> {
+        let out = std::mem::take(&mut self.outgoings);
+        self.outgoings = Vec::new();
+        out
     }
 
-    #[allow(dead_code)]
-    pub fn take_send_bundles(&mut self) -> Vec<(NodeId, Vec<u8>)> {
-        let mut data = Vec::with_capacity(self.send_bundles.len());
-        for (recipient, bdl) in std::mem::take(&mut self.send_bundles) {
-            data.push((recipient, bincode::serialize(&bdl).unwrap()))
+    #[cfg(test)]
+    pub fn take_gossip_bundles(&mut self) -> Vec<Vec<u8>> {
+        let mut data = Vec::with_capacity(self.outgoings.len());
+        for out in std::mem::take(&mut self.outgoings) {
+            if let Outgoing::Gossip(bdl) = out {
+                data.push(bincode::serialize(&bdl).unwrap())
+            }
         }
         data
     }
 
     #[cfg(test)]
-    pub fn has_broadcast_message(&self, msg: &[u8]) -> bool {
-        for bdl in &self.broadcast_bundles {
-            if bdl.message.eq(&msg) {
-                return true;
+    pub fn take_direct_bundles(&mut self) -> Vec<(NodeId, Vec<u8>)> {
+        let mut data = Vec::with_capacity(self.outgoings.len());
+
+        for out in std::mem::take(&mut self.outgoings) {
+            if let Outgoing::Direct(recipient, bdl) = out {
+                data.push((recipient, bincode::serialize(&bdl).unwrap()))
+            }
+        }
+        data
+    }
+
+    #[cfg(test)]
+    pub fn has_gossip_message(&self, msg: &[u8]) -> bool {
+        for out in &self.outgoings {
+            if let Outgoing::Gossip(bdl) = out {
+                if bdl.message.eq(&msg) {
+                    return true;
+                }
             }
         }
         false
     }
 
     #[cfg(test)]
-    pub fn has_send_message(&self, to: &NodeId, msg: &[u8]) -> bool {
-        for (receiver, bdl) in &self.send_bundles {
-            if bdl.message.eq(&msg) {
-                return receiver == to;
+    pub fn has_direct_message(&self, to: &NodeId, msg: &[u8]) -> bool {
+        for out in &self.outgoings {
+            if let Outgoing::Direct(recipient, bdl) = out {
+                if bdl.message == msg && recipient == to {
+                    return true;
+                }
             }
         }
         false

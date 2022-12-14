@@ -1,7 +1,6 @@
 pub mod consensus;
 pub mod hash;
-
-pub(crate) mod proposal;
+pub mod error;
 
 mod abba;
 mod broadcaster;

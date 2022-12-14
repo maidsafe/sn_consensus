@@ -47,11 +47,7 @@ impl TestNet {
             tag: tag.clone(),
             action: crate::mvba::vcbc::message::Action::Final(proposal_digest, c_final_sig),
         };
-        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
-            random(),
-            i,
-            sec_key_share.clone(),
-        )));
+        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(), i)));
         let abba = Abba::new(
             "test".to_string(),
             i,
@@ -113,7 +109,7 @@ impl TestNet {
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
             .borrow()
-            .has_broadcast_message(&bincode::serialize(msg).unwrap())
+            .has_gossip_message(&bincode::serialize(msg).unwrap())
     }
 }
 

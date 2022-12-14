@@ -4,8 +4,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
     abba::{self, Abba},
-    bundle::Bundle,
+    bundle::{Bundle, Outgoing},
+    error::{Error, Result},
     vcbc::{self, message::Tag},
+    Proposal,
 };
 
 pub struct Consensus {
@@ -26,16 +28,8 @@ impl Consensus {
         parties: Vec<NodeId>,
         message_validity: MessageValidity,
     ) -> Consensus {
-        let broadcaster = Broadcaster::new(bundle_id, self_id, sec_key_share.clone());
+        let broadcaster = Broadcaster::new(bundle_id, self_id);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
-
-        // TODO: uncomment me
-        // let abba = Abba::new(
-        //     pub_key_set.clone(),
-        //     number,
-        //     threshold,
-        //     broadcaster_rc.clone(),
-        // );
         let mut abba_map = HashMap::new();
         let mut vcbc_map = HashMap::new();
 
@@ -72,37 +66,19 @@ impl Consensus {
     }
 
     /// starts the consensus by broadcasting the `m`.
-    pub fn start(&mut self, _m: &[u8]) -> Vec<Vec<u8>> {
+    pub fn start(&mut self, proposal: Proposal) -> Result<Vec<Outgoing>> {
         match self.vcbc_map.get_mut(&self.self_id) {
-            Some(_vcbc) => {}
-            None => {
-                log::warn!("this node is an observer node")
-            }
-        }
-
-        // TODO:
-        // self.broadcaster.borrow_mut().take_bundles()
-
-        // TODO: fixme
-        // just fixing cargo clippy issees
-        match self.abba_map.get_mut(&self.self_id) {
-            Some(abba) => {
-                let c_final = vcbc::message::Message {
-                    tag: vcbc::message::Tag::new("id", 0, 0),
-                    action: vcbc::message::Action::Send(vec![]),
-                };
-                abba.pre_vote_one(c_final).unwrap();
-                abba.pre_vote_zero().unwrap();
-                abba.is_decided();
+            Some(vcbc) => {
+                vcbc.c_broadcast(proposal)?;
             }
             None => {
                 log::warn!("this node is an observer node")
             }
         }
-        vec![]
+        Ok(self.broadcaster.borrow_mut().take_outgoings())
     }
 
-    pub fn process_bundle(&mut self, sender: NodeId, bundle: &Bundle) -> Vec<Vec<u8>> {
+    pub fn process_bundle(&mut self, sender: NodeId, bundle: &Bundle) -> Result<Vec<Outgoing>> {
         let mut delivered_count = 0;
         for vcbc in self.vcbc_map.values() {
             if vcbc.is_delivered() {
@@ -127,9 +103,7 @@ impl Consensus {
                 //
             }
         }
-        // TODO:
-        // self.broadcaster.borrow_mut().take_bundles()
-        vec![]
+        Ok(self.broadcaster.borrow_mut().take_outgoings())
     }
 
     fn super_majority_num(&self) -> usize {

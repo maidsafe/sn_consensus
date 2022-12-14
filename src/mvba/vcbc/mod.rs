@@ -1,4 +1,4 @@
-mod error;
+pub(crate) mod error;
 pub(crate) mod message;
 
 use self::error::{Error, Result};

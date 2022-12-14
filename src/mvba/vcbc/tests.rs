@@ -40,11 +40,7 @@ impl Net {
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
             let key_share = secret_key_set.secret_key_share(node_id);
-            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
-                bundle_id,
-                node_id,
-                key_share.clone(),
-            )));
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(bundle_id, node_id)));
             let vcbc = Vcbc::new(
                 node_id,
                 tag.clone(),
@@ -70,8 +66,8 @@ impl Net {
     fn enqueue_bundles_from(&mut self, id: NodeId) {
         let (send_bundles, bcast_bundles) = {
             let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
-            let send_bundles = broadcaster.take_send_bundles();
-            let bcast_bundles = broadcaster.take_broadcast_bundles();
+            let send_bundles = broadcaster.take_direct_bundles();
+            let bcast_bundles = broadcaster.take_gossip_bundles();
             (send_bundles, bcast_bundles)
         };
 
@@ -239,11 +235,7 @@ impl TestNet {
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
-        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
-            random(),
-            i,
-            sec_key_share.clone(),
-        )));
+        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(random(), i)));
         let tag = Tag::new("test", j, 0);
         let vcbc = Vcbc::new(
             i,
@@ -302,13 +294,13 @@ impl TestNet {
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
             .borrow()
-            .has_broadcast_message(&bincode::serialize(msg).unwrap())
+            .has_gossip_message(&bincode::serialize(msg).unwrap())
     }
 
     pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
         self.broadcaster
             .borrow()
-            .has_send_message(to, &bincode::serialize(msg).unwrap())
+            .has_direct_message(to, &bincode::serialize(msg).unwrap())
     }
 
     pub fn m(&self) -> Vec<u8> {

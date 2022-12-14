@@ -1,4 +1,6 @@
 // TODO: apply section 5.3.3. Further Optimizations
+pub(crate) mod error;
+pub(crate) mod message;
 
 mod error;
 pub(super) mod message;
@@ -6,18 +8,6 @@ pub(super) mod message;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-
-use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
-use log::{debug, error};
-
-use super::NodeId;
-use crate::mvba::abba::message::MainVoteJustification;
-use crate::mvba::broadcaster::Broadcaster;
-use error::{Error, Result};
-use message::{
-    Action, DecisionAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
-    PreVoteJustification, Value,
-};
 
 pub(crate) const MODULE_NAME: &str = "abba";
 
