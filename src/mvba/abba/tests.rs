@@ -1,3 +1,9 @@
+use std::rc::Rc;
+use std::{cell::RefCell, collections::BTreeMap};
+
+use blsttc::{SecretKey, SecretKeySet};
+use rand::{random, thread_rng};
+
 use super::{
     error::Error,
     message::{
@@ -8,11 +14,6 @@ use super::{
 };
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
 use crate::mvba::{hash::Hash32, vcbc::message::Tag};
-use blsttc::{SecretKey, SecretKeySet};
-use std::rc::Rc;
-use std::{cell::RefCell, collections::BTreeMap};
-
-use rand::{random, thread_rng};
 
 struct TestNet {
     sec_key_set: SecretKeySet,
