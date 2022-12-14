@@ -2,15 +2,14 @@ use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
-pub enum PreVoteValue {
+pub enum Value {
     One,
     Zero,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteValue {
-    One,
-    Zero,
+    Value(Value),
     Abstain,
 }
 
@@ -38,7 +37,7 @@ pub enum MainVoteJustification {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PreVoteAction {
     pub round: usize,
-    pub value: PreVoteValue,
+    pub value: Value,
     pub justification: PreVoteJustification,
     pub sig_share: SignatureShare,
 }
@@ -61,8 +60,8 @@ pub struct AggregatedMainVoteAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Action {
-    PreVote(Box<PreVoteAction>),
-    MainVote(Box<MainVoteAction>),
+    PreVote(PreVoteAction),
+    MainVote(MainVoteAction),
     Decision(AggregatedMainVoteAction),
 }
 

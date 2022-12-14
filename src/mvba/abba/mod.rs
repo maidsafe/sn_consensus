@@ -6,7 +6,7 @@ mod error;
 use self::error::{Error, Result};
 use self::message::{
     Action, AggregatedMainVoteAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
-    PreVoteJustification, PreVoteValue,
+    PreVoteJustification, Value,
 };
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
@@ -59,18 +59,18 @@ impl Abba {
     /// pre_vote_zero starts the abba by broadcasting a pre-vote message with value 0.
     pub fn pre_vote_zero(&mut self) -> Result<()> {
         let justification = PreVoteJustification::FirstRoundZero;
-        self.pre_vote(PreVoteValue::Zero, justification)
+        self.pre_vote(Value::Zero, justification)
     }
 
     /// pre_vote_one starts the abba by broadcasting a pre-vote message with value 1.
     pub fn pre_vote_one(&mut self, c_final: crate::mvba::vcbc::message::Message) -> Result<()> {
         let justification = PreVoteJustification::FirstRoundOne(c_final);
-        self.pre_vote(PreVoteValue::One, justification)
+        self.pre_vote(Value::One, justification)
     }
 
-    fn pre_vote(&mut self, value: PreVoteValue, justification: PreVoteJustification) -> Result<()> {
+    fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
-        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
+        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
         let action = PreVoteAction {
             round: self.r,
@@ -80,7 +80,7 @@ impl Abba {
         };
         let msg = Message {
             id: self.id.clone(),
-            action: Action::PreVote(Box::new(action)),
+            action: Action::PreVote(action),
         };
         // and send to all parties the message (ID, pre-process, Vi , signature share).
         self.broadcast(msg)
@@ -135,10 +135,10 @@ impl Abba {
                     if main_votes.len() == self.threshold() {
                         let mut zero_votes = main_votes
                             .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::Zero);
+                            .filter(|(_, a)| a.value == MainVoteValue::Value(Value::Zero));
                         let mut one_votes = main_votes
                             .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::One);
+                            .filter(|(_, a)| a.value == MainVoteValue::Value(Value::One));
                         let abstain_votes = main_votes
                             .iter()
                             .filter(|(_, a)| a.value == MainVoteValue::Abstain);
@@ -193,7 +193,7 @@ impl Abba {
                                         )),
                                     };
                                 // hard pre-vote for 0
-                                (PreVoteValue::Zero, PreVoteJustification::Hard(sig.clone()))
+                                (Value::Zero, PreVoteJustification::Hard(sig.clone()))
                             } else if let Some((_, one_vote)) = one_votes.next() {
                                 // if there is a main-vote for 1,
                                 let sig =
@@ -205,7 +205,7 @@ impl Abba {
                                         )),
                                     };
                                 // hard pre-vote for 1
-                                (PreVoteValue::One, PreVoteJustification::Hard(sig.clone()))
+                                (Value::One, PreVoteJustification::Hard(sig.clone()))
                             } else if abstain_votes.clone().count() == self.threshold() {
                                 // if all main-votes are abstain,
                                 let sig_share: HashMap<&NodeId, &SignatureShare> =
@@ -213,7 +213,7 @@ impl Abba {
                                 let sig = self.pub_key_set.combine_signatures(sig_share)?;
                                 // soft pre-vote for 1
                                 // Coin value bias to 1 in weaker validity mode.
-                                (PreVoteValue::One, PreVoteJustification::Soft(sig))
+                                (Value::One, PreVoteJustification::Soft(sig))
                             } else {
                                 return Err(Error::Generic(
                                     "protocol violated, no pre-vote majority".to_string(),
@@ -221,18 +221,18 @@ impl Abba {
                             };
 
                         // Produce an S-signature share on the message `(ID, pre-vote, r, b)`
-                        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
+                        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, value)?;
                         let sig_share = self.sec_key_share.sign(sign_bytes);
 
                         // Send to all parties the message `(ID, pre-vote, r, b, justification, signature share)`
                         let pre_vote_message = Message {
                             id: self.id.clone(),
-                            action: Action::PreVote(Box::new(PreVoteAction {
+                            action: Action::PreVote(PreVoteAction {
                                 round: self.r,
                                 value,
                                 justification,
                                 sig_share,
-                            })),
+                            }),
                         };
 
                         self.broadcast(pre_vote_message)?;
@@ -254,13 +254,9 @@ impl Abba {
                     }
                 };
                 if pre_votes.len() == self.threshold() {
-                    let zero_votes = pre_votes
-                        .iter()
-                        .filter(|(_, a)| a.value == PreVoteValue::Zero);
+                    let zero_votes = pre_votes.iter().filter(|(_, a)| a.value == Value::Zero);
 
-                    let one_votes = pre_votes
-                        .iter()
-                        .filter(|(_, a)| a.value == PreVoteValue::One);
+                    let one_votes = pre_votes.iter().filter(|(_, a)| a.value == Value::One);
 
                     let (value, just) = if zero_votes.clone().count() == self.threshold() {
                         // If there are n − t pre-votes for 0:
@@ -270,7 +266,10 @@ impl Abba {
                             zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                         let sig = self.pub_key_set.combine_signatures(sig_share)?;
 
-                        (MainVoteValue::Zero, MainVoteJustification::NoAbstain(sig))
+                        (
+                            MainVoteValue::Value(Value::Zero),
+                            MainVoteJustification::NoAbstain(sig),
+                        )
                     } else if one_votes.clone().count() == self.threshold() {
                         // If there are n − t pre-votes for 1:
                         //   - value: 1
@@ -279,10 +278,13 @@ impl Abba {
                             one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                         let sig = self.pub_key_set.combine_signatures(sig_share)?;
 
-                        (MainVoteValue::One, MainVoteJustification::NoAbstain(sig))
+                        (
+                            MainVoteValue::Value(Value::One),
+                            MainVoteJustification::NoAbstain(sig),
+                        )
                     } else if let (Some(zero_vote), Some(one_vote)) = (
-                        pre_votes.values().find(|a| a.value == PreVoteValue::Zero),
-                        pre_votes.values().find(|a| a.value == PreVoteValue::One),
+                        pre_votes.values().find(|a| a.value == Value::Zero),
+                        pre_votes.values().find(|a| a.value == Value::One),
                     ) {
                         // there is a pre-vote for 0 and a pre-vote for 1 (conflicts):
                         //   - value:  abstain
@@ -307,12 +309,12 @@ impl Abba {
                     // send to all parties the message: `(ID, main-vote, r, v, justification, signature share)`
                     let main_vote_message = Message {
                         id: self.id.clone(),
-                        action: Action::MainVote(Box::new(MainVoteAction {
+                        action: Action::MainVote(MainVoteAction {
                             round: self.r,
                             value,
                             justification: just,
                             sig_share,
-                        })),
+                        }),
                     };
 
                     self.broadcast(main_vote_message)?;
@@ -333,7 +335,7 @@ impl Abba {
             Action::PreVote(action) => {
                 let pre_votes = self.get_mut_pre_votes_by_round(action.round);
                 if let Some(exist) = pre_votes.get(sender) {
-                    if exist != action.as_ref() {
+                    if exist != action {
                         return Err(Error::InvalidMessage(format!(
                             "double pre-vote detected from {:?}",
                             sender
@@ -342,12 +344,12 @@ impl Abba {
                     return Ok(false);
                 }
 
-                pre_votes.insert(*sender, *action.clone());
+                pre_votes.insert(*sender, action.clone());
             }
             Action::MainVote(action) => {
                 let main_votes = self.get_mut_main_votes_by_round(action.round);
                 if let Some(exist) = main_votes.get(sender) {
-                    if exist != action.as_ref() {
+                    if exist != action {
                         return Err(Error::InvalidMessage(format!(
                             "double main-vote detected from {:?}",
                             sender
@@ -356,7 +358,7 @@ impl Abba {
                     return Ok(false);
                 }
 
-                main_votes.insert(*sender, *action.clone());
+                main_votes.insert(*sender, action.clone());
             }
             Action::Decision(_action) => (),
         }
@@ -374,7 +376,7 @@ impl Abba {
         match &msg.action {
             Action::PreVote(action) => {
                 // check the validity of the S-signature share on message (ID, pre-vote, r, b)
-                let sign_bytes = self.pre_vote_bytes_to_sign(action.round, &action.value)?;
+                let sign_bytes = self.pre_vote_bytes_to_sign(action.round, action.value)?;
                 if !self
                     .pub_key_set
                     .public_key_share(sender)
@@ -392,7 +394,7 @@ impl Abba {
                             )));
                         }
 
-                        if action.value != PreVoteValue::Zero {
+                        if action.value != Value::Zero {
                             return Err(Error::InvalidMessage(
                                 "initial value should be zero".to_string(),
                             ));
@@ -436,7 +438,7 @@ impl Abba {
 
                         // A weaker validity: an honest party may only decide on a value
                         // for which it has the accompanying validating data.
-                        if action.value != PreVoteValue::One {
+                        if action.value != Value::One {
                             return Err(Error::InvalidMessage(
                                 "initial value should be one".to_string(),
                             ));
@@ -445,7 +447,7 @@ impl Abba {
                     PreVoteJustification::Hard(sig) => {
                         // Hard pre-vote justification is the S-threshold signature for `(ID, pre-vote, r − 1, b)`
                         let sign_bytes =
-                            self.pre_vote_bytes_to_sign(action.round - 1, &action.value)?;
+                            self.pre_vote_bytes_to_sign(action.round - 1, action.value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid hard-vote justification".to_string(),
@@ -477,10 +479,8 @@ impl Abba {
 
                 match &action.justification {
                     MainVoteJustification::NoAbstain(sig) => {
-                        let pre_vote_value = if action.value == MainVoteValue::Zero {
-                            PreVoteValue::Zero
-                        } else if action.value == MainVoteValue::One {
-                            PreVoteValue::One
+                        let pre_vote_value = if let MainVoteValue::Value(value) = action.value {
+                            value
                         } else {
                             return Err(Error::InvalidMessage(
                                 "no-abstain justifications should come with no-abstain value"
@@ -489,7 +489,7 @@ impl Abba {
                         };
                         // valid S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes =
-                            self.pre_vote_bytes_to_sign(action.round, &pre_vote_value)?;
+                            self.pre_vote_bytes_to_sign(action.round, pre_vote_value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid main-vote justification".to_string(),
@@ -557,10 +557,8 @@ impl Abba {
 
                 match &action.justification {
                     MainVoteJustification::NoAbstain(sig) => {
-                        let pre_vote_value = if action.value == MainVoteValue::Zero {
-                            PreVoteValue::Zero
-                        } else if action.value == MainVoteValue::One {
-                            PreVoteValue::One
+                        let pre_vote_value = if let MainVoteValue::Value(value) = action.value {
+                            value
                         } else {
                             return Err(Error::InvalidMessage(
                                 "no-abstain justifications should come with no-abstain value"
@@ -569,7 +567,7 @@ impl Abba {
                         };
                         // valid S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes =
-                            self.pre_vote_bytes_to_sign(action.round, &pre_vote_value)?;
+                            self.pre_vote_bytes_to_sign(action.round, pre_vote_value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid main-vote justification".to_string(),
@@ -599,7 +597,7 @@ impl Abba {
 
     // pre_vote_bytes_to_sign generates bytes for Pre-Vote signature share.
     // pre_vote_bytes_to_sign is same as serialized of $(ID, pre-vote, r, b)$ in spec.
-    fn pre_vote_bytes_to_sign(&self, round: usize, v: &PreVoteValue) -> Result<Vec<u8>> {
+    fn pre_vote_bytes_to_sign(&self, round: usize, v: Value) -> Result<Vec<u8>> {
         Ok(bincode::serialize(&(
             self.id.clone(),
             "pre-vote",

@@ -2,7 +2,7 @@ use super::{
     error::Error,
     message::{
         Action, MainVoteAction, MainVoteJustification, MainVoteValue, Message, PreVoteAction,
-        PreVoteJustification, PreVoteValue,
+        PreVoteJustification, Value,
     },
     Abba,
 };
@@ -72,20 +72,20 @@ impl TestNet {
     pub fn make_pre_vote_msg(
         &self,
         round: usize,
-        value: PreVoteValue,
+        value: Value,
         justification: &PreVoteJustification,
         peer_id: &NodeId,
     ) -> Message {
-        let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, &value).unwrap();
+        let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
             id: self.abba.id.clone(),
-            action: Action::PreVote(Box::new(PreVoteAction {
+            action: Action::PreVote(PreVoteAction {
                 round,
                 value,
                 justification: justification.clone(),
                 sig_share,
-            })),
+            }),
         }
     }
 
@@ -100,12 +100,12 @@ impl TestNet {
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
             id: self.abba.id.clone(),
-            action: Action::MainVote(Box::new(MainVoteAction {
+            action: Action::MainVote(MainVoteAction {
                 round,
                 value,
                 justification: justification.clone(),
                 sig_share,
-            })),
+            }),
         }
     }
 
@@ -139,7 +139,7 @@ fn test_should_publish_pre_vote_message() {
     t.abba.pre_vote_one(t.c_final.clone()).unwrap();
 
     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-    let pre_vote_x = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_X);
+    let pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_X);
     assert!(t.is_broadcasted(&pre_vote_x));
 }
 
@@ -152,8 +152,8 @@ fn test_should_publish_main_vote_message() {
     t.abba.pre_vote_one(t.c_final.clone()).unwrap();
     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
 
-    let pre_vote_y = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_Y);
-    let pre_vote_s = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_S);
+    let pre_vote_y = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_Y);
+    let pre_vote_s = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_S);
 
     t.abba
         .receive_message(TestNet::PARTY_Y, pre_vote_y)
@@ -162,14 +162,15 @@ fn test_should_publish_main_vote_message() {
         .receive_message(TestNet::PARTY_S, pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t
-        .abba
-        .pre_vote_bytes_to_sign(1, &PreVoteValue::One)
-        .unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
-    let main_vote_x =
-        t.make_main_vote_msg(1, MainVoteValue::One, &main_vote_just, &TestNet::PARTY_X);
+    let main_vote_x = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Value(Value::One),
+        &main_vote_just,
+        &TestNet::PARTY_X,
+    );
 
     assert!(t.is_broadcasted(&main_vote_x));
 }
@@ -181,7 +182,7 @@ fn test_ignore_messages_with_wrong_id() {
     let mut t = TestNet::new(i, j);
 
     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-    let mut pre_vote_x = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
+    let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
     pre_vote_x.id = "another-id".to_string();
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
@@ -228,12 +229,12 @@ fn test_pre_vote_invalid_sig_share() {
         .sign("invalid-msg");
     let msg = Message {
         id: t.abba.id.clone(),
-        action: Action::PreVote(Box::new(PreVoteAction {
+        action: Action::PreVote(PreVoteAction {
             round: 1,
             justification: just,
-            value: PreVoteValue::One,
+            value: Value::One,
             sig_share: invalid_sig_share,
-        })),
+        }),
     };
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
@@ -248,10 +249,10 @@ fn test_double_pre_vote() {
     let mut t = TestNet::new(i, j);
 
     let just_0 = PreVoteJustification::FirstRoundZero;
-    let pre_vote_1 = t.make_pre_vote_msg(1, PreVoteValue::Zero, &just_0, &TestNet::PARTY_B);
+    let pre_vote_1 = t.make_pre_vote_msg(1, Value::Zero, &just_0, &TestNet::PARTY_B);
 
     let just_1 = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-    let pre_vote_2 = t.make_pre_vote_msg(1, PreVoteValue::One, &just_1, &TestNet::PARTY_B);
+    let pre_vote_2 = t.make_pre_vote_msg(1, Value::One, &just_1, &TestNet::PARTY_B);
 
     t.abba
         .receive_message(TestNet::PARTY_B, pre_vote_1.clone())
@@ -276,7 +277,7 @@ fn test_pre_vote_round_1_invalid_round() {
     let mut t = TestNet::new(i, j);
 
     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-    let msg = t.make_pre_vote_msg(2, PreVoteValue::One, &just, &TestNet::PARTY_B);
+    let msg = t.make_pre_vote_msg(2, Value::One, &just, &TestNet::PARTY_B);
 
     t.abba
         .receive_message(TestNet::PARTY_B, msg)
@@ -292,7 +293,7 @@ fn test_pre_vote_round_1_invalid_c_final_tag() {
     let mut invalid_c_final = t.c_final.clone();
     invalid_c_final.tag.id = "i-am-invalid".to_string();
     let just = PreVoteJustification::FirstRoundOne(invalid_c_final.clone());
-    let pre_vote_x = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
+    let pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
@@ -313,7 +314,7 @@ fn test_pre_vote_round_1_invalid_c_final_signature() {
         action: crate::mvba::vcbc::message::Action::Final(t.proposal_digest, invalid_sig),
     };
     let just = PreVoteJustification::FirstRoundOne(invalid_c_final);
-    let msg = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
+    let msg = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
@@ -327,7 +328,7 @@ fn test_pre_vote_round_1_invalid_value_one() {
     let mut t = TestNet::new(i, j);
 
     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-    let msg = t.make_pre_vote_msg(1, PreVoteValue::Zero, &just, &TestNet::PARTY_B);
+    let msg = t.make_pre_vote_msg(1, Value::Zero, &just, &TestNet::PARTY_B);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
@@ -341,7 +342,7 @@ fn test_pre_vote_round_1_invalid_value_zero() {
     let mut t = TestNet::new(i, j);
 
     let just = PreVoteJustification::FirstRoundZero;
-    let msg = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
+    let msg = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
@@ -357,8 +358,8 @@ fn test_normal_case_one_round() {
     t.abba.pre_vote_one(t.c_final.clone()).unwrap();
 
     let pre_vote_just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-    let pre_vote_y = t.make_pre_vote_msg(1, PreVoteValue::One, &pre_vote_just, &TestNet::PARTY_Y);
-    let pre_vote_s = t.make_pre_vote_msg(1, PreVoteValue::One, &pre_vote_just, &TestNet::PARTY_S);
+    let pre_vote_y = t.make_pre_vote_msg(1, Value::One, &pre_vote_just, &TestNet::PARTY_Y);
+    let pre_vote_s = t.make_pre_vote_msg(1, Value::One, &pre_vote_just, &TestNet::PARTY_S);
 
     t.abba
         .receive_message(TestNet::PARTY_Y, pre_vote_y)
@@ -367,16 +368,21 @@ fn test_normal_case_one_round() {
         .receive_message(TestNet::PARTY_S, pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t
-        .abba
-        .pre_vote_bytes_to_sign(1, &PreVoteValue::One)
-        .unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
-    let main_vote_y =
-        t.make_main_vote_msg(1, MainVoteValue::One, &main_vote_just, &TestNet::PARTY_Y);
-    let main_vote_s =
-        t.make_main_vote_msg(1, MainVoteValue::One, &main_vote_just, &TestNet::PARTY_S);
+    let main_vote_y = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Value(Value::One),
+        &main_vote_just,
+        &TestNet::PARTY_Y,
+    );
+    let main_vote_s = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Value(Value::One),
+        &main_vote_just,
+        &TestNet::PARTY_S,
+    );
 
     t.abba
         .receive_message(TestNet::PARTY_Y, main_vote_y)
@@ -386,7 +392,10 @@ fn test_normal_case_one_round() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::One);
+    assert_eq!(
+        t.abba.decided_value.unwrap().value,
+        MainVoteValue::Value(Value::One)
+    );
 }
 
 #[test]
@@ -400,9 +409,9 @@ fn test_normal_case_zero() {
     let round_1_just_0 = PreVoteJustification::FirstRoundZero;
 
     let round_1_pre_vote_y =
-        t.make_pre_vote_msg(1, PreVoteValue::Zero, &round_1_just_0, &TestNet::PARTY_Y);
+        t.make_pre_vote_msg(1, Value::Zero, &round_1_just_0, &TestNet::PARTY_Y);
     let round_1_pre_vote_s =
-        t.make_pre_vote_msg(1, PreVoteValue::Zero, &round_1_just_0, &TestNet::PARTY_S);
+        t.make_pre_vote_msg(1, Value::Zero, &round_1_just_0, &TestNet::PARTY_S);
 
     t.abba
         .receive_message(TestNet::PARTY_Y, round_1_pre_vote_y)
@@ -411,18 +420,27 @@ fn test_normal_case_zero() {
         .receive_message(TestNet::PARTY_S, round_1_pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t
-        .abba
-        .pre_vote_bytes_to_sign(1, &PreVoteValue::Zero)
-        .unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::Zero).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
-    let round_1_main_vote_x =
-        t.make_main_vote_msg(1, MainVoteValue::Zero, &main_vote_just, &TestNet::PARTY_X);
-    let round_1_main_vote_y =
-        t.make_main_vote_msg(1, MainVoteValue::Zero, &main_vote_just, &TestNet::PARTY_Y);
-    let round_1_main_vote_s =
-        t.make_main_vote_msg(1, MainVoteValue::Zero, &main_vote_just, &TestNet::PARTY_S);
+    let round_1_main_vote_x = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Value(Value::Zero),
+        &main_vote_just,
+        &TestNet::PARTY_X,
+    );
+    let round_1_main_vote_y = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Value(Value::Zero),
+        &main_vote_just,
+        &TestNet::PARTY_Y,
+    );
+    let round_1_main_vote_s = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Value(Value::Zero),
+        &main_vote_just,
+        &TestNet::PARTY_S,
+    );
     assert!(t.is_broadcasted(&round_1_main_vote_x));
 
     t.abba
@@ -433,7 +451,10 @@ fn test_normal_case_zero() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::Zero);
+    assert_eq!(
+        t.abba.decided_value.unwrap().value,
+        MainVoteValue::Value(Value::Zero)
+    );
 }
 
 #[test]
@@ -447,10 +468,9 @@ fn test_normal_case_two_rounds() {
     let round_1_just_0 = PreVoteJustification::FirstRoundZero;
     let round_1_just_1 = PreVoteJustification::FirstRoundOne(t.c_final.clone());
 
-    let round_1_pre_vote_y =
-        t.make_pre_vote_msg(1, PreVoteValue::One, &round_1_just_1, &TestNet::PARTY_Y);
+    let round_1_pre_vote_y = t.make_pre_vote_msg(1, Value::One, &round_1_just_1, &TestNet::PARTY_Y);
     let round_1_pre_vote_s =
-        t.make_pre_vote_msg(1, PreVoteValue::Zero, &round_1_just_0, &TestNet::PARTY_S);
+        t.make_pre_vote_msg(1, Value::Zero, &round_1_just_0, &TestNet::PARTY_S);
 
     t.abba
         .receive_message(TestNet::PARTY_Y, round_1_pre_vote_y)
@@ -496,24 +516,12 @@ fn test_normal_case_two_rounds() {
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let round_2_pre_vote_just = PreVoteJustification::Soft(sig);
 
-    let round_2_pre_vote_x = t.make_pre_vote_msg(
-        2,
-        PreVoteValue::One,
-        &round_2_pre_vote_just,
-        &TestNet::PARTY_X,
-    );
-    let round_2_pre_vote_y = t.make_pre_vote_msg(
-        2,
-        PreVoteValue::One,
-        &round_2_pre_vote_just,
-        &TestNet::PARTY_Y,
-    );
-    let round_2_pre_vote_s = t.make_pre_vote_msg(
-        2,
-        PreVoteValue::One,
-        &round_2_pre_vote_just,
-        &TestNet::PARTY_S,
-    );
+    let round_2_pre_vote_x =
+        t.make_pre_vote_msg(2, Value::One, &round_2_pre_vote_just, &TestNet::PARTY_X);
+    let round_2_pre_vote_y =
+        t.make_pre_vote_msg(2, Value::One, &round_2_pre_vote_just, &TestNet::PARTY_Y);
+    let round_2_pre_vote_s =
+        t.make_pre_vote_msg(2, Value::One, &round_2_pre_vote_just, &TestNet::PARTY_S);
 
     assert!(t.is_broadcasted(&round_2_pre_vote_x));
 
@@ -524,27 +532,24 @@ fn test_normal_case_two_rounds() {
         .receive_message(TestNet::PARTY_S, round_2_pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t
-        .abba
-        .pre_vote_bytes_to_sign(2, &PreVoteValue::One)
-        .unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(2, Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let round_2_main_vote_just = MainVoteJustification::NoAbstain(sig);
     let round_2_main_vote_x = t.make_main_vote_msg(
         2,
-        MainVoteValue::One,
+        MainVoteValue::Value(Value::One),
         &round_2_main_vote_just,
         &TestNet::PARTY_X,
     );
     let round_2_main_vote_y = t.make_main_vote_msg(
         2,
-        MainVoteValue::One,
+        MainVoteValue::Value(Value::One),
         &round_2_main_vote_just,
         &TestNet::PARTY_Y,
     );
     let round_2_main_vote_s = t.make_main_vote_msg(
         2,
-        MainVoteValue::One,
+        MainVoteValue::Value(Value::One),
         &round_2_main_vote_just,
         &TestNet::PARTY_S,
     );
@@ -558,7 +563,10 @@ fn test_normal_case_two_rounds() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::One);
+    assert_eq!(
+        t.abba.decided_value.unwrap().value,
+        MainVoteValue::Value(Value::One)
+    );
 }
 
 struct Net {
@@ -702,6 +710,9 @@ fn test_net_happy_path() {
 
     for (id, node) in net.nodes {
         println!("Checking {id}");
-        assert_eq!(node.decided_value.unwrap().value, MainVoteValue::One);
+        assert_eq!(
+            node.decided_value.unwrap().value,
+            MainVoteValue::Value(Value::One)
+        );
     }
 }
