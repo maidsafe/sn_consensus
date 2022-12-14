@@ -135,10 +135,10 @@ impl Abba {
                     if main_votes.len() == self.threshold() {
                         let mut zero_votes = main_votes
                             .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::Value(Value::Zero));
+                            .filter(|(_, a)| a.value == MainVoteValue::zero());
                         let mut one_votes = main_votes
                             .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::Value(Value::One));
+                            .filter(|(_, a)| a.value == MainVoteValue::one());
                         let abstain_votes = main_votes
                             .iter()
                             .filter(|(_, a)| a.value == MainVoteValue::Abstain);
@@ -266,10 +266,7 @@ impl Abba {
                             zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                         let sig = self.pub_key_set.combine_signatures(sig_share)?;
 
-                        (
-                            MainVoteValue::Value(Value::Zero),
-                            MainVoteJustification::NoAbstain(sig),
-                        )
+                        (MainVoteValue::zero(), MainVoteJustification::NoAbstain(sig))
                     } else if one_votes.clone().count() == self.threshold() {
                         // If there are n − t pre-votes for 1:
                         //   - value: 1
@@ -278,10 +275,7 @@ impl Abba {
                             one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                         let sig = self.pub_key_set.combine_signatures(sig_share)?;
 
-                        (
-                            MainVoteValue::Value(Value::One),
-                            MainVoteJustification::NoAbstain(sig),
-                        )
+                        (MainVoteValue::one(), MainVoteJustification::NoAbstain(sig))
                     } else if let (Some(zero_vote), Some(one_vote)) = (
                         pre_votes.values().find(|a| a.value == Value::Zero),
                         pre_votes.values().find(|a| a.value == Value::One),

@@ -13,6 +13,16 @@ pub enum MainVoteValue {
     Abstain,
 }
 
+impl MainVoteValue {
+    pub fn one() -> Self {
+        Self::Value(Value::One)
+    }
+
+    pub fn zero() -> Self {
+        Self::Value(Value::Zero)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteJustification {
     // Round one, without the justification. The initial value should set to zero

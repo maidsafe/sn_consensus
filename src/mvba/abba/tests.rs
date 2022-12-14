@@ -165,12 +165,8 @@ fn test_should_publish_main_vote_message() {
     let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
-    let main_vote_x = t.make_main_vote_msg(
-        1,
-        MainVoteValue::Value(Value::One),
-        &main_vote_just,
-        &TestNet::PARTY_X,
-    );
+    let main_vote_x =
+        t.make_main_vote_msg(1, MainVoteValue::one(), &main_vote_just, &TestNet::PARTY_X);
 
     assert!(t.is_broadcasted(&main_vote_x));
 }
@@ -371,18 +367,10 @@ fn test_normal_case_one_round() {
     let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
-    let main_vote_y = t.make_main_vote_msg(
-        1,
-        MainVoteValue::Value(Value::One),
-        &main_vote_just,
-        &TestNet::PARTY_Y,
-    );
-    let main_vote_s = t.make_main_vote_msg(
-        1,
-        MainVoteValue::Value(Value::One),
-        &main_vote_just,
-        &TestNet::PARTY_S,
-    );
+    let main_vote_y =
+        t.make_main_vote_msg(1, MainVoteValue::one(), &main_vote_just, &TestNet::PARTY_Y);
+    let main_vote_s =
+        t.make_main_vote_msg(1, MainVoteValue::one(), &main_vote_just, &TestNet::PARTY_S);
 
     t.abba
         .receive_message(TestNet::PARTY_Y, main_vote_y)
@@ -392,10 +380,7 @@ fn test_normal_case_one_round() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(
-        t.abba.decided_value.unwrap().value,
-        MainVoteValue::Value(Value::One)
-    );
+    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::one());
 }
 
 #[test]
@@ -423,24 +408,12 @@ fn test_normal_case_zero() {
     let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::Zero).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
-    let round_1_main_vote_x = t.make_main_vote_msg(
-        1,
-        MainVoteValue::Value(Value::Zero),
-        &main_vote_just,
-        &TestNet::PARTY_X,
-    );
-    let round_1_main_vote_y = t.make_main_vote_msg(
-        1,
-        MainVoteValue::Value(Value::Zero),
-        &main_vote_just,
-        &TestNet::PARTY_Y,
-    );
-    let round_1_main_vote_s = t.make_main_vote_msg(
-        1,
-        MainVoteValue::Value(Value::Zero),
-        &main_vote_just,
-        &TestNet::PARTY_S,
-    );
+    let round_1_main_vote_x =
+        t.make_main_vote_msg(1, MainVoteValue::zero(), &main_vote_just, &TestNet::PARTY_X);
+    let round_1_main_vote_y =
+        t.make_main_vote_msg(1, MainVoteValue::zero(), &main_vote_just, &TestNet::PARTY_Y);
+    let round_1_main_vote_s =
+        t.make_main_vote_msg(1, MainVoteValue::zero(), &main_vote_just, &TestNet::PARTY_S);
     assert!(t.is_broadcasted(&round_1_main_vote_x));
 
     t.abba
@@ -451,10 +424,7 @@ fn test_normal_case_zero() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(
-        t.abba.decided_value.unwrap().value,
-        MainVoteValue::Value(Value::Zero)
-    );
+    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::zero());
 }
 
 #[test]
@@ -537,19 +507,19 @@ fn test_normal_case_two_rounds() {
     let round_2_main_vote_just = MainVoteJustification::NoAbstain(sig);
     let round_2_main_vote_x = t.make_main_vote_msg(
         2,
-        MainVoteValue::Value(Value::One),
+        MainVoteValue::one(),
         &round_2_main_vote_just,
         &TestNet::PARTY_X,
     );
     let round_2_main_vote_y = t.make_main_vote_msg(
         2,
-        MainVoteValue::Value(Value::One),
+        MainVoteValue::one(),
         &round_2_main_vote_just,
         &TestNet::PARTY_Y,
     );
     let round_2_main_vote_s = t.make_main_vote_msg(
         2,
-        MainVoteValue::Value(Value::One),
+        MainVoteValue::one(),
         &round_2_main_vote_just,
         &TestNet::PARTY_S,
     );
@@ -563,10 +533,7 @@ fn test_normal_case_two_rounds() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(
-        t.abba.decided_value.unwrap().value,
-        MainVoteValue::Value(Value::One)
-    );
+    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::one());
 }
 
 struct Net {
@@ -710,9 +677,6 @@ fn test_net_happy_path() {
 
     for (id, node) in net.nodes {
         println!("Checking {id}");
-        assert_eq!(
-            node.decided_value.unwrap().value,
-            MainVoteValue::Value(Value::One)
-        );
+        assert_eq!(node.decided_value.unwrap().value, MainVoteValue::one());
     }
 }
