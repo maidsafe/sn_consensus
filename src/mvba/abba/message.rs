@@ -52,9 +52,18 @@ pub struct MainVoteAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct AggregatedMainVoteAction {
+    pub round: usize,
+    pub value: MainVoteValue,
+    pub justification: MainVoteJustification,
+    pub sig: Signature,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Action {
     PreVote(Box<PreVoteAction>),
     MainVote(Box<MainVoteAction>),
+    Decision(AggregatedMainVoteAction),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +76,8 @@ impl Message {
     pub fn action_str(&self) -> &str {
         match self.action {
             Action::PreVote(_) => "pre-vote",
-            Action::MainVote(_) => "pre-main",
+            Action::MainVote(_) => "main-vote",
+            Action::Decision(_) => "decision",
         }
     }
 }

@@ -5,14 +5,14 @@ pub(super) mod message;
 mod error;
 use self::error::{Error, Result};
 use self::message::{
-    Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteJustification,
-    PreVoteValue,
+    Action, AggregatedMainVoteAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
+    PreVoteJustification, PreVoteValue,
 };
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
 use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
-use log::debug;
+use log::{debug, error};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -21,10 +21,10 @@ pub(crate) const MODULE_NAME: &str = "abba";
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
-    id: String,                  // this is same as $ID$ in spec
-    i: NodeId,                   // this is same as $i$ in spec
-    r: usize,                    // this is same as $r$ in spec
-    decided_value: Option<bool>, // TODO: should be boolean?
+    id: String, // this is same as $ID$ in spec
+    i: NodeId,  // this is same as $i$ in spec
+    r: usize,   // this is same as $r$ in spec
+    decided_value: Option<AggregatedMainVoteAction>,
     tag: crate::mvba::vcbc::message::Tag,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
@@ -101,6 +101,19 @@ impl Abba {
         }
 
         match &msg.action {
+            Action::Decision(agg_main_vote) => {
+                if let Some(existing_decision) = self.decided_value.as_ref() {
+                    if existing_decision != agg_main_vote {
+                        error!("Existing decision does not match the decision we received: {existing_decision:?} != {agg_main_vote:?}");
+
+                        return Err(Error::Generic("Received conflicting decision".into()));
+                    }
+                    return Ok(());
+                }
+
+                self.decided_value = Some(agg_main_vote.clone());
+                self.broadcast(msg.clone())?; // re-broadcast the msg in case we were the only one who received it.
+            }
             Action::MainVote(action) => {
                 if action.round + 1 != self.r {
                     return Ok(());
@@ -121,28 +134,55 @@ impl Abba {
 
                     if main_votes.len() == self.threshold() {
                         let mut zero_votes = main_votes
-                            .values()
-                            .filter(|a| a.value == MainVoteValue::Zero);
+                            .iter()
+                            .filter(|(_, a)| a.value == MainVoteValue::Zero);
                         let mut one_votes = main_votes
-                            .values()
-                            .filter(|a| a.value == MainVoteValue::One);
+                            .iter()
+                            .filter(|(_, a)| a.value == MainVoteValue::One);
                         let abstain_votes = main_votes
                             .iter()
                             .filter(|(_, a)| a.value == MainVoteValue::Abstain);
 
                         // 3. CHECK FOR DECISION. Collect n −t valid and properly justified main-votes of round r .
                         // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
-                        let mut decided_value = None;
                         if zero_votes.clone().count() == self.threshold() {
-                            decided_value = Some(false);
+                            let sig_share: HashMap<&NodeId, &SignatureShare> =
+                                zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
+                            let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                            let decision = AggregatedMainVoteAction {
+                                round: action.round,
+                                value: action.value,
+                                justification: action.justification.clone(),
+                                sig,
+                            };
+                            self.decided_value = Some(decision.clone());
+                            self.broadcast(Message {
+                                id: self.id.clone(),
+                                action: Action::Decision(decision),
+                            })?;
+                            return Ok(());
                         }
 
                         if one_votes.clone().count() == self.threshold() {
-                            decided_value = Some(true);
+                            let sig_share: HashMap<&NodeId, &SignatureShare> =
+                                one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
+                            let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                            let decision = AggregatedMainVoteAction {
+                                round: action.round,
+                                value: action.value,
+                                justification: action.justification.clone(),
+                                sig,
+                            };
+                            self.decided_value = Some(decision.clone());
+                            self.broadcast(Message {
+                                id: self.id.clone(),
+                                action: Action::Decision(decision),
+                            })?;
+                            return Ok(());
                         }
 
                         let (value, justification) =
-                            if let Some(zero_vote) = zero_votes.next() {
+                            if let Some((_, zero_vote)) = zero_votes.next() {
                                 // if there is a main-vote for 0,
                                 let sig =
                                     match &zero_vote.justification {
@@ -154,7 +194,7 @@ impl Abba {
                                     };
                                 // hard pre-vote for 0
                                 (PreVoteValue::Zero, PreVoteJustification::Hard(sig.clone()))
-                            } else if let Some(one_vote) = one_votes.next() {
+                            } else if let Some((_, one_vote)) = one_votes.next() {
                                 // if there is a main-vote for 1,
                                 let sig =
                                     match &one_vote.justification {
@@ -196,7 +236,6 @@ impl Abba {
                         };
 
                         self.broadcast(pre_vote_message)?;
-                        self.decided_value = decided_value;
                     }
                 }
             }
@@ -319,6 +358,7 @@ impl Abba {
 
                 main_votes.insert(*sender, *action.clone());
             }
+            Action::Decision(_action) => (),
         }
         Ok(true)
     }
@@ -501,6 +541,45 @@ impl Abba {
                                 )));
                             }
                         }
+                    }
+                }
+            }
+            Action::Decision(action) => {
+                // check the validity of the S-signature share
+                let sign_bytes = self.main_vote_bytes_to_sign(action.round, &action.value)?;
+                if !self
+                    .pub_key_set
+                    .public_key()
+                    .verify(&action.sig, &sign_bytes)
+                {
+                    return Err(Error::InvalidMessage("invalid signature".to_string()));
+                }
+
+                match &action.justification {
+                    MainVoteJustification::NoAbstain(sig) => {
+                        let pre_vote_value = if action.value == MainVoteValue::Zero {
+                            PreVoteValue::Zero
+                        } else if action.value == MainVoteValue::One {
+                            PreVoteValue::One
+                        } else {
+                            return Err(Error::InvalidMessage(
+                                "no-abstain justifications should come with no-abstain value"
+                                    .to_string(),
+                            ));
+                        };
+                        // valid S-signature share on the message `(ID, pre-vote, r, b)`
+                        let sign_bytes =
+                            self.pre_vote_bytes_to_sign(action.round, &pre_vote_value)?;
+                        if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                            return Err(Error::InvalidMessage(
+                                "invalid main-vote justification".to_string(),
+                            ));
+                        }
+                    }
+                    MainVoteJustification::Abstain(..) => {
+                        return Err(Error::InvalidMessage(
+                            "Abstain is not a valid decision value".into(),
+                        ));
                     }
                 }
             }

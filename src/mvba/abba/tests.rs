@@ -386,7 +386,7 @@ fn test_normal_case_one_round() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(t.abba.decided_value, Some(true));
+    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::One);
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn test_normal_case_zero() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(t.abba.decided_value, Some(false));
+    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::Zero);
 }
 
 #[test]
@@ -558,7 +558,7 @@ fn test_normal_case_two_rounds() {
         .unwrap();
 
     assert!(t.abba.is_decided());
-    assert_eq!(t.abba.decided_value, Some(true));
+    assert_eq!(t.abba.decided_value.unwrap().value, MainVoteValue::One);
 }
 
 struct Net {
@@ -702,6 +702,6 @@ fn test_net_happy_path() {
 
     for (id, node) in net.nodes {
         println!("Checking {id}");
-        assert_eq!(node.decided_value, Some(true));
+        assert_eq!(node.decided_value.unwrap().value, MainVoteValue::One);
     }
 }
