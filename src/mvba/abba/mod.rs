@@ -5,7 +5,7 @@ pub(super) mod message;
 mod error;
 use self::error::{Error, Result};
 use self::message::{
-    Action, AggregatedMainVoteAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
+    Action, DecisionAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
     PreVoteJustification, Value,
 };
 use super::NodeId;
@@ -24,7 +24,7 @@ pub(crate) struct Abba {
     id: String, // this is same as $ID$ in spec
     i: NodeId,  // this is same as $i$ in spec
     r: usize,   // this is same as $r$ in spec
-    decided_value: Option<AggregatedMainVoteAction>,
+    decided_value: Option<DecisionAction>,
     tag: crate::mvba::vcbc::message::Tag,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
@@ -149,7 +149,7 @@ impl Abba {
                             let sig_share: HashMap<&NodeId, &SignatureShare> =
                                 zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                             let sig = self.pub_key_set.combine_signatures(sig_share)?;
-                            let decision = AggregatedMainVoteAction {
+                            let decision = DecisionAction {
                                 round: action.round,
                                 value: action.value,
                                 justification: action.justification.clone(),
@@ -167,7 +167,7 @@ impl Abba {
                             let sig_share: HashMap<&NodeId, &SignatureShare> =
                                 one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                             let sig = self.pub_key_set.combine_signatures(sig_share)?;
-                            let decision = AggregatedMainVoteAction {
+                            let decision = DecisionAction {
                                 round: action.round,
                                 value: action.value,
                                 justification: action.justification.clone(),

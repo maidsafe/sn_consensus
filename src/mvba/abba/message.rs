@@ -61,7 +61,7 @@ pub struct MainVoteAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct AggregatedMainVoteAction {
+pub struct DecisionAction {
     pub round: usize,
     pub value: MainVoteValue,
     pub justification: MainVoteJustification,
@@ -72,7 +72,7 @@ pub struct AggregatedMainVoteAction {
 pub enum Action {
     PreVote(PreVoteAction),
     MainVote(MainVoteAction),
-    Decision(AggregatedMainVoteAction),
+    Decision(DecisionAction),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
