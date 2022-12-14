@@ -1,21 +1,23 @@
 // TODO: apply section 5.3.3. Further Optimizations
 
+mod error;
 pub(super) mod message;
 
-mod error;
-use self::error::{Error, Result};
-use self::message::{
-    Action, DecisionAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
-    PreVoteJustification, Value,
-};
-use super::NodeId;
-use crate::mvba::abba::message::MainVoteJustification;
-use crate::mvba::broadcaster::Broadcaster;
-use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
-use log::{debug, error};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
+use log::{debug, error};
+
+use super::NodeId;
+use crate::mvba::abba::message::MainVoteJustification;
+use crate::mvba::broadcaster::Broadcaster;
+use error::{Error, Result};
+use message::{
+    Action, DecisionAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
+    PreVoteJustification, Value,
+};
 
 pub(crate) const MODULE_NAME: &str = "abba";
 
@@ -131,56 +133,55 @@ impl Abba {
                             return Ok(());
                         }
                     };
+                    let mut zero_votes = main_votes
+                        .iter()
+                        .filter(|(_, a)| a.value == MainVoteValue::zero());
+                    let mut one_votes = main_votes
+                        .iter()
+                        .filter(|(_, a)| a.value == MainVoteValue::one());
+                    let abstain_votes = main_votes
+                        .iter()
+                        .filter(|(_, a)| a.value == MainVoteValue::Abstain);
+
+                    // 3. CHECK FOR DECISION. Collect n −t valid and properly justified main-votes of round r .
+                    // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
+                    if zero_votes.clone().count() == self.threshold() {
+                        let sig_share: HashMap<&NodeId, &SignatureShare> =
+                            zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
+                        let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                        let decision = DecisionAction {
+                            round: action.round,
+                            value: action.value,
+                            justification: action.justification.clone(),
+                            sig,
+                        };
+                        self.decided_value = Some(decision.clone());
+                        self.broadcast(Message {
+                            id: self.id.clone(),
+                            action: Action::Decision(decision),
+                        })?;
+                        return Ok(());
+                    }
+
+                    if one_votes.clone().count() == self.threshold() {
+                        let sig_share: HashMap<&NodeId, &SignatureShare> =
+                            one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
+                        let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                        let decision = DecisionAction {
+                            round: action.round,
+                            value: action.value,
+                            justification: action.justification.clone(),
+                            sig,
+                        };
+                        self.decided_value = Some(decision.clone());
+                        self.broadcast(Message {
+                            id: self.id.clone(),
+                            action: Action::Decision(decision),
+                        })?;
+                        return Ok(());
+                    }
 
                     if main_votes.len() == self.threshold() {
-                        let mut zero_votes = main_votes
-                            .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::zero());
-                        let mut one_votes = main_votes
-                            .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::one());
-                        let abstain_votes = main_votes
-                            .iter()
-                            .filter(|(_, a)| a.value == MainVoteValue::Abstain);
-
-                        // 3. CHECK FOR DECISION. Collect n −t valid and properly justified main-votes of round r .
-                        // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
-                        if zero_votes.clone().count() == self.threshold() {
-                            let sig_share: HashMap<&NodeId, &SignatureShare> =
-                                zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
-                            let sig = self.pub_key_set.combine_signatures(sig_share)?;
-                            let decision = DecisionAction {
-                                round: action.round,
-                                value: action.value,
-                                justification: action.justification.clone(),
-                                sig,
-                            };
-                            self.decided_value = Some(decision.clone());
-                            self.broadcast(Message {
-                                id: self.id.clone(),
-                                action: Action::Decision(decision),
-                            })?;
-                            return Ok(());
-                        }
-
-                        if one_votes.clone().count() == self.threshold() {
-                            let sig_share: HashMap<&NodeId, &SignatureShare> =
-                                one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
-                            let sig = self.pub_key_set.combine_signatures(sig_share)?;
-                            let decision = DecisionAction {
-                                round: action.round,
-                                value: action.value,
-                                justification: action.justification.clone(),
-                                sig,
-                            };
-                            self.decided_value = Some(decision.clone());
-                            self.broadcast(Message {
-                                id: self.id.clone(),
-                                action: Action::Decision(decision),
-                            })?;
-                            return Ok(());
-                        }
-
                         let (value, justification) =
                             if let Some((_, zero_vote)) = zero_votes.next() {
                                 // if there is a main-vote for 0,
