@@ -64,7 +64,6 @@ pub struct MainVoteAction {
 pub struct DecisionAction {
     pub round: usize,
     pub value: MainVoteValue,
-    pub justification: MainVoteJustification,
     pub sig: Signature,
 }
 

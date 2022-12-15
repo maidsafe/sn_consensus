@@ -152,7 +152,6 @@ impl Abba {
                         let decision = DecisionAction {
                             round: action.round,
                             value: action.value,
-                            justification: action.justification.clone(),
                             sig,
                         };
                         self.decided_value = Some(decision.clone());
@@ -170,7 +169,6 @@ impl Abba {
                         let decision = DecisionAction {
                             round: action.round,
                             value: action.value,
-                            justification: action.justification.clone(),
                             sig,
                         };
                         self.decided_value = Some(decision.clone());
@@ -548,32 +546,6 @@ impl Abba {
                     .verify(&action.sig, &sign_bytes)
                 {
                     return Err(Error::InvalidMessage("invalid signature".to_string()));
-                }
-
-                match &action.justification {
-                    MainVoteJustification::NoAbstain(sig) => {
-                        let pre_vote_value = if let MainVoteValue::Value(value) = action.value {
-                            value
-                        } else {
-                            return Err(Error::InvalidMessage(
-                                "no-abstain justifications should come with no-abstain value"
-                                    .to_string(),
-                            ));
-                        };
-                        // valid S-signature share on the message `(ID, pre-vote, r, b)`
-                        let sign_bytes =
-                            self.pre_vote_bytes_to_sign(action.round, pre_vote_value)?;
-                        if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
-                            return Err(Error::InvalidMessage(
-                                "invalid main-vote justification".to_string(),
-                            ));
-                        }
-                    }
-                    MainVoteJustification::Abstain(..) => {
-                        return Err(Error::InvalidMessage(
-                            "Abstain is not a valid decision value".into(),
-                        ));
-                    }
                 }
             }
         }
