@@ -2,16 +2,25 @@ use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
-pub enum PreVoteValue {
+pub enum Value {
     One,
     Zero,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteValue {
-    One,
-    Zero,
+    Value(Value),
     Abstain,
+}
+
+impl MainVoteValue {
+    pub fn one() -> Self {
+        Self::Value(Value::One)
+    }
+
+    pub fn zero() -> Self {
+        Self::Value(Value::Zero)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -38,7 +47,7 @@ pub enum MainVoteJustification {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PreVoteAction {
     pub round: usize,
-    pub value: PreVoteValue,
+    pub value: Value,
     pub justification: PreVoteJustification,
     pub sig_share: SignatureShare,
 }
@@ -52,9 +61,17 @@ pub struct MainVoteAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct DecisionAction {
+    pub round: usize,
+    pub value: MainVoteValue,
+    pub sig: Signature,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Action {
-    PreVote(Box<PreVoteAction>),
-    MainVote(Box<MainVoteAction>),
+    PreVote(PreVoteAction),
+    MainVote(MainVoteAction),
+    Decision(DecisionAction),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +84,8 @@ impl Message {
     pub fn action_str(&self) -> &str {
         match self.action {
             Action::PreVote(_) => "pre-vote",
-            Action::MainVote(_) => "pre-main",
+            Action::MainVote(_) => "main-vote",
+            Action::Decision(_) => "decision",
         }
     }
 }

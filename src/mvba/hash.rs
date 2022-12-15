@@ -16,12 +16,12 @@ pub struct InvalidLength {
 }
 
 impl Hash32 {
-    pub fn calculate(data: &[u8]) -> Self {
+    pub fn calculate(data: impl AsRef<[u8]>) -> Self {
         use tiny_keccak::{Hasher, Sha3};
 
         let mut sha3 = Sha3::v256();
         let mut hash = [0; HASH32_SIZE];
-        sha3.update(data);
+        sha3.update(data.as_ref());
         sha3.finalize(&mut hash);
         Hash32(hash)
     }
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn test_calc() {
-        let hash = Hash32::calculate("abcd".as_bytes());
+        let hash = Hash32::calculate("abcd");
         assert_eq!(
             format!("{}", hash),
             "6f6f129471590d2c91804c812b5750cd44cbdfb7238541c451e1ea2bc0193177"
