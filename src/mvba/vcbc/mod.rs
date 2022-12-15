@@ -1,17 +1,19 @@
 pub(crate) mod error;
 pub(crate) mod message;
 
+use std::cell::RefCell;
+use std::collections::hash_map::Entry::Vacant;
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use log::warn;
+
 use self::error::{Error, Result};
 use self::message::{Action, Message};
 use super::hash::Hash32;
 use super::{MessageValidity, NodeId, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
-use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
-use log::warn;
-use std::cell::RefCell;
-use std::collections::hash_map::Entry::Vacant;
-use std::collections::HashMap;
-use std::rc::Rc;
 
 pub(crate) const MODULE_NAME: &str = "vcbc";
 

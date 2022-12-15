@@ -2,20 +2,29 @@
 pub(crate) mod error;
 pub(crate) mod message;
 
-mod error;
-pub(super) mod message;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
+use log::debug;
+
+use self::error::{Error, Result};
+use self::message::{
+    Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteJustification,
+    PreVoteValue,
+};
+use super::NodeId;
+use crate::mvba::abba::message::MainVoteJustification;
+use crate::mvba::broadcaster::Broadcaster;
 
 pub(crate) const MODULE_NAME: &str = "abba";
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
-    i: NodeId,                   // this is same as $i$ in spec
-    j: NodeId,                   // this is same as $j$ in spec
-    r: usize,                    // this is same as $r$ in spec
+    i: NodeId, // this is same as $i$ in spec
+    j: NodeId, // this is same as $j$ in spec
+    r: usize,  // this is same as $r$ in spec
     decided_value: Option<DecisionAction>,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
@@ -387,10 +396,8 @@ impl Abba {
 
                         match &c_final.action {
                             crate::mvba::vcbc::message::Action::Final(digest, sig) => {
-                                let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                    &c_final.j,
-                                    *digest,
-                                )?;
+                                let sign_bytes =
+                                    crate::mvba::vcbc::c_ready_bytes_to_sign(&c_final.j, *digest)?;
 
                                 if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                                     return Err(Error::InvalidMessage(
@@ -487,8 +494,7 @@ impl Abba {
                             PreVoteJustification::FirstRoundOne(c_final) => match &c_final.action {
                                 crate::mvba::vcbc::message::Action::Final(digest, sig) => {
                                     let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                        &c_final.j,
-                                        *digest,
+                                        &c_final.j, *digest,
                                     )?;
 
                                     if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
@@ -541,22 +547,14 @@ impl Abba {
 
     // pre_vote_bytes_to_sign generates bytes for Pre-Vote signature share.
     // pre_vote_bytes_to_sign is same as serialized of $(ID, pre-vote, r, b)$ in spec.
-    fn pre_vote_bytes_to_sign(&self, round: usize, v: Value) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            "pre-vote",
-            round,
-            v,
-        ))?)
+    fn pre_vote_bytes_to_sign(&self, round: usize, v: &Value) -> Result<Vec<u8>> {
+        Ok(bincode::serialize(&("pre-vote", round, v))?)
     }
 
     // main_vote_bytes_to_sign generates bytes for Main-Vote signature share.
     // main_vote_bytes_to_sign is same as serialized of $(ID, main-vote, r, v)$ in spec.
     fn main_vote_bytes_to_sign(&self, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            "main-vote",
-            round,
-            v,
-        ))?)
+        Ok(bincode::serialize(&("main-vote", round, v))?)
     }
 
     // threshold return the threshold of the public key set.
