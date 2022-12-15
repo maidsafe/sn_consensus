@@ -1,62 +1,61 @@
+use super::{
+    abba::{self, Abba},
+    bundle::{Bundle, Outgoing},
+    error::Error,
+    error::Result,
+    vcbc::{self},
+    Proposal,
+};
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{
-    abba::{self, Abba},
-    bundle::{Bundle, Outgoing},
-    error::{Error, Result},
-    vcbc::{self, message::Tag},
-    Proposal,
-};
-
 pub struct Consensus {
+    pub id: String, // this is same as $ID$ in spec
     self_id: NodeId,
     threshold: usize,
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
-    #[allow(unused)]
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
 impl Consensus {
     pub fn init(
-        bundle_id: u32,
+        id: String,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
         message_validity: MessageValidity,
     ) -> Consensus {
-        let broadcaster = Broadcaster::new(bundle_id, self_id);
+        let broadcaster = Broadcaster::new(id.clone(), self_id);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
         let mut abba_map = HashMap::new();
         let mut vcbc_map = HashMap::new();
 
-        for id in &parties {
-            let tag = Tag::new("vcbc", *id, 0);
+        for party in &parties {
             let vcbc = Vcbc::new(
                 self_id,
-                tag.clone(),
+                party.clone(),
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 message_validity,
                 broadcaster_rc.clone(),
             );
-            vcbc_map.insert(*id, vcbc).unwrap();
+            vcbc_map.insert(party.clone(), vcbc).unwrap();
 
             let abba = Abba::new(
-                format!("{}", id),
                 self_id,
-                tag,
+                party.clone(),
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),
             );
-            abba_map.insert(*id, abba).unwrap();
+            abba_map.insert(party.clone(), abba).unwrap();
         }
 
         Consensus {
+            id,
             self_id,
             threshold: pub_key_set.threshold(),
             vcbc_map,
@@ -78,7 +77,14 @@ impl Consensus {
         Ok(self.broadcaster.borrow_mut().take_outgoings())
     }
 
-    pub fn process_bundle(&mut self, sender: NodeId, bundle: &Bundle) -> Result<Vec<Outgoing>> {
+    pub fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
+        if bundle.id != self.id {
+            return Err(Error::InvalidMessage(format!(
+                "invalid ID. expected: {}, got {}",
+                self.id, bundle.id
+            )));
+        }
+
         let mut delivered_count = 0;
         for vcbc in self.vcbc_map.values() {
             if vcbc.is_delivered() {
@@ -88,15 +94,15 @@ impl Consensus {
 
         match bundle.module.as_ref() {
             vcbc::MODULE_NAME => {
-                let vcbc = self.vcbc_map.get_mut(&sender).unwrap();
-                let msg = bincode::deserialize(&bundle.message).unwrap();
-                vcbc.receive_message(sender, msg).unwrap();
+                let vcbc = self.vcbc_map.get_mut(&bundle.initiator).unwrap();
+                let msg = bincode::deserialize(&bundle.payload)?;
+                vcbc.receive_message(bundle.initiator, msg).unwrap();
                 if delivered_count >= self.super_majority_num() {}
             }
             abba::MODULE_NAME => {
-                let abba = self.abba_map.get_mut(&sender).unwrap();
-                let msg = bincode::deserialize(&bundle.message).unwrap();
-                abba.receive_message(sender, msg).unwrap();
+                let abba = self.abba_map.get_mut(&bundle.initiator).unwrap();
+                let msg = bincode::deserialize(&bundle.payload)?;
+                abba.receive_message(bundle.initiator, msg).unwrap();
                 if delivered_count >= self.super_majority_num() {}
             }
             _ => {

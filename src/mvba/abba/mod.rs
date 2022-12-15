@@ -13,11 +13,10 @@ pub(crate) const MODULE_NAME: &str = "abba";
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
-    id: String, // this is same as $ID$ in spec
-    i: NodeId,  // this is same as $i$ in spec
-    r: usize,   // this is same as $r$ in spec
+    i: NodeId,                   // this is same as $i$ in spec
+    j: NodeId,                   // this is same as $j$ in spec
+    r: usize,                    // this is same as $r$ in spec
     decided_value: Option<DecisionAction>,
-    tag: crate::mvba::vcbc::message::Tag,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
@@ -27,19 +26,17 @@ pub(crate) struct Abba {
 
 impl Abba {
     pub fn new(
-        id: String,
         i: NodeId,
-        tag: crate::mvba::vcbc::message::Tag,
+        j: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            id,
             i,
+            j,
             r: 1,
             decided_value: None,
-            tag,
             pub_key_set,
             sec_key_share,
             broadcaster,
@@ -71,7 +68,6 @@ impl Abba {
             sig_share,
         };
         let msg = Message {
-            id: self.id.clone(),
             action: Action::PreVote(action),
         };
         // and send to all parties the message (ID, pre-process, Vi , signature share).
@@ -215,8 +211,7 @@ impl Abba {
 
                         // Send to all parties the message `(ID, pre-vote, r, b, justification, signature share)`
                         let pre_vote_message = Message {
-                            id: self.id.clone(),
-                            action: Action::PreVote(PreVoteAction {
+                            action: Action::PreVote(Box::new(PreVoteAction {
                                 round: self.r,
                                 value,
                                 justification,
@@ -291,7 +286,6 @@ impl Abba {
 
                     // send to all parties the message: `(ID, main-vote, r, v, justification, signature share)`
                     let main_vote_message = Message {
-                        id: self.id.clone(),
                         action: Action::MainVote(MainVoteAction {
                             round: self.r,
                             value,
@@ -349,13 +343,6 @@ impl Abba {
     }
 
     fn check_message(&mut self, sender: &NodeId, msg: &Message) -> Result<()> {
-        if msg.id != self.id {
-            return Err(Error::InvalidMessage(format!(
-                "invalid ID. expected: {}, got {}",
-                self.id, msg.id
-            )));
-        }
-
         match &msg.action {
             Action::PreVote(action) => {
                 // check the validity of the S-signature share on message (ID, pre-vote, r, b)
@@ -391,17 +378,17 @@ impl Abba {
                             )));
                         }
 
-                        if self.tag != c_final.tag {
+                        if self.j != c_final.j {
                             return Err(Error::InvalidMessage(format!(
-                                "invalid tag. expected {:?}, got {:?}",
-                                self.tag, c_final.tag
+                                "invalid sender. expected {:?}, got {:?}",
+                                self.j, c_final.j
                             )));
                         }
 
                         match &c_final.action {
                             crate::mvba::vcbc::message::Action::Final(digest, sig) => {
                                 let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                    &c_final.tag,
+                                    &c_final.j,
                                     *digest,
                                 )?;
 
@@ -500,7 +487,7 @@ impl Abba {
                             PreVoteJustification::FirstRoundOne(c_final) => match &c_final.action {
                                 crate::mvba::vcbc::message::Action::Final(digest, sig) => {
                                     let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                        &c_final.tag,
+                                        &c_final.j,
                                         *digest,
                                     )?;
 
@@ -556,7 +543,6 @@ impl Abba {
     // pre_vote_bytes_to_sign is same as serialized of $(ID, pre-vote, r, b)$ in spec.
     fn pre_vote_bytes_to_sign(&self, round: usize, v: Value) -> Result<Vec<u8>> {
         Ok(bincode::serialize(&(
-            self.id.clone(),
             "pre-vote",
             round,
             v,
@@ -567,7 +553,6 @@ impl Abba {
     // main_vote_bytes_to_sign is same as serialized of $(ID, main-vote, r, v)$ in spec.
     fn main_vote_bytes_to_sign(&self, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
         Ok(bincode::serialize(&(
-            self.id.clone(),
             "main-vote",
             round,
             v,

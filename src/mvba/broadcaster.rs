@@ -5,15 +5,15 @@ use super::{
 
 // Broadcaster holds information required to broadcast the messages.
 pub struct Broadcaster {
-    bundle_id: u32,
+    id: String,
     self_id: NodeId,
     outgoings: Vec<Outgoing>,
 }
 
 impl Broadcaster {
-    pub fn new(bundle_id: u32, self_id: NodeId) -> Self {
+    pub fn new(id: String, self_id: NodeId) -> Self {
         Self {
-            bundle_id,
+            id,
             self_id,
             outgoings: Vec::new(),
         }
@@ -23,24 +23,23 @@ impl Broadcaster {
         self.self_id
     }
 
-    pub fn send_to(&mut self, module: &str, message: Vec<u8>, recipient: NodeId) {
-        let bdl = Bundle {
-            id: self.bundle_id,
-            sender: self.self_id,
-            module: module.to_string(),
-            message,
-        };
+    pub fn send_to(&mut self, module: &str, payload: Vec<u8>, recipient: NodeId) {
+        let bdl = self.make_bundle(module, payload);
         self.outgoings.push(Outgoing::Direct(recipient, bdl));
     }
 
-    pub fn broadcast(&mut self, module: &str, message: Vec<u8>) {
-        let bdl = Bundle {
-            id: self.bundle_id,
-            sender: self.self_id,
-            module: module.to_string(),
-            message,
-        };
+    pub fn broadcast(&mut self, module: &str, payload: Vec<u8>) {
+        let bdl = self.make_bundle(module, payload);
         self.outgoings.push(Outgoing::Gossip(bdl));
+    }
+
+    fn make_bundle(&self, module: &str, payload: Vec<u8>) -> Bundle {
+        Bundle {
+            id: self.id.clone(),
+            initiator: self.self_id,
+            module: module.to_string(),
+            payload,
+        }
     }
 
     pub fn take_outgoings(&mut self) -> Vec<Outgoing> {
@@ -73,10 +72,10 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_gossip_message(&self, msg: &[u8]) -> bool {
+    pub fn has_gossip_message(&self, pld: &[u8]) -> bool {
         for out in &self.outgoings {
             if let Outgoing::Gossip(bdl) = out {
-                if bdl.message.eq(&msg) {
+                if bdl.payload.eq(&pld) {
                     return true;
                 }
             }
@@ -85,10 +84,10 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_direct_message(&self, to: &NodeId, msg: &[u8]) -> bool {
+    pub fn has_direct_message(&self, to: &NodeId, pld: &[u8]) -> bool {
         for out in &self.outgoings {
             if let Outgoing::Direct(recipient, bdl) = out {
-                if bdl.message == msg && recipient == to {
+                if bdl.payload == pld && recipient == to {
                     return true;
                 }
             }
