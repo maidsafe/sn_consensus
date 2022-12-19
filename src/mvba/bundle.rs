@@ -1,4 +1,4 @@
-use super::{NodeId, abba, vcbc};
+use super::{NodeId};
 use serde::{Deserialize, Serialize};
 
 // TODO: remove me.
@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 //     Abba(abba::message::Message),
 //     Vcbc(vcbc::message::Message),
 // }
-
 
 /// Bundle is a wrapper around the actual message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,5 +24,5 @@ pub struct Bundle {
 /// Ongoing messages definition
 pub enum Outgoing {
     Gossip(Bundle),
-    Direct(NodeId, Bundle)
+    Direct(NodeId, Bundle),
 }

@@ -129,7 +129,7 @@ impl Net {
 #[test]
 fn test_vcbc_happy_path() {
     let proposer = 1;
-    let mut net = Net::new(7, proposer.clone());
+    let mut net = Net::new(7, proposer);
 
     // Node 1 (the proposer) will initiate VCBC by broadcasting a value
 
@@ -212,7 +212,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 // --------------------------------------
 // Testing one peers in faulty situations
 
-use rand::{random, thread_rng, Rng};
+use rand::{thread_rng, Rng};
 
 struct TestNet {
     sec_key_set: SecretKeySet,
@@ -260,7 +260,7 @@ impl TestNet {
 
     pub fn make_send_msg(&self, m: &[u8]) -> Message {
         Message {
-            j: self.vcbc.j.clone(),
+            proposer: self.vcbc.j,
             action: Action::Send(m.to_vec()),
         }
     }
@@ -268,7 +268,7 @@ impl TestNet {
     pub fn make_ready_msg(&self, d: &Hash32, peer_id: &NodeId) -> Message {
         let sig_share = self.sig_share(d, peer_id);
         Message {
-            j: self.vcbc.j.clone(),
+            proposer: self.vcbc.j,
             action: Action::Ready(*d, sig_share),
         }
     }
@@ -287,7 +287,7 @@ impl TestNet {
             .unwrap();
 
         Message {
-            j: self.vcbc.j.clone(),
+            proposer: self.vcbc.j,
             action: Action::Final(*d, sig),
         }
     }
@@ -327,7 +327,7 @@ fn test_ignore_messages_with_wrong_j() {
     let mut t = TestNet::new(i, j);
 
     let mut msg = t.make_send_msg(&t.m);
-    msg.j = TestNet::PARTY_S;
+    msg.proposer = TestNet::PARTY_S;
 
     t.vcbc.receive_message(TestNet::PARTY_B, msg).unwrap();
 
@@ -441,7 +441,7 @@ fn test_invalid_sig_share() {
         .secret_key_share(TestNet::PARTY_B)
         .sign("invalid_message".as_bytes());
     let ready_msg_x = Message {
-        j: t.vcbc.j.clone(),
+        proposer: t.vcbc.j,
         action: Action::Ready(t.d(), sig_share),
     };
 

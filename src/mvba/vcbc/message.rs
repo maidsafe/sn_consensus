@@ -1,7 +1,6 @@
 use crate::mvba::{hash::Hash32, NodeId, Proposal};
 use blsttc::{Signature, SignatureShare};
 
-
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Action {
     Send(Proposal),                // this is same as $c-send$ in spec
@@ -11,7 +10,7 @@ pub enum Action {
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Message {
-    pub j: NodeId,
+    pub proposer: NodeId,
     pub action: Action,
 }
 

@@ -1,8 +1,8 @@
-use crate::mvba::{hash, NodeId};
+
 use core::fmt::Debug;
 use thiserror::Error;
 
-use super::{vcbc, abba};
+use super::{abba, vcbc};
 
 #[derive(Error, Debug)]
 pub enum Error {

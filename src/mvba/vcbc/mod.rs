@@ -94,7 +94,7 @@ impl Vcbc {
         // Upon receiving message (ID.j.s, in, c-broadcast, m):
         // send (ID.j.s, c-send, m) to all parties
         let send_msg = Message {
-            j: self.j.clone(),
+            proposer: self.j,
             action: Action::Send(m),
         };
         self.broadcast(send_msg)
@@ -102,7 +102,7 @@ impl Vcbc {
 
     /// receive_message process the received message 'msg` from `sender`
     pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
-        if msg.j != self.j {
+        if msg.proposer != self.j {
             log::trace!("invalid sender, ignoring message.: {:?}. ", msg);
             return Ok(());
         }
@@ -132,7 +132,7 @@ impl Vcbc {
                     let s1 = self.sec_key_share.sign(sign_bytes);
 
                     let ready_msg = Message {
-                        j: self.j.clone(),
+                        proposer: self.j,
                         action: Action::Ready(d, s1),
                     };
 
@@ -167,7 +167,7 @@ impl Vcbc {
                     }
 
                     // if i = j and νl is a valid S1-signature share then
-                    if self.i == msg.j && valid_sig {
+                    if self.i == msg.proposer && valid_sig {
                         // Wd ← Wd ∪ {νl}
                         e.insert(sig_share);
 
@@ -181,7 +181,7 @@ impl Vcbc {
                             let sig = self.pub_key_set.combine_signatures(self.wd.iter())?;
 
                             let final_msg = Message {
-                                j: self.j.clone(),
+                                proposer: self.j,
                                 action: Action::Final(d, sig),
                             };
 

@@ -11,8 +11,8 @@ use log::debug;
 
 use self::error::{Error, Result};
 use self::message::{
-    Action, MainVoteAction, MainVoteValue, Message, PreVoteAction, PreVoteJustification,
-    PreVoteValue,
+    Action, DecisionAction, MainVoteAction, MainVoteValue, Message, PreVoteAction,
+    PreVoteJustification, Value,
 };
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
@@ -68,7 +68,7 @@ impl Abba {
 
     fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
-        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, value)?;
+        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
         let action = PreVoteAction {
             round: self.r,
@@ -101,7 +101,10 @@ impl Abba {
             Action::Decision(agg_main_vote) => {
                 if let Some(existing_decision) = self.decided_value.as_ref() {
                     if existing_decision != agg_main_vote {
-                        error!("Existing decision does not match the decision we received: {existing_decision:?} != {agg_main_vote:?}");
+                        log::error!(
+                            "Existing decision does not match the decision we received:
+                            {existing_decision:?} != {agg_main_vote:?}"
+                        );
 
                         return Err(Error::Generic("Received conflicting decision".into()));
                     }
@@ -151,7 +154,6 @@ impl Abba {
                         };
                         self.decided_value = Some(decision.clone());
                         self.broadcast(Message {
-                            id: self.id.clone(),
                             action: Action::Decision(decision),
                         })?;
                         return Ok(());
@@ -168,7 +170,6 @@ impl Abba {
                         };
                         self.decided_value = Some(decision.clone());
                         self.broadcast(Message {
-                            id: self.id.clone(),
                             action: Action::Decision(decision),
                         })?;
                         return Ok(());
@@ -215,12 +216,12 @@ impl Abba {
                             };
 
                         // Produce an S-signature share on the message `(ID, pre-vote, r, b)`
-                        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, value)?;
+                        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
                         let sig_share = self.sec_key_share.sign(sign_bytes);
 
                         // Send to all parties the message `(ID, pre-vote, r, b, justification, signature share)`
                         let pre_vote_message = Message {
-                            action: Action::PreVote(Box::new(PreVoteAction {
+                            action: Action::PreVote(PreVoteAction {
                                 round: self.r,
                                 value,
                                 justification,
@@ -355,7 +356,7 @@ impl Abba {
         match &msg.action {
             Action::PreVote(action) => {
                 // check the validity of the S-signature share on message (ID, pre-vote, r, b)
-                let sign_bytes = self.pre_vote_bytes_to_sign(action.round, action.value)?;
+                let sign_bytes = self.pre_vote_bytes_to_sign(action.round, &action.value)?;
                 if !self
                     .pub_key_set
                     .public_key_share(sender)
@@ -387,17 +388,19 @@ impl Abba {
                             )));
                         }
 
-                        if self.j != c_final.j {
+                        if self.j != c_final.proposer {
                             return Err(Error::InvalidMessage(format!(
                                 "invalid sender. expected {:?}, got {:?}",
-                                self.j, c_final.j
+                                self.j, c_final.proposer
                             )));
                         }
 
                         match &c_final.action {
                             crate::mvba::vcbc::message::Action::Final(digest, sig) => {
-                                let sign_bytes =
-                                    crate::mvba::vcbc::c_ready_bytes_to_sign(&c_final.j, *digest)?;
+                                let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
+                                    &c_final.proposer,
+                                    *digest,
+                                )?;
 
                                 if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                                     return Err(Error::InvalidMessage(
@@ -424,7 +427,7 @@ impl Abba {
                     PreVoteJustification::Hard(sig) => {
                         // Hard pre-vote justification is the S-threshold signature for `(ID, pre-vote, r − 1, b)`
                         let sign_bytes =
-                            self.pre_vote_bytes_to_sign(action.round - 1, action.value)?;
+                            self.pre_vote_bytes_to_sign(action.round - 1, &action.value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid hard-vote justification".to_string(),
@@ -466,7 +469,7 @@ impl Abba {
                         };
                         // valid S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes =
-                            self.pre_vote_bytes_to_sign(action.round, pre_vote_value)?;
+                            self.pre_vote_bytes_to_sign(action.round, &pre_vote_value)?;
                         if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid main-vote justification".to_string(),
@@ -494,7 +497,8 @@ impl Abba {
                             PreVoteJustification::FirstRoundOne(c_final) => match &c_final.action {
                                 crate::mvba::vcbc::message::Action::Final(digest, sig) => {
                                     let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                        &c_final.j, *digest,
+                                        &c_final.proposer,
+                                        *digest,
                                     )?;
 
                                     if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {

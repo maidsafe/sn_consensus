@@ -36,22 +36,22 @@ impl Consensus {
         for party in &parties {
             let vcbc = Vcbc::new(
                 self_id,
-                party.clone(),
+                *party,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 message_validity,
                 broadcaster_rc.clone(),
             );
-            vcbc_map.insert(party.clone(), vcbc).unwrap();
+            vcbc_map.insert(*party, vcbc).unwrap();
 
             let abba = Abba::new(
                 self_id,
-                party.clone(),
+                *party,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),
             );
-            abba_map.insert(party.clone(), abba).unwrap();
+            abba_map.insert(*party, abba).unwrap();
         }
 
         Consensus {

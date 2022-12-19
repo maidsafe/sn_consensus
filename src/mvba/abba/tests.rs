@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::{cell::RefCell, collections::BTreeMap};
 
 use blsttc::{SecretKey, SecretKeySet};
-use rand::{random, thread_rng};
+use rand::thread_rng;
 
 use super::{
     error::Error,
@@ -12,8 +12,8 @@ use super::{
     },
     Abba,
 };
+use crate::mvba::hash::Hash32;
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
-use crate::mvba::{hash::Hash32, vcbc::message::Tag};
 
 struct TestNet {
     sec_key_set: SecretKeySet,
@@ -39,7 +39,7 @@ impl TestNet {
         let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&j, proposal_digest).unwrap();
         let c_final_sig = sec_key_set.secret_key().sign(sign_bytes);
         let c_final = crate::mvba::vcbc::message::Message {
-            j: j,
+            proposer: j,
             action: crate::mvba::vcbc::message::Action::Final(proposal_digest, c_final_sig),
         };
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new("test".to_string(), i)));
@@ -67,7 +67,7 @@ impl TestNet {
         justification: &PreVoteJustification,
         peer_id: &NodeId,
     ) -> Message {
-        let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, value).unwrap();
+        let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
             action: Action::PreVote(PreVoteAction {
@@ -151,7 +151,7 @@ fn test_should_publish_main_vote_message() {
         .receive_message(TestNet::PARTY_S, pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::One).unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, &Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
     let main_vote_x =
@@ -183,11 +183,11 @@ fn test_absent_vote_round_one_invalid_justification() {
     let mut t = TestNet::new(i, j);
 
     let sign_bytes =
-        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.j.clone(), t.proposal_digest)
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.proposer.clone(), t.proposal_digest)
             .unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
     let invalid_c_final = crate::mvba::vcbc::message::Message {
-        j: t.c_final.j.clone(),
+        proposer: t.c_final.proposer,
         action: crate::mvba::vcbc::message::Action::Final(t.proposal_digest, invalid_sig),
     };
 
@@ -219,7 +219,7 @@ fn test_pre_vote_invalid_sig_share() {
             justification: just,
             value: Value::One,
             sig_share: invalid_sig_share,
-        },
+        }),
     };
 
     let result = t.abba.receive_message(TestNet::PARTY_B, msg);
@@ -276,13 +276,13 @@ fn test_pre_vote_round_1_invalid_c_final_j() {
     let mut t = TestNet::new(i, j);
 
     let mut invalid_c_final = t.c_final.clone();
-    invalid_c_final.j = TestNet::PARTY_Y;;
+    invalid_c_final.proposer = TestNet::PARTY_Y;
     let just = PreVoteJustification::FirstRoundOne(invalid_c_final.clone());
     let pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid sender. expected {:?}, got {:?}", t.abba.j, invalid_c_final.j)));
+        if msg == format!("invalid sender. expected {:?}, got {:?}", t.abba.j, invalid_c_final.proposer)));
 }
 #[test]
 fn test_pre_vote_round_1_invalid_c_final_signature() {
@@ -291,11 +291,11 @@ fn test_pre_vote_round_1_invalid_c_final_signature() {
     let mut t = TestNet::new(i, j);
 
     let sign_bytes =
-        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.j.clone(), t.proposal_digest)
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.c_final.proposer.clone(), t.proposal_digest)
             .unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
     let invalid_c_final = crate::mvba::vcbc::message::Message {
-        j: t.c_final.j.clone(),
+        proposer: t.c_final.proposer,
         action: crate::mvba::vcbc::message::Action::Final(t.proposal_digest, invalid_sig),
     };
     let just = PreVoteJustification::FirstRoundOne(invalid_c_final);
@@ -353,7 +353,7 @@ fn test_normal_case_one_round() {
         .receive_message(TestNet::PARTY_S, pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::One).unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, &Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
     let main_vote_y =
@@ -394,7 +394,7 @@ fn test_normal_case_zero() {
         .receive_message(TestNet::PARTY_S, round_1_pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, Value::Zero).unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, &Value::Zero).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let main_vote_just = MainVoteJustification::NoAbstain(sig);
     let round_1_main_vote_x =
@@ -491,7 +491,7 @@ fn test_normal_case_two_rounds() {
         .receive_message(TestNet::PARTY_S, round_2_pre_vote_s)
         .unwrap();
 
-    let sign_bytes = t.abba.pre_vote_bytes_to_sign(2, Value::One).unwrap();
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(2, &Value::One).unwrap();
     let sig = t.sec_key_set.secret_key().sign(sign_bytes);
     let round_2_main_vote_just = MainVoteJustification::NoAbstain(sig);
     let round_2_main_vote_x = t.make_main_vote_msg(
@@ -527,13 +527,13 @@ fn test_normal_case_two_rounds() {
 
 struct Net {
     secret_key_set: SecretKeySet,
-    tag: Tag,
+    proposer: NodeId,
     nodes: BTreeMap<NodeId, Abba>,
     queue: BTreeMap<NodeId, Vec<Bundle>>,
 }
 
 impl Net {
-    fn new(n: usize, tag: Tag) -> Self {
+    fn new(n: usize, proposer: NodeId) -> Self {
         // we can tolerate < n/3 faults
         let faults = n.saturating_sub(1) / 3;
 
@@ -543,19 +543,14 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let bundle_id = 0; // TODO: what is this?
+        let id = "test-id".to_string();
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
             let key_share = secret_key_set.secret_key_share(node_id);
-            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
-                bundle_id,
-                node_id,
-                key_share.clone(),
-            )));
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(id.clone(), node_id)));
             let vcbc = Abba::new(
-                tag.id.clone(),
+                proposer,
                 node_id,
-                tag.clone(),
                 public_key_set.clone(),
                 key_share,
                 broadcaster,
@@ -565,7 +560,7 @@ impl Net {
 
         Net {
             secret_key_set,
-            tag,
+            proposer,
             nodes,
             queue: Default::default(),
         }
@@ -578,8 +573,8 @@ impl Net {
     fn enqueue_bundles_from(&mut self, id: NodeId) {
         let (send_bundles, bcast_bundles) = {
             let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
-            let send_bundles = broadcaster.take_send_bundles();
-            let bcast_bundles = broadcaster.take_broadcast_bundles();
+            let send_bundles = broadcaster.take_direct_bundles();
+            let bcast_bundles = broadcaster.take_gossip_bundles();
             (send_bundles, bcast_bundles)
         };
 
@@ -604,12 +599,12 @@ impl Net {
                 let recipient_node = self.node_mut(recipient);
 
                 for bundle in queue {
-                    let msg: Message = bincode::deserialize(&bundle.message)
+                    let msg: Message = bincode::deserialize(&bundle.payload)
                         .expect("Failed to deserialize message");
 
                     println!("Handling message: {msg:?}");
                     recipient_node
-                        .receive_message(bundle.sender, msg)
+                        .receive_message(bundle.initiator, msg)
                         .expect("Failed to receive msg");
                 }
 
@@ -628,11 +623,11 @@ impl Net {
 
             let bundle = msgs.swap_remove(index);
             let msg: Message =
-                bincode::deserialize(&bundle.message).expect("Failed to deserialize message");
+                bincode::deserialize(&bundle.payload).expect("Failed to deserialize message");
 
             let recipient_node = self.node_mut(recipient);
             recipient_node
-                .receive_message(bundle.sender, msg)
+                .receive_message(bundle.initiator, msg)
                 .expect("Failed to receive message");
             self.enqueue_bundles_from(recipient);
         }
@@ -642,13 +637,14 @@ impl Net {
 #[test]
 fn test_net_happy_path() {
     let proposer = 1;
-    let mut net = Net::new(3, Tag::new("happy-path", proposer, 0));
+    let mut net = Net::new(3, proposer);
 
     let proposal_digest = Hash32::calculate("test-data".as_bytes());
-    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&net.tag, proposal_digest).unwrap();
+    let sign_bytes =
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&net.proposer, proposal_digest).unwrap();
     let c_final_sig = net.secret_key_set.secret_key().sign(sign_bytes);
     let c_final = crate::mvba::vcbc::message::Message {
-        tag: net.tag.clone(),
+        proposer: net.proposer,
         action: crate::mvba::vcbc::message::Action::Final(proposal_digest, c_final_sig),
     };
 

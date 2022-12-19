@@ -1,6 +1,6 @@
 pub mod consensus;
-pub mod hash;
 pub mod error;
+pub mod hash;
 
 mod abba;
 mod broadcaster;
