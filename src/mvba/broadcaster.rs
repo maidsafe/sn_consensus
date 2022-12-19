@@ -49,26 +49,19 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn take_gossip_bundles(&mut self) -> Vec<Vec<u8>> {
-        let mut data = Vec::with_capacity(self.outgoings.len());
-        for out in std::mem::take(&mut self.outgoings) {
-            if let Outgoing::Gossip(bdl) = out {
-                data.push(bincode::serialize(&bdl).unwrap())
-            }
-        }
-        data
-    }
-
-    #[cfg(test)]
-    pub fn take_direct_bundles(&mut self) -> Vec<(NodeId, Vec<u8>)> {
-        let mut data = Vec::with_capacity(self.outgoings.len());
+    pub fn take_bundles(&mut self) -> (Vec<Vec<u8>>, Vec<(NodeId, Vec<u8>)>) {
+        let mut gossips = Vec::with_capacity(self.outgoings.len());
+        let mut directs = Vec::with_capacity(self.outgoings.len());
 
         for out in std::mem::take(&mut self.outgoings) {
-            if let Outgoing::Direct(recipient, bdl) = out {
-                data.push((recipient, bincode::serialize(&bdl).unwrap()))
+            match out {
+                Outgoing::Gossip(bdl) => gossips.push(bincode::serialize(&bdl).unwrap()),
+                Outgoing::Direct(recipient, bdl) => {
+                    directs.push((recipient, bincode::serialize(&bdl).unwrap()))
+                }
             }
         }
-        data
+        (gossips, directs)
     }
 
     #[cfg(test)]

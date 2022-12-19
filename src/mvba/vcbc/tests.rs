@@ -27,7 +27,7 @@ struct Net {
 }
 
 impl Net {
-    fn new(n: usize, j: NodeId) -> Self {
+    fn new(n: usize, proposer: NodeId) -> Self {
         // we can tolerate < n/3 faults
         let faults = n.saturating_sub(1) / 3;
 
@@ -39,18 +39,18 @@ impl Net {
         let public_key_set = secret_key_set.public_keys();
         let id = "testing-vcbc".to_string();
 
-        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|i| {
-            let key_share = secret_key_set.secret_key_share(i);
-            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(id.clone(), i)));
+        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
+            let key_share = secret_key_set.secret_key_share(self_id);
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(id.clone(), self_id)));
             let vcbc = Vcbc::new(
-                i,
-                j,
+                self_id,
+                proposer,
                 public_key_set.clone(),
                 key_share,
                 valid_proposal,
                 broadcaster,
             );
-            (i, vcbc)
+            (self_id, vcbc)
         }));
 
         Net {
@@ -67,8 +67,7 @@ impl Net {
     fn enqueue_bundles_from(&mut self, id: NodeId) {
         let (send_bundles, bcast_bundles) = {
             let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
-            let send_bundles = broadcaster.take_direct_bundles();
-            let bcast_bundles = broadcaster.take_gossip_bundles();
+            let (bcast_bundles, send_bundles) = broadcaster.take_bundles();
             (send_bundles, bcast_bundles)
         };
 
@@ -147,7 +146,7 @@ fn test_vcbc_happy_path() {
     // And check that all nodes have delivered the expected value and signature
 
     let expected_bytes_to_sign: Vec<u8> =
-        bincode::serialize(&(proposer, "c-ready", Hash32::calculate("HAPPY-PATH-VALUE")))
+        c_ready_bytes_to_sign(&proposer, Hash32::calculate("HAPPY-PATH-VALUE"))
             .expect("Failed to serialize");
 
     let expected_sig = net

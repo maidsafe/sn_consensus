@@ -61,18 +61,18 @@ fn try_insert(map: &mut HashMap<NodeId, Message>, k: NodeId, v: Message) -> Resu
 
 impl Vcbc {
     pub fn new(
-        i: NodeId,
-        j: NodeId,
+        self_id: NodeId,
+        proposer: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         message_validity: MessageValidity,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
-        debug_assert_eq!(i, broadcaster.borrow().self_id());
+        debug_assert_eq!(self_id, broadcaster.borrow().self_id());
 
         Self {
-            i,
-            j,
+            i: self_id,
+            j: proposer,
             m_bar: None,
             u_bar: None,
             wd: HashMap::new(),
@@ -148,10 +148,7 @@ impl Vcbc {
                 let sign_bytes = c_ready_bytes_to_sign(&self.j, d)?;
 
                 if d != msg_d {
-                    warn!(
-                        "c-ready has unknown digest. expected {:?}, got {:?}",
-                        d, msg_d
-                    );
+                    warn!("c-ready has unknown digest. expected {d:?}, got {msg_d:?}");
                     return Err(Error::Generic("Invalid digest".to_string()));
                 }
 

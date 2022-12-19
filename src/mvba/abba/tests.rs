@@ -249,7 +249,6 @@ fn test_double_pre_vote() {
         .unwrap();
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_2);
-    println!("{:?}", result);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
         if msg == format!(
             "double pre-vote detected from {:?}", &TestNet::PARTY_B)));
@@ -549,8 +548,8 @@ impl Net {
             let key_share = secret_key_set.secret_key_share(node_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(id.clone(), node_id)));
             let vcbc = Abba::new(
-                proposer,
                 node_id,
+                proposer,
                 public_key_set.clone(),
                 key_share,
                 broadcaster,
@@ -573,8 +572,7 @@ impl Net {
     fn enqueue_bundles_from(&mut self, id: NodeId) {
         let (send_bundles, bcast_bundles) = {
             let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
-            let send_bundles = broadcaster.take_direct_bundles();
-            let bcast_bundles = broadcaster.take_gossip_bundles();
+            let (bcast_bundles, send_bundles)  = broadcaster.take_bundles();
             (send_bundles, bcast_bundles)
         };
 
@@ -637,7 +635,7 @@ impl Net {
 #[test]
 fn test_net_happy_path() {
     let proposer = 1;
-    let mut net = Net::new(3, proposer);
+    let mut net = Net::new(4, proposer);
 
     let proposal_digest = Hash32::calculate("test-data".as_bytes());
     let sign_bytes =

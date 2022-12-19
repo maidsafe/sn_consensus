@@ -4,6 +4,7 @@ pub(crate) mod message;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::Read;
 use std::rc::Rc;
 
 use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};
@@ -35,15 +36,15 @@ pub(crate) struct Abba {
 
 impl Abba {
     pub fn new(
-        i: NodeId,
-        j: NodeId,
+        self_id: NodeId,
+        proposer: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            i,
-            j,
+            i: self_id,
+            j: proposer,
             r: 1,
             decided_value: None,
             pub_key_set,
