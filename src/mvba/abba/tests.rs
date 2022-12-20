@@ -572,7 +572,7 @@ impl Net {
     fn enqueue_bundles_from(&mut self, id: NodeId) {
         let (send_bundles, bcast_bundles) = {
             let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
-            let (bcast_bundles, send_bundles)  = broadcaster.take_bundles();
+            let (bcast_bundles, send_bundles) = broadcaster.take_bundles();
             (send_bundles, bcast_bundles)
         };
 

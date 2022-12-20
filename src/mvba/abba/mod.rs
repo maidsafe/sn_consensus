@@ -4,7 +4,7 @@ pub(crate) mod message;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::Read;
+
 use std::rc::Rc;
 
 use blsttc::{PublicKeySet, SecretKeyShare, SignatureShare};

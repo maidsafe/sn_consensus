@@ -1,4 +1,4 @@
-use super::{NodeId};
+use super::NodeId;
 use serde::{Deserialize, Serialize};
 
 // TODO: remove me.

@@ -5,6 +5,7 @@ pub mod hash;
 mod abba;
 mod broadcaster;
 mod bundle;
+mod mvba;
 mod vcbc;
 
 pub type NodeId = usize;

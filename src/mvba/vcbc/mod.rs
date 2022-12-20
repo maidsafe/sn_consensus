@@ -225,6 +225,18 @@ impl Vcbc {
         self.u_bar.is_some()
     }
 
+    pub fn c_final_message(&self) -> Message {
+        debug_assert!(self.u_bar.is_none(), "message should be delivered");
+
+        Message {
+            proposer: self.j,
+            action: Action::Final(
+                self.d.unwrap(),
+                self.u_bar.as_ref().unwrap().clone(),
+            ),
+        }
+    }
+
     #[cfg(test)]
     fn read_delivered(&self) -> Option<(Vec<u8>, Signature)> {
         if let (Some(m), Some(u)) = (&self.m_bar, &self.u_bar) {
