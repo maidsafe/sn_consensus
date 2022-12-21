@@ -5,15 +5,13 @@ use super::{
 
 // Broadcaster holds information required to broadcast the messages.
 pub struct Broadcaster {
-    id: String,
     self_id: NodeId,
     outgoings: Vec<Outgoing>,
 }
 
 impl Broadcaster {
-    pub fn new(id: String, self_id: NodeId) -> Self {
+    pub fn new(self_id: NodeId) -> Self {
         Self {
-            id,
             self_id,
             outgoings: Vec::new(),
         }
@@ -35,7 +33,6 @@ impl Broadcaster {
 
     fn make_bundle(&self, module: &str, payload: Vec<u8>) -> Bundle {
         Bundle {
-            id: self.id.clone(),
             initiator: self.self_id,
             module: module.to_string(),
             payload,

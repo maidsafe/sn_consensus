@@ -44,6 +44,7 @@ impl TestNet {
         };
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new("test".to_string(), i)));
         let abba = Abba::new(
+            "test-id".to_string(),
             i,
             j,
             sec_key_set.public_keys(),
@@ -70,6 +71,7 @@ impl TestNet {
         let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
+            id: self.abba.id.clone(),
             action: Action::PreVote(PreVoteAction {
                 round,
                 value,
@@ -89,6 +91,7 @@ impl TestNet {
         let sign_bytes = self.abba.main_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
+            id: self.abba.id.clone(),
             action: Action::MainVote(MainVoteAction {
                 round,
                 value,
@@ -160,21 +163,20 @@ fn test_should_publish_main_vote_message() {
     assert!(t.is_broadcasted(&main_vote_x));
 }
 
-// TODO
-// #[test]
-// fn test_ignore_messages_with_wrong_id() {
-//     let i = TestNet::PARTY_X;
-//     let j = TestNet::PARTY_X;
-//     let mut t = TestNet::new(i, j);
+#[test]
+fn test_ignore_messages_with_wrong_id() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
 
-//     let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
-//     let mut pre_vote_x = t.make_pre_vote_msg(1, PreVoteValue::One, &just, &TestNet::PARTY_B);
-//     pre_vote_x.id = "another-id".to_string();
+    let just = PreVoteJustification::FirstRoundOne(t.c_final.clone());
+    let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
+    pre_vote_x.id = "another-id".to_string();
 
-//     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
-//     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-//         if msg == format!("invalid ID. expected: {}, got another-id", t.abba.id)));
-// }
+    let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+        if msg == format!("invalid ID. expected: {}, got another-id", t.abba.id)));
+}
 
 #[test]
 fn test_absent_vote_round_one_invalid_justification() {
@@ -214,6 +216,7 @@ fn test_pre_vote_invalid_sig_share() {
         .secret_key_share(TestNet::PARTY_B)
         .sign("invalid-msg");
     let msg = Message {
+        id: t.abba.id.clone(),
         action: Action::PreVote(PreVoteAction {
             round: 1,
             justification: just,
@@ -548,6 +551,7 @@ impl Net {
             let key_share = secret_key_set.secret_key_share(node_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(id.clone(), node_id)));
             let vcbc = Abba::new(
+                id,
                 node_id,
                 proposer,
                 public_key_set.clone(),

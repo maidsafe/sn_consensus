@@ -3,12 +3,7 @@ mod message;
 
 use self::message::{Message, Vote};
 
-use super::{
-    error::Error,
-    error::Result,
-    hash::Hash32,
-    Proposal,
-};
+use super::{error::Error, error::Result, hash::Hash32, Proposal};
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -16,6 +11,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 pub(crate) const MODULE_NAME: &str = "mvba";
 
 pub struct Mvba {
+    id: String,      // this is same as $ID$ in spec
     i: NodeId,       // this is same as $i$ in spec
     l: usize,        // this is same as $a$ in spec
     v: Option<bool>, // this is same as $v$ in spec
@@ -29,6 +25,7 @@ pub struct Mvba {
 
 impl Mvba {
     pub fn new(
+        id: String,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -36,6 +33,7 @@ impl Mvba {
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
+            id,
             i: self_id,
             l: 0,
             v: None,
@@ -54,7 +52,31 @@ impl Mvba {
         self.proposals.insert(proposer, (proposal, signature));
     }
 
+    pub fn move_to_next_proposal(&mut self) {
+        self.l += 1;
+        self.v = None;
+    }
+
+    pub fn is_completed(&self) -> bool {
+        self.v.is_some()
+    }
+
+    pub fn completed_vote(&self) -> bool {
+        self.v.unwrap()
+    }
+
+    pub fn completed_vote_one(&self) -> (Proposal, Signature) {
+        self.proposals.get(&self.l).unwrap().clone()
+    }
+
     fn check_message(&mut self, msg: &Message) -> Result<()> {
+        if msg.vote.id != self.id {
+            return Err(Error::InvalidMessage(format!(
+                "invalid ID. expected: {}, got {}",
+                self.id, msg.vote.id
+            )));
+        }
+
         let sign_bytes = bincode::serialize(&msg.vote)?;
         if !self
             .pub_key_set
@@ -102,7 +124,9 @@ impl Mvba {
         self.votes.insert(msg.voter, msg.vote.clone());
 
         // set the proposal if we don't have it
-        if let std::collections::hash_map::Entry::Vacant(e) = self.proposals.entry(msg.vote.proposer) {
+        if let std::collections::hash_map::Entry::Vacant(e) =
+            self.proposals.entry(msg.vote.proposer)
+        {
             if let Some((proposal, signature)) = &msg.vote.proof {
                 e.insert((proposal.clone(), signature.clone()));
             }
@@ -127,7 +151,8 @@ impl Mvba {
                     // if wa = ⊥ then
                     // send the message (ID, v-vote, a, 0, ⊥) to all parties
                     Vote {
-                        proposer: *a,
+                        id: self.id.clone(),
+                        proposer: a.clone(),
                         value: false,
                         proof: None,
                     }
@@ -137,7 +162,8 @@ impl Mvba {
                     // let ρ be the message that completes the c-broadcast with tag ID|vcbc.a.0
                     // send the message (ID, v-vote, a, 1, ρ) to all parties
                     Vote {
-                        proposer: *a,
+                        id: self.id.clone(),
+                        proposer: a.clone(),
                         value: false,
                         proof: Some((proposal.clone(), signature.clone())),
                     }

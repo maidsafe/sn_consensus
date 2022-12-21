@@ -3,6 +3,7 @@ use super::{
     bundle::{Bundle, Outgoing},
     error::Error,
     error::Result,
+    hash::Hash32,
     mvba::{self, Mvba},
     vcbc::{self},
     Proposal,
@@ -11,16 +12,12 @@ use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId}
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-pub(crate) const MVBA_MODULE_NAME: &str = "mvba";
-
 pub struct Consensus {
-    pub id: String, // this is same as $ID$ in spec
     self_id: NodeId,
-    pub_key_set: PublicKeySet,
-    parties: Vec<NodeId>,
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
     mvba: Mvba,
+    finished: bool,
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
@@ -33,13 +30,14 @@ impl Consensus {
         parties: Vec<NodeId>,
         message_validity: MessageValidity,
     ) -> Consensus {
-        let broadcaster = Broadcaster::new(id.clone(), self_id);
+        let broadcaster = Broadcaster::new(self_id);
         let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
         let mut abba_map = HashMap::new();
         let mut vcbc_map = HashMap::new();
 
         for party in &parties {
             let vcbc = Vcbc::new(
+                id.clone(),
                 self_id,
                 *party,
                 pub_key_set.clone(),
@@ -50,6 +48,7 @@ impl Consensus {
             vcbc_map.insert(*party, vcbc).unwrap();
 
             let abba = Abba::new(
+                id.clone(),
                 self_id,
                 *party,
                 pub_key_set.clone(),
@@ -60,6 +59,7 @@ impl Consensus {
         }
 
         let mvba = Mvba::new(
+            id,
             self_id,
             sec_key_share,
             pub_key_set.clone(),
@@ -68,13 +68,11 @@ impl Consensus {
         );
 
         Consensus {
-            id,
             self_id,
-            pub_key_set,
-            parties,
             vcbc_map,
             abba_map,
             mvba,
+            finished: false,
             broadcaster: broadcaster_rc,
         }
     }
@@ -94,11 +92,8 @@ impl Consensus {
     }
 
     pub fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
-        if bundle.id != self.id {
-            return Err(Error::InvalidMessage(format!(
-                "invalid ID. expected: {}, got {}",
-                self.id, bundle.id
-            )));
+        if self.finished {
+            return Ok(vec![]);
         }
 
         match bundle.module.as_ref() {
@@ -106,6 +101,10 @@ impl Consensus {
                 Some(vcbc) => {
                     let msg = bincode::deserialize(&bundle.payload)?;
                     vcbc.receive_message(bundle.initiator, msg)?;
+                    if vcbc.is_delivered() {
+                        let (proposal, sig) = vcbc.delivered_message();
+                        self.mvba.set_proposal(bundle.initiator, proposal, sig);
+                    }
                 }
                 None => return Err(Error::UnknownNodeId(bundle.initiator)),
             },
@@ -113,6 +112,13 @@ impl Consensus {
                 Some(abba) => {
                     let msg = bincode::deserialize(&bundle.payload)?;
                     abba.receive_message(bundle.initiator, msg)?;
+                    if abba.is_decided() {
+                        if abba.decided_value() {
+                            self.finished = true;
+                        } else {
+                            self.mvba.move_to_next_proposal();
+                        }
+                    }
                 }
                 None => {
                     return Err(Error::UnknownNodeId(bundle.initiator));
@@ -121,6 +127,16 @@ impl Consensus {
             mvba::MODULE_NAME => {
                 let msg = bincode::deserialize(&bundle.payload)?;
                 self.mvba.receive_message(msg)?;
+                if self.mvba.is_completed() {
+                    let abba = self.abba_map.get_mut(&bundle.initiator).unwrap();
+                    if self.mvba.completed_vote() {
+                        abba.pre_vote_zero()?;
+                    } else {
+                        let (proposal, sig) = self.mvba.completed_vote_one();
+                        let digest = Hash32::calculate(proposal);
+                        abba.pre_vote_one(digest, sig)?;
+                    }
+                }
             }
 
             _ => {
@@ -130,13 +146,6 @@ impl Consensus {
                 )));
             }
         };
-
-        let mut delivered_count = 0;
-        for vcbc in self.vcbc_map.values() {
-            if vcbc.is_delivered() {
-                delivered_count += 1;
-            }
-        }
 
         Ok(self.broadcaster.borrow_mut().take_outgoings())
     }

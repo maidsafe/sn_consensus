@@ -11,8 +11,6 @@ use serde::{Deserialize, Serialize};
 /// Bundle is a wrapper around the actual message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bundle {
-    /// This is the consensus ID and should be different per instance of MVBA
-    pub id: String,
     /// This is the node if of the initiator and in the most cases is same as `j` in specs.
     pub initiator: NodeId,
     /// This is the destination  module, it can be ABBA, VCBC or MVBA.

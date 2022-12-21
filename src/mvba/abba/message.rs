@@ -1,6 +1,8 @@
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
+use crate::mvba::hash::Hash32;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Value {
     One,
@@ -28,8 +30,9 @@ pub enum PreVoteJustification {
     // Round one, without the justification. The initial value should set to zero
     FirstRoundZero,
     // Round one, with the justification. The initial value should set to one
-    // The justification is `c-final` message of the VCBC protocol.
-    FirstRoundOne(crate::mvba::vcbc::message::Message),
+    // The justification is a `c-final` signature of the VCBC protocol for this tuple:
+    // `(id, proposer, 0, "c-ready", digest)`
+    FirstRoundOne(Hash32, Signature),
     // In Round r > 1, justification is either hard,...
     Hard(Signature),
     // ... or soft (refer to the spec)
@@ -63,7 +66,7 @@ pub struct MainVoteAction {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct DecisionAction {
     pub round: usize,
-    pub value: MainVoteValue,
+    pub value: Value,
     pub sig: Signature,
 }
 
@@ -76,6 +79,7 @@ pub enum Action {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
+    pub id: String,
     pub action: Action,
 }
 
