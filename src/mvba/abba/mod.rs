@@ -384,7 +384,7 @@ impl Abba {
                 if !self
                     .pub_key_set
                     .public_key_share(sender)
-                    .verify(&action.sig_share, &sign_bytes)
+                    .verify(&action.sig_share, sign_bytes)
                 {
                     return Err(Error::InvalidMessage("invalid signature share".to_string()));
                 }
@@ -415,7 +415,7 @@ impl Abba {
                         let sign_bytes =
                             crate::mvba::vcbc::c_ready_bytes_to_sign(&self.id, &self.j, digest)?;
 
-                        if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                        if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid signature for the VCBC proposal".to_string(),
                             ));
@@ -433,7 +433,7 @@ impl Abba {
                         // Hard pre-vote justification is the S-threshold signature for `(ID, pre-vote, r − 1, b)`
                         let sign_bytes =
                             self.pre_vote_bytes_to_sign(action.round - 1, &action.value)?;
-                        if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                        if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid hard-vote justification".to_string(),
                             ));
@@ -443,7 +443,7 @@ impl Abba {
                         // Soft pre-vote justification is the S-threshold signature for `(ID, main-vote, r − 1, abstain)`
                         let sign_bytes =
                             self.main_vote_bytes_to_sign(self.r - 1, &MainVoteValue::Abstain)?;
-                        if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                        if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid soft-vote justification".to_string(),
                             ));
@@ -457,7 +457,7 @@ impl Abba {
                 if !self
                     .pub_key_set
                     .public_key_share(sender)
-                    .verify(&action.sig_share, &sign_bytes)
+                    .verify(&action.sig_share, sign_bytes)
                 {
                     return Err(Error::InvalidMessage("invalid signature share".to_string()));
                 }
@@ -475,7 +475,7 @@ impl Abba {
                         // valid S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes =
                             self.pre_vote_bytes_to_sign(action.round, &pre_vote_value)?;
-                        if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                        if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                             return Err(Error::InvalidMessage(
                                 "invalid main-vote justification".to_string(),
                             ));
@@ -504,7 +504,7 @@ impl Abba {
                                     &self.id, &self.j, digest,
                                 )?;
 
-                                if !self.pub_key_set.public_key().verify(sig, &sign_bytes) {
+                                if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                                     return Err(Error::InvalidMessage(
                                         "invalid signature for the VCBC proposal".to_string(),
                                     ));
@@ -527,7 +527,7 @@ impl Abba {
                 if !self
                     .pub_key_set
                     .public_key()
-                    .verify(&action.sig, &sign_bytes)
+                    .verify(&action.sig, sign_bytes)
                 {
                     return Err(Error::InvalidMessage("invalid signature".to_string()));
                 }

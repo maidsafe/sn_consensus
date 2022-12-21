@@ -199,7 +199,7 @@ impl Mvba {
     // It adds the message to our messages log.
     fn broadcast(&mut self, vote: Vote) -> Result<()> {
         let sign_bytes = bincode::serialize(&vote)?;
-        let sig = self.sec_key_share.sign(&sign_bytes);
+        let sig = self.sec_key_share.sign(sign_bytes);
         let msg = Message {
             vote,
             voter: self.i,

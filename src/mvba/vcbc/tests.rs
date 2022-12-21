@@ -155,7 +155,7 @@ fn test_vcbc_happy_path() {
     let expected_sig = net
         .secret_key_set
         .secret_key()
-        .sign(&expected_bytes_to_sign);
+        .sign(expected_bytes_to_sign);
 
     for (_, node) in net.nodes {
         assert_eq!(
@@ -201,7 +201,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
     let expected_sig = net
         .secret_key_set
         .secret_key()
-        .sign(&expected_bytes_to_sign);
+        .sign(expected_bytes_to_sign);
 
     for (_, node) in net.nodes {
         assert_eq!(

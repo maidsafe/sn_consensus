@@ -166,7 +166,7 @@ impl Vcbc {
                     let valid_sig = self
                         .pub_key_set
                         .public_key_share(sender)
-                        .verify(&sig_share, &sign_bytes);
+                        .verify(&sig_share, sign_bytes);
 
                     if !valid_sig {
                         warn!("c-ready has has invalid signature share");
