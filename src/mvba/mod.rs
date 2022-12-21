@@ -5,6 +5,8 @@ pub mod hash;
 mod abba;
 mod broadcaster;
 mod bundle;
+// TODO: remove me
+#[allow(clippy::module_inception)]
 mod mvba;
 mod vcbc;
 

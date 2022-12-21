@@ -45,6 +45,7 @@ impl Broadcaster {
         out
     }
 
+    #[allow(clippy::type_complexity)]
     #[cfg(test)]
     pub fn take_bundles(&mut self) -> (Vec<Vec<u8>>, Vec<(NodeId, Vec<u8>)>) {
         let mut gossips = Vec::with_capacity(self.outgoings.len());

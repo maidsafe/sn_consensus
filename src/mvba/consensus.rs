@@ -62,8 +62,8 @@ impl Consensus {
             id,
             self_id,
             sec_key_share,
-            pub_key_set.clone(),
-            parties.clone(),
+            pub_key_set,
+            parties,
             broadcaster_rc.clone(),
         );
 

@@ -1,6 +1,6 @@
 // TODO: apply section 5.3.3. Further Optimizations
 pub(crate) mod error;
-pub(crate) mod message;
+pub mod message;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

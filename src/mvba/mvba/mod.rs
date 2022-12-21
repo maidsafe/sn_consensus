@@ -1,9 +1,10 @@
-mod error;
+pub(crate) mod error;
 mod message;
 
 use self::message::{Message, Vote};
 
-use super::{error::Error, error::Result, hash::Hash32, Proposal};
+use self::{error::Error, error::Result};
+use super::{hash::Hash32, Proposal};
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -152,7 +153,7 @@ impl Mvba {
                     // send the message (ID, v-vote, a, 0, ⊥) to all parties
                     Vote {
                         id: self.id.clone(),
-                        proposer: a.clone(),
+                        proposer: *a,
                         value: false,
                         proof: None,
                     }
@@ -163,7 +164,7 @@ impl Mvba {
                     // send the message (ID, v-vote, a, 1, ρ) to all parties
                     Vote {
                         id: self.id.clone(),
-                        proposer: a.clone(),
+                        proposer: *a,
                         value: false,
                         proof: Some((proposal.clone(), signature.clone())),
                     }

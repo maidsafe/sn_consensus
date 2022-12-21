@@ -1,5 +1,5 @@
 pub(crate) mod error;
-pub(crate) mod message;
+pub mod message;
 
 use std::cell::RefCell;
 use std::collections::hash_map::Entry::Vacant;
@@ -104,8 +104,15 @@ impl Vcbc {
 
     /// receive_message process the received message 'msg` from `sender`
     pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
-        if msg.tag != self.tag {
-            log::trace!("invalid sender, ignoring message.: {:?}. ", msg);
+        if msg.tag.id != self.tag.id {
+            return Err(Error::InvalidMessage(format!(
+                "invalid ID. expected: {}, got {}",
+                self.tag.id, msg.tag.id
+            )));
+        }
+
+        if msg.tag.j != self.tag.j {
+            log::trace!("not ours message.: {:?}. ", msg);
             return Ok(());
         }
 
@@ -121,7 +128,7 @@ impl Vcbc {
                 // if j = l and m̄ = ⊥ then
                 if sender == self.tag.j && self.m_bar.is_none() {
                     if !(self.message_validity)(sender, &m) {
-                        return Err(Error::InvalidMessage);
+                        return Err(Error::InvalidMessage("invalid proposal".to_string()));
                     }
                     // m̄ ← m
                     self.m_bar = Some(m.clone());
