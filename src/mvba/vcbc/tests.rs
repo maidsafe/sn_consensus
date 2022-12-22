@@ -152,10 +152,7 @@ fn test_vcbc_happy_path() {
         c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate("HAPPY-PATH-VALUE"))
             .expect("Failed to serialize");
 
-    let expected_sig = net
-        .secret_key_set
-        .secret_key()
-        .sign(expected_bytes_to_sign);
+    let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
     for (_, node) in net.nodes {
         assert_eq!(
@@ -198,10 +195,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
         c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate(&proposal))
             .expect("Failed to serialize");
 
-    let expected_sig = net
-        .secret_key_set
-        .secret_key()
-        .sign(expected_bytes_to_sign);
+    let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
     for (_, node) in net.nodes {
         assert_eq!(
@@ -247,10 +241,10 @@ impl TestNet {
     const PARTY_S: NodeId = 3;
 
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
-    // The VCBC test instance creates for party `i`, `tag.ID` sets to `test`
-    // and `tag.s` sets to `0`.
+    // The VCBC test instance creates for party `i` with `ID` sets to `test-id`
+    // and `s` sets to `0`.
     pub fn new(i: NodeId, j: NodeId) -> Self {
-        let id = "testing-vcbc".to_string();
+        let id = "test-id".to_string();
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);

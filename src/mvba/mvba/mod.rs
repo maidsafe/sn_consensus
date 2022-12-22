@@ -4,6 +4,7 @@ mod message;
 use self::message::{Message, Vote};
 
 use self::{error::Error, error::Result};
+use super::vcbc;
 use super::{hash::Hash32, Proposal};
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
@@ -17,7 +18,8 @@ pub struct Mvba {
     l: usize,        // this is same as $a$ in spec
     v: Option<bool>, // this is same as $v$ in spec
     proposals: HashMap<NodeId, (Proposal, Signature)>,
-    votes: HashMap<NodeId, Vote>,
+    votes_per_proposer: HashMap<NodeId, HashMap<NodeId, Vote>>,
+    voted: bool,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     parties: Vec<NodeId>,
@@ -38,8 +40,9 @@ impl Mvba {
             i: self_id,
             l: 0,
             v: None,
+            voted: false,
             proposals: HashMap::new(),
-            votes: HashMap::new(),
+            votes_per_proposer: HashMap::new(),
             pub_key_set,
             sec_key_share,
             parties,
@@ -47,15 +50,32 @@ impl Mvba {
         }
     }
 
-    pub fn set_proposal(&mut self, proposer: NodeId, proposal: Proposal, signature: Signature) {
+    pub fn set_proposal(
+        &mut self,
+        proposer: NodeId,
+        proposal: Proposal,
+        signature: Signature,
+    ) -> Result<()> {
         debug_assert!(self.parties.contains(&proposer));
 
+        let digest = Hash32::calculate(&proposal);
+        let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &proposer, &digest).unwrap();
+        if !self.pub_key_set.public_key().verify(&signature, sign_bytes) {
+            return Err(Error::InvalidMessage(
+                "proposal with an invalid proof".to_string(),
+            ));
+        }
+
         self.proposals.insert(proposer, (proposal, signature));
+        self.vote()
     }
 
-    pub fn move_to_next_proposal(&mut self) {
+    pub fn move_to_next_proposal(&mut self) -> Result<()> {
         self.l += 1;
         self.v = None;
+        self.voted = false;
+
+        self.vote()
     }
 
     pub fn is_completed(&self) -> bool {
@@ -84,7 +104,7 @@ impl Mvba {
             .public_key_share(msg.voter)
             .verify(&msg.signature, sign_bytes)
         {
-            return Err(Error::InvalidMessage("invalid signature share".to_string()));
+            return Err(Error::InvalidMessage("invalid signature".to_string()));
         }
 
         if !msg.vote.value && msg.vote.proof.is_some() {
@@ -96,12 +116,9 @@ impl Mvba {
         }
 
         if let Some((proposal, signature)) = &msg.vote.proof {
-            let d = Hash32::calculate(proposal);
-            if !self
-                .pub_key_set
-                .public_key()
-                .verify(signature, d.as_fixed_bytes())
-            {
+            let digest = Hash32::calculate(proposal);
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &self.l, &digest).unwrap();
+            if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
                 ));
@@ -111,8 +128,9 @@ impl Mvba {
         Ok(())
     }
 
-    pub fn add_vote(&mut self, msg: Message) -> Result<bool> {
-        if let Some(exist) = self.votes.get(&msg.voter) {
+    pub fn add_vote(&mut self, msg: &Message) -> Result<bool> {
+        let votes = self.must_get_proposer_votes(&msg.vote.proposer);
+        if let Some(exist) = votes.get(&msg.voter) {
             if exist != &msg.vote {
                 return Err(Error::InvalidMessage(format!(
                     "double vote detected from {:?}",
@@ -122,7 +140,7 @@ impl Mvba {
             return Ok(false);
         }
 
-        self.votes.insert(msg.voter, msg.vote.clone());
+        votes.insert(msg.voter, msg.vote.clone());
 
         // set the proposal if we don't have it
         if let std::collections::hash_map::Entry::Vacant(e) =
@@ -139,13 +157,54 @@ impl Mvba {
     /// receive_message process the received message 'msg` from `sender`
     pub fn receive_message(&mut self, msg: Message) -> Result<()> {
         self.check_message(&msg)?;
-        if !self.add_vote(msg)? {
+        if !self.add_vote(&msg)? {
+            return Ok(());
+        }
+
+        // Message is for another proposal, not current one
+        // TODO: test me!
+        if msg.vote.proposer != self.l {
             return Ok(());
         }
 
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
-        if self.proposals.len() >= self.threshold() && !self.votes.contains_key(&self.i) {
+        if self.proposals.len() >= self.threshold() {
+            // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
+            // that VID|a (uj , ρj) holds
+            let votes = self.must_get_proposer_votes(&msg.vote.proposer);
+            if votes.len() >= self.threshold() {
+                let votes = self.must_get_proposer_votes(&msg.vote.proposer);
+                let mut yes_votes = votes.values().filter(|v| v.value);
+                match yes_votes.next() {
+                    // if there is some uj = 1 then
+                    Some(_) => {
+                        // v ← 1; ρ ← ρj
+                        self.v = Some(true);
+                    }
+                    // else
+                    None => {
+                        // v ← 0; ρ ← ⊥
+                        self.v = Some(false);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // TODO: make me better, no unwrap?
+    fn must_get_proposer_votes(&mut self, proposer: &NodeId) -> &mut HashMap<NodeId, Vote> {
+        if !self.votes_per_proposer.contains_key(proposer) {
+            self.votes_per_proposer.insert(*proposer, HashMap::new());
+        }
+        self.votes_per_proposer.get_mut(proposer).unwrap()
+    }
+    fn vote(&mut self) -> Result<()> {
+        // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
+        //from distinct Pj such that QID (wj , πj ) holds
+        if self.proposals.len() >= self.threshold() && !self.voted {
             let a = self.parties.get(self.l).unwrap();
             let vote = match self.proposals.get(a) {
                 None => {
@@ -165,31 +224,13 @@ impl Mvba {
                     Vote {
                         id: self.id.clone(),
                         proposer: *a,
-                        value: false,
+                        value: true,
                         proof: Some((proposal.clone(), signature.clone())),
                     }
                 }
             };
 
             self.broadcast(vote)?;
-
-            // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
-            // that VID|a (uj , ρj) holds
-            if self.votes.len() >= self.threshold() {
-                let mut yes_votes = self.votes.values().filter(|v| v.value);
-                match yes_votes.next() {
-                    // if there is some uj = 1 then
-                    Some(_) => {
-                        // v ← 1; ρ ← ρj
-                        self.v = Some(true);
-                    }
-                    // else
-                    None => {
-                        // v ← 0; ρ ← ⊥
-                        self.v = Some(false);
-                    }
-                }
-            }
         }
 
         Ok(())
@@ -217,3 +258,7 @@ impl Mvba {
         self.pub_key_set.threshold() + 1
     }
 }
+
+#[cfg(test)]
+#[path = "./tests.rs"]
+mod tests;

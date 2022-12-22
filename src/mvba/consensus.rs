@@ -103,7 +103,7 @@ impl Consensus {
                     vcbc.receive_message(bundle.initiator, msg)?;
                     if vcbc.is_delivered() {
                         let (proposal, sig) = vcbc.delivered_message();
-                        self.mvba.set_proposal(bundle.initiator, proposal, sig);
+                        self.mvba.set_proposal(bundle.initiator, proposal, sig)?;
                     }
                 }
                 None => return Err(Error::UnknownNodeId(bundle.initiator)),
@@ -116,7 +116,7 @@ impl Consensus {
                         if abba.decided_value() {
                             self.finished = true;
                         } else {
-                            self.mvba.move_to_next_proposal();
+                            self.mvba.move_to_next_proposal()?;
                         }
                     }
                 }

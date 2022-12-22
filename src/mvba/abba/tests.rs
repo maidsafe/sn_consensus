@@ -30,7 +30,7 @@ impl TestNet {
     const PARTY_S: NodeId = 3;
 
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
-    // The ABBA test instance creates for party `i`, `ID` sets to `test`
+    // The ABBA test instance creates for party `i`, `ID` sets to `test-id`
     pub fn new(i: NodeId, j: NodeId) -> Self {
         let id = "test-id".to_string();
         let mut rng = thread_rng();

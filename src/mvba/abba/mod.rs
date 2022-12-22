@@ -32,7 +32,7 @@ pub(crate) struct Abba {
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
-    round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>,
+    round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>, // TODO: prevent an attack when receive round with big number
     round_main_votes: Vec<HashMap<NodeId, MainVoteAction>>,
 }
 
