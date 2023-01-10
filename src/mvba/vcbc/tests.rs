@@ -6,7 +6,7 @@ use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
 use crate::mvba::Proposal;
-use blsttc::{SecretKeySet, SignatureShare};
+use blsttc::{SecretKeySet, Signature, SignatureShare};
 use quickcheck_macros::quickcheck;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -211,10 +211,7 @@ fn test_ignore_messages_with_wrong_id() {
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
 
-    let mut final_msg = t.make_final_msg(
-        &t.d(),
-        [TestNet::PARTY_X, TestNet::PARTY_Y, TestNet::PARTY_S].to_vec(),
-    );
+    let mut final_msg = t.make_final_msg(&t.d());
     final_msg.tag.id = "another-id".to_string();
 
     let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg);
@@ -285,22 +282,10 @@ impl TestNet {
         }
     }
 
-    pub fn make_final_msg(&self, d: &Hash32, peer_ids: Vec<NodeId>) -> Message {
-        let mut sig_shares = Vec::new();
-        for peer_id in peer_ids {
-            let sig_share = self.sig_share(d, &peer_id);
-            sig_shares.push((peer_id, sig_share));
-        }
-
-        let sig = self
-            .sec_key_set
-            .public_keys()
-            .combine_signatures(sig_shares)
-            .unwrap();
-
+    pub fn make_final_msg(&self, d: &Hash32) -> Message {
         Message {
             tag: self.vcbc.tag.clone(),
-            action: Action::Final(*d, sig),
+            action: Action::Final(*d, self.u()),
         }
     }
 
@@ -316,12 +301,21 @@ impl TestNet {
             .has_direct_message(to, &bincode::serialize(msg).unwrap())
     }
 
+    // m is same as proposal
     pub fn m(&self) -> Vec<u8> {
         self.m.clone()
     }
 
+    // d is same as proposal's digest
     pub fn d(&self) -> Hash32 {
         Hash32::calculate(&self.m)
+    }
+
+    // u is same as final signature
+    pub fn u(&self) -> Signature {
+        let sign_bytes =
+            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, &self.d()).unwrap();
+        self.sec_key_set.secret_key().sign(sign_bytes)
     }
 
     fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
@@ -409,20 +403,33 @@ fn test_normal_case_operation() {
 
 #[test]
 fn test_final_message_first() {
-    let i = TestNet::PARTY_B;
+    let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_S;
     let mut t = TestNet::new(i, j);
 
     let send_msg = t.make_send_msg(&t.m());
-    let final_msg = t.make_final_msg(
-        &t.d(),
-        [TestNet::PARTY_X, TestNet::PARTY_Y, TestNet::PARTY_S].to_vec(),
-    );
+    let final_msg = t.make_final_msg(&t.d());
 
     t.vcbc.receive_message(TestNet::PARTY_S, final_msg).unwrap();
     t.vcbc.receive_message(TestNet::PARTY_S, send_msg).unwrap();
 
     assert!(t.vcbc.is_delivered());
+}
+
+#[test]
+fn test_request_for_proposal() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_S;
+    let mut t = TestNet::new(i, j);
+
+    let final_msg = t.make_final_msg(&t.d());
+    let request_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Request,
+    };
+
+    t.vcbc.receive_message(TestNet::PARTY_S, final_msg).unwrap();
+    assert!(t.is_send_to(&TestNet::PARTY_S, &request_msg));
 }
 
 #[test]
@@ -463,4 +470,50 @@ fn test_invalid_sig_share() {
         .unwrap();
 
     assert!(!t.vcbc.wd.contains_key(&TestNet::PARTY_B));
+}
+
+#[test]
+fn test_c_request() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    let sig = t.sec_key_set.secret_key().sign(t.m());
+
+    t.vcbc.m_bar = Some(t.m());
+    t.vcbc.u_bar = Some(sig.clone());
+
+    let request_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Request,
+    };
+    let answer_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Answer(t.m(), sig),
+    };
+
+    t.vcbc
+        .receive_message(TestNet::PARTY_S, request_msg)
+        .unwrap();
+
+    assert!(t.is_send_to(&TestNet::PARTY_S, &answer_msg));
+}
+
+#[test]
+fn test_c_answer() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_S;
+    let mut t = TestNet::new(i, j);
+
+    let sig = t.u();
+    let answer_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Answer(t.m(), sig),
+    };
+
+    t.vcbc
+        .receive_message(TestNet::PARTY_S, answer_msg)
+        .unwrap();
+
+    assert!(t.vcbc.is_delivered());
 }

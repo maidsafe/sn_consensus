@@ -32,7 +32,7 @@ pub fn c_ready_bytes_to_sign(
 pub(crate) struct Vcbc {
     tag: Tag,                            // this is same as $Tag$ in spec
     i: NodeId,                           // this is same as $i$ in spec
-    m_bar: Option<Vec<u8>>,              // this is same as $\bar{m}$ in spec
+    m_bar: Option<Proposal>,             // this is same as $\bar{m}$ in spec
     u_bar: Option<Signature>,            // this is same as $\bar{\mu}$ in spec
     wd: HashMap<NodeId, SignatureShare>, // this is same as $W_d$ in spec
     rd: usize,                           // this is same as $r_d$ in spec
@@ -204,13 +204,19 @@ impl Vcbc {
                     None => {
                         warn!("received c-final before receiving s-send, logging message");
                         try_insert(&mut self.final_messages, sender, msg)?;
+                        // requesting for the proposal
+                        let request_msg = Message {
+                            tag: self.tag.clone(),
+                            action: Action::Request,
+                        };
+                        self.send_to(request_msg, sender)?;
+
                         return Ok(());
                     }
                 };
 
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
-
                 if !valid_sig {
                     warn!("c-ready has has invalid signature share");
                 }
@@ -219,6 +225,39 @@ impl Vcbc {
                 if d == msg_d && self.u_bar.is_none() && valid_sig {
                     // µ̄ ← µ
                     self.u_bar = Some(sig);
+                }
+            }
+            Action::Request => {
+                // Upon receiving message (ID.j.s, c-request) from Pl :
+                if let Some(u) = &self.u_bar {
+                    // if µ̄  != ⊥ then
+
+                    // proposal is known because we have the valid signature
+                    debug_assert!(self.m_bar.is_some());
+                    if let Some(m) = &self.m_bar {
+                        let answer_msg = Message {
+                            tag: self.tag.clone(),
+                            action: Action::Answer(m.clone(), u.clone()),
+                        };
+
+                        // send (ID.j.s, c-answer, m̄, µ̄) to Pl
+                        self.send_to(answer_msg, sender)?;
+                    }
+                }
+            }
+            Action::Answer(m, u) => {
+                // Upon receiving message (ID.j.s, c-answer, m, µ) from Pl :
+                if self.u_bar.is_none() {
+                    // if µ̄ = ⊥ and ...
+                    let d = Hash32::calculate(&m);
+                    let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
+                    if self.pub_key_set.public_key().verify(&u, sign_bytes) {
+                        // ... µ is a valid S1 -signature on (ID.j.s, c-ready, H(m)) then
+                        // µ̄ ← µ
+                        // m̄ ← m
+                        self.u_bar = Some(u);
+                        self.m_bar = Some(m);
+                    }
                 }
             }
         }
