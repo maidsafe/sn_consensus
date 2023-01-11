@@ -17,6 +17,23 @@ use crate::mvba::broadcaster::Broadcaster;
 
 pub(crate) const MODULE_NAME: &str = "vcbc";
 
+// make_c_request_message creates the payload message to request a proposal
+// from the the proposer
+pub fn make_c_request_message(
+    id: &str,
+    proposer: NodeId,
+) -> std::result::Result<Vec<u8>, bincode::Error> {
+    let msg = Message {
+        tag: Tag {
+            id: id.to_string(),
+            j: proposer,
+            s: 0,
+        },
+        action: Action::Request,
+    };
+    bincode::serialize(&msg)
+}
+
 // c_ready_bytes_to_sign generates bytes that should be signed by each party
 // as a wittiness of receiving the message.
 // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec
@@ -294,7 +311,7 @@ impl Vcbc {
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
     fn send_to(&mut self, msg: self::Message, to: NodeId) -> Result<()> {
-        let data = bincode::serialize(&msg).unwrap();
+        let data = bincode::serialize(&msg)?;
         if to == self.i {
             self.receive_message(self.i, msg)?;
         } else {

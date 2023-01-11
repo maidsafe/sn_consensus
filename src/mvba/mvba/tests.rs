@@ -69,12 +69,13 @@ impl TestNet {
                 proof: None,
             }
         } else {
-            let proposal = self.proposals.get(proposer).unwrap();
+            let (proposal, signature) = self.proposals.get(proposer).unwrap();
+            let digest = Hash32::calculate(proposal);
             Vote {
                 id: self.mvba.id.clone(),
                 proposer: *proposer,
                 value,
-                proof: Some(proposal.clone()),
+                proof: Some((digest, signature.clone())),
             }
         };
         let signature = self.sign_vote(&vote, voter);
@@ -173,7 +174,7 @@ fn test_ignore_proposal_with_an_invalid_proof() {
     let mut msg = t.make_vote_msg(&voter, &proposer, true);
     let inv_proposal = "invalid_proposal".as_bytes();
     let inv_sig = SecretKey::random().sign(inv_proposal);
-    msg.vote.proof = Some((inv_proposal.to_vec(), inv_sig));
+    msg.vote.proof = Some((Hash32::calculate(inv_proposal), inv_sig));
     msg.signature = t.sign_vote(&msg.vote, &voter);
 
     let result = t.mvba.receive_message(msg);
@@ -199,7 +200,6 @@ fn test_double_vote() {
 
 #[test]
 fn test_normal_case() {
-    let proposer = TestNet::PARTY_X;
     let i = TestNet::PARTY_Y;
     let mut t = TestNet::new(i);
 
@@ -209,9 +209,9 @@ fn test_normal_case() {
     let proposal_y = t.proposals.get(&TestNet::PARTY_Y).unwrap().clone();
     let proposal_s = t.proposals.get(&TestNet::PARTY_S).unwrap().clone();
 
-    let msg_x = t.make_vote_msg(&TestNet::PARTY_X, &proposer, true);
-    let msg_y = t.make_vote_msg(&TestNet::PARTY_Y, &proposer, true);
-    let msg_s = t.make_vote_msg(&TestNet::PARTY_S, &proposer, true);
+    let msg_x = t.make_vote_msg(&TestNet::PARTY_X, &TestNet::PARTY_X, true);
+    let msg_y = t.make_vote_msg(&TestNet::PARTY_Y, &TestNet::PARTY_X, true);
+    let msg_s = t.make_vote_msg(&TestNet::PARTY_S, &TestNet::PARTY_X, true);
 
     t.mvba
         .set_proposal(TestNet::PARTY_X, proposal_x.0, proposal_x.1)
@@ -279,4 +279,21 @@ fn test_normal_case_no_vote() {
 
     assert!(t.mvba.is_completed());
     assert!(t.mvba.completed_vote());
+}
+
+#[test]
+fn test_request_proposal() {
+    let i = TestNet::PARTY_Y;
+    let mut t = TestNet::new(i);
+
+    let msg_x = t.make_vote_msg(&TestNet::PARTY_X, &TestNet::PARTY_X, true);
+
+    t.mvba.receive_message(msg_x).unwrap();
+
+    let data = vcbc::make_c_request_message(&t.mvba.id, TestNet::PARTY_X).unwrap();
+
+    assert!(t
+        .broadcaster
+        .borrow()
+        .has_direct_message(&TestNet::PARTY_X, &data));
 }

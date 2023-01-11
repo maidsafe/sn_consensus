@@ -115,9 +115,8 @@ impl Mvba {
             return Err(Error::InvalidMessage("yes vote without proof".to_string()));
         }
 
-        if let Some((proposal, signature)) = &msg.vote.proof {
-            let digest = Hash32::calculate(proposal);
-            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &self.l, &digest).unwrap();
+        if let Some((digest, signature)) = &msg.vote.proof {
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &self.l, digest).unwrap();
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
@@ -142,16 +141,20 @@ impl Mvba {
 
         votes.insert(msg.voter, msg.vote.clone());
 
-        // set the proposal if we don't have it
-        if let std::collections::hash_map::Entry::Vacant(e) =
-            self.proposals.entry(msg.vote.proposer)
-        {
-            if let Some((proposal, signature)) = &msg.vote.proof {
-                e.insert((proposal.clone(), signature.clone()));
-            }
-        }
+        if msg.vote.value && !self.proposals.contains_key(&msg.vote.proposer) {
+            // If a v-vote from Pj indicates 1 but Pi has not yet received Pa ’s proposal,
+            // ignore the vote and ask Pj to supply Pa ’s proposal
+            // (by sending it the message (ID|vcbc.a.0, c-request)).
+            let data = vcbc::make_c_request_message(&self.id, msg.vote.proposer)?;
 
-        Ok(true)
+            self.broadcaster
+                .borrow_mut()
+                .send_to(vcbc::MODULE_NAME, data, msg.voter);
+
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     }
 
     /// receive_message process the received message 'msg` from `sender`
@@ -221,11 +224,12 @@ impl Mvba {
                     // else
                     // let ρ be the message that completes the c-broadcast with tag ID|vcbc.a.0
                     // send the message (ID, v-vote, a, 1, ρ) to all parties
+                    let digest = Hash32::calculate(proposal);
                     Vote {
                         id: self.id.clone(),
                         proposer: *a,
                         value: true,
-                        proof: Some((proposal.clone(), signature.clone())),
+                        proof: Some((digest, signature.clone())),
                     }
                 }
             };

@@ -1,13 +1,6 @@
 use super::NodeId;
 use serde::{Deserialize, Serialize};
 
-// TODO: remove me.
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub enum BundleMessage {
-//     Abba(abba::message::Message),
-//     Vcbc(vcbc::message::Message),
-// }
-
 /// Bundle is a wrapper around the actual message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bundle {
