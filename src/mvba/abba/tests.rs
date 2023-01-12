@@ -71,6 +71,7 @@ impl TestNet {
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
             id: self.abba.id.clone(),
+            proposer: self.abba.j,
             action: Action::PreVote(PreVoteAction {
                 round,
                 value,
@@ -91,6 +92,7 @@ impl TestNet {
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
             id: self.abba.id.clone(),
+            proposer: self.abba.j,
             action: Action::MainVote(MainVoteAction {
                 round,
                 value,
@@ -184,6 +186,21 @@ fn test_ignore_messages_with_wrong_id() {
 }
 
 #[test]
+fn test_ignore_messages_with_wrong_proposer() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    let just = PreVoteJustification::FirstRoundOne(t.proposal_digest, t.proposal_sig.clone());
+    let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
+    pre_vote_x.proposer = TestNet::PARTY_B;
+
+    let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+        if msg == format!("invalid proposer. expected: {}, got 2", t.abba.j)));
+}
+
+#[test]
 fn test_absent_main_vote_round_one_invalid_justification() {
     let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_B;
@@ -218,6 +235,7 @@ fn test_pre_vote_invalid_sig_share() {
         .sign("invalid-msg");
     let msg = Message {
         id: t.abba.id.clone(),
+        proposer: t.abba.j,
         action: Action::PreVote(PreVoteAction {
             round: 1,
             justification: just,

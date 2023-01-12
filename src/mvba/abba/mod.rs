@@ -75,18 +75,15 @@ impl Abba {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
         let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
-        let action = PreVoteAction {
+
+        // and send to all parties the message (ID, pre-process, Vi , signature share).
+        let action = Action::PreVote(PreVoteAction {
             round: self.r,
             value,
             justification,
             sig_share,
-        };
-        let msg = Message {
-            id: self.id.clone(),
-            action: Action::PreVote(action),
-        };
-        // and send to all parties the message (ID, pre-process, Vi , signature share).
-        self.broadcast(msg)
+        });
+        self.broadcast(action)
     }
 
     // receive_message process the received message 'msg` from `sender`
@@ -118,7 +115,7 @@ impl Abba {
                 }
 
                 self.decided_value = Some(agg_main_vote.clone());
-                self.broadcast(msg.clone())?; // re-broadcast the msg in case we were the only one who received it.
+                self.broadcast(msg.action.clone())?; // re-broadcast the msg in case we were the only one who received it.
             }
             Action::MainVote(action) => {
                 if action.round + 1 != self.r {
@@ -159,10 +156,7 @@ impl Abba {
                             sig,
                         };
                         self.decided_value = Some(decision.clone());
-                        self.broadcast(Message {
-                            id: self.id.clone(),
-                            action: Action::Decision(decision),
-                        })?;
+                        self.broadcast(Action::Decision(decision))?;
                         return Ok(());
                     }
 
@@ -176,10 +170,7 @@ impl Abba {
                             sig,
                         };
                         self.decided_value = Some(decision.clone());
-                        self.broadcast(Message {
-                            id: self.id.clone(),
-                            action: Action::Decision(decision),
-                        })?;
+                        self.broadcast(Action::Decision(decision))?;
                         return Ok(());
                     }
 
@@ -228,17 +219,13 @@ impl Abba {
                         let sig_share = self.sec_key_share.sign(sign_bytes);
 
                         // Send to all parties the message `(ID, pre-vote, r, b, justification, signature share)`
-                        let pre_vote_message = Message {
-                            id: self.id.clone(),
-                            action: Action::PreVote(PreVoteAction {
-                                round: self.r,
-                                value,
-                                justification,
-                                sig_share,
-                            }),
-                        };
-
-                        self.broadcast(pre_vote_message)?;
+                        let action = Action::PreVote(PreVoteAction {
+                            round: self.r,
+                            value,
+                            justification,
+                            sig_share,
+                        });
+                        self.broadcast(action)?;
                     }
                 }
             }
@@ -304,17 +291,13 @@ impl Abba {
                     let sig_share = self.sec_key_share.sign(sign_bytes);
 
                     // send to all parties the message: `(ID, main-vote, r, v, justification, signature share)`
-                    let main_vote_message = Message {
-                        id: self.id.clone(),
-                        action: Action::MainVote(MainVoteAction {
-                            round: self.r,
-                            value,
-                            justification: just,
-                            sig_share,
-                        }),
-                    };
-
-                    self.broadcast(main_vote_message)?;
+                    let action = Action::MainVote(MainVoteAction {
+                        round: self.r,
+                        value,
+                        justification: just,
+                        sig_share,
+                    });
+                    self.broadcast(action)?;
                     self.r += 1;
                 }
             }
@@ -374,6 +357,13 @@ impl Abba {
             return Err(Error::InvalidMessage(format!(
                 "invalid ID. expected: {}, got {}",
                 self.id, msg.id
+            )));
+        }
+
+        if msg.proposer != self.j {
+            return Err(Error::InvalidMessage(format!(
+                "invalid proposer. expected: {}, got {}",
+                self.j, msg.proposer
             )));
         }
 
@@ -539,7 +529,12 @@ impl Abba {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, msg: self::Message) -> Result<()> {
+    fn broadcast(&mut self, action: Action) -> Result<()> {
+        let msg = Message {
+            id: self.id.clone(),
+            proposer: self.j,
+            action,
+        };
         let data = bincode::serialize(&msg)?;
         self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
         self.receive_message(self.i, msg)?;
