@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use thiserror::Error;
 
-use super::{abba, mvba, vcbc, NodeId};
+use super::{abba, mvba, vcbc};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -17,8 +17,6 @@ pub enum Error {
     InvalidMessage(String),
     #[error("generic error {0}")]
     Generic(String),
-    #[error("unknown node id {0}")]
-    UnknownNodeId(NodeId),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

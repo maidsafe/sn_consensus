@@ -7,7 +7,7 @@ pub struct Bundle {
     /// This is the initiator node and in the most cases is same as `i` in specs.
     pub initiator: NodeId,
     /// This is the target node and in the most cases is same as `j` in specs.
-    // pub target: Option<NodeId>,
+    pub target: Option<NodeId>,
     /// This is the destination  module, it can be ABBA, VCBC or MVBA.
     pub module: String,
     /// This is the actual message

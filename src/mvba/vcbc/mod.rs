@@ -119,8 +119,8 @@ impl Vcbc {
         self.broadcast(send_msg)
     }
 
-    /// receive_message process the received message 'msg` from `sender`
-    pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
+    /// receive_message process the received message 'msg` from `initiator`
+    pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
         if msg.tag.id != self.tag.id {
             return Err(Error::InvalidMessage(format!(
                 "invalid ID. expected: {}, got {}",
@@ -137,14 +137,14 @@ impl Vcbc {
             "received {} message: {:?} from {}",
             msg.action_str(),
             msg,
-            sender
+            initiator
         );
         match msg.action.clone() {
             Action::Send(m) => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
                 // if j = l and m̄ = ⊥ then
-                if sender == self.tag.j && self.m_bar.is_none() {
-                    if !(self.message_validity)(sender, &m) {
+                if initiator == self.tag.j && self.m_bar.is_none() {
+                    if !(self.message_validity)(initiator, &m) {
                         return Err(Error::InvalidMessage("invalid proposal".to_string()));
                     }
                     // m̄ ← m
@@ -179,10 +179,10 @@ impl Vcbc {
                 }
 
                 // Upon receiving message (ID.j.s, c-ready, d, νl) from Pl for the first time:
-                if let Vacant(e) = self.wd.entry(sender) {
+                if let Vacant(e) = self.wd.entry(initiator) {
                     let valid_sig = self
                         .pub_key_set
-                        .public_key_share(sender)
+                        .public_key_share(initiator)
                         .verify(&sig_share, sign_bytes);
 
                     if !valid_sig {
@@ -220,13 +220,13 @@ impl Vcbc {
                     Some(d) => d,
                     None => {
                         warn!("received c-final before receiving s-send, logging message");
-                        try_insert(&mut self.final_messages, sender, msg)?;
+                        try_insert(&mut self.final_messages, initiator, msg)?;
                         // requesting for the proposal
                         let request_msg = Message {
                             tag: self.tag.clone(),
                             action: Action::Request,
                         };
-                        self.send_to(request_msg, sender)?;
+                        self.send_to(request_msg, initiator)?;
 
                         return Ok(());
                     }
@@ -258,7 +258,7 @@ impl Vcbc {
                         };
 
                         // send (ID.j.s, c-answer, m̄, µ̄) to Pl
-                        self.send_to(answer_msg, sender)?;
+                        self.send_to(answer_msg, initiator)?;
                     }
                 }
             }
@@ -279,8 +279,8 @@ impl Vcbc {
             }
         }
 
-        for (sender, final_msg) in std::mem::take(&mut self.final_messages) {
-            self.receive_message(sender, final_msg)?;
+        for (initiator, final_msg) in std::mem::take(&mut self.final_messages) {
+            self.receive_message(initiator, final_msg)?;
         }
 
         Ok(())
@@ -315,7 +315,9 @@ impl Vcbc {
         if to == self.i {
             self.receive_message(self.i, msg)?;
         } else {
-            self.broadcaster.borrow_mut().send_to(MODULE_NAME, data, to);
+            self.broadcaster
+                .borrow_mut()
+                .send_to(MODULE_NAME, Some(self.i), data, to);
         }
         Ok(())
     }
@@ -324,7 +326,9 @@ impl Vcbc {
     // It adds the message to our messages log.
     fn broadcast(&mut self, msg: self::Message) -> Result<()> {
         let data = bincode::serialize(&msg)?;
-        self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
+        self.broadcaster
+            .borrow_mut()
+            .broadcast(MODULE_NAME, Some(self.i), data);
         self.receive_message(self.i, msg)?;
         Ok(())
     }

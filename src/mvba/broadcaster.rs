@@ -21,19 +21,26 @@ impl Broadcaster {
         self.self_id
     }
 
-    pub fn send_to(&mut self, module: &str, payload: Vec<u8>, recipient: NodeId) {
-        let bdl = self.make_bundle(module, payload);
+    pub fn send_to(
+        &mut self,
+        module: &str,
+        target: Option<NodeId>,
+        payload: Vec<u8>,
+        recipient: NodeId,
+    ) {
+        let bdl = self.make_bundle(module, target, payload);
         self.outgoings.push(Outgoing::Direct(recipient, bdl));
     }
 
-    pub fn broadcast(&mut self, module: &str, payload: Vec<u8>) {
-        let bdl = self.make_bundle(module, payload);
+    pub fn broadcast(&mut self, module: &str, target: Option<NodeId>, payload: Vec<u8>) {
+        let bdl = self.make_bundle(module, target, payload);
         self.outgoings.push(Outgoing::Gossip(bdl));
     }
 
-    fn make_bundle(&self, module: &str, payload: Vec<u8>) -> Bundle {
+    fn make_bundle(&self, module: &str, target: Option<NodeId>, payload: Vec<u8>) -> Bundle {
         Bundle {
             initiator: self.self_id,
+            target,
             module: module.to_string(),
             payload,
         }

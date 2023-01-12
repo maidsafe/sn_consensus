@@ -86,17 +86,17 @@ impl Abba {
         self.broadcast(action)
     }
 
-    // receive_message process the received message 'msg` from `sender`
-    pub fn receive_message(&mut self, sender: NodeId, msg: Message) -> Result<()> {
+    // receive_message process the received message 'msg` from `initiator`
+    pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
         log::debug!(
             "received {} message: {:?} from {}",
             msg.action_str(),
             msg,
-            sender
+            initiator
         );
 
-        self.check_message(&sender, &msg)?;
-        if !self.add_message(&sender, &msg)? {
+        self.check_message(&initiator, &msg)?;
+        if !self.add_message(&initiator, &msg)? {
             return Ok(());
         }
 
@@ -317,42 +317,42 @@ impl Abba {
         }
     }
 
-    fn add_message(&mut self, sender: &NodeId, msg: &Message) -> Result<bool> {
+    fn add_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<bool> {
         match &msg.action {
             Action::PreVote(action) => {
                 let pre_votes = self.get_mut_pre_votes_by_round(action.round);
-                if let Some(exist) = pre_votes.get(sender) {
+                if let Some(exist) = pre_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
                             "double pre-vote detected from {:?}",
-                            sender
+                            initiator
                         )));
                     }
                     return Ok(false);
                 }
 
-                pre_votes.insert(*sender, action.clone());
+                pre_votes.insert(*initiator, action.clone());
             }
             Action::MainVote(action) => {
                 let main_votes = self.get_mut_main_votes_by_round(action.round);
-                if let Some(exist) = main_votes.get(sender) {
+                if let Some(exist) = main_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
                             "double main-vote detected from {:?}",
-                            sender
+                            initiator
                         )));
                     }
                     return Ok(false);
                 }
 
-                main_votes.insert(*sender, action.clone());
+                main_votes.insert(*initiator, action.clone());
             }
             Action::Decision(_action) => (),
         }
         Ok(true)
     }
 
-    fn check_message(&mut self, sender: &NodeId, msg: &Message) -> Result<()> {
+    fn check_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<()> {
         if msg.id != self.id {
             return Err(Error::InvalidMessage(format!(
                 "invalid ID. expected: {}, got {}",
@@ -373,7 +373,7 @@ impl Abba {
                 let sign_bytes = self.pre_vote_bytes_to_sign(action.round, &action.value)?;
                 if !self
                     .pub_key_set
-                    .public_key_share(sender)
+                    .public_key_share(initiator)
                     .verify(&action.sig_share, sign_bytes)
                 {
                     return Err(Error::InvalidMessage("invalid signature share".to_string()));
@@ -446,7 +446,7 @@ impl Abba {
                 let sign_bytes = self.main_vote_bytes_to_sign(action.round, &action.value)?;
                 if !self
                     .pub_key_set
-                    .public_key_share(sender)
+                    .public_key_share(initiator)
                     .verify(&action.sig_share, sign_bytes)
                 {
                     return Err(Error::InvalidMessage("invalid signature share".to_string()));
@@ -536,7 +536,9 @@ impl Abba {
             action,
         };
         let data = bincode::serialize(&msg)?;
-        self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
+        self.broadcaster
+            .borrow_mut()
+            .broadcast(MODULE_NAME, Some(self.j), data);
         self.receive_message(self.i, msg)?;
         Ok(())
     }

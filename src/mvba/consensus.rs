@@ -97,38 +97,50 @@ impl Consensus {
         }
 
         match bundle.module.as_ref() {
-            vcbc::MODULE_NAME => match self.vcbc_map.get_mut(&bundle.initiator) {
-                Some(vcbc) => {
-                    let msg = bincode::deserialize(&bundle.payload)?;
-                    vcbc.receive_message(bundle.initiator, msg)?;
-                    if vcbc.is_delivered() {
-                        let (proposal, sig) = vcbc.delivered_message();
-                        self.mvba.set_proposal(bundle.initiator, proposal, sig)?;
-                    }
-                }
-                None => return Err(Error::UnknownNodeId(bundle.initiator)),
-            },
-            abba::MODULE_NAME => match self.abba_map.get_mut(&bundle.initiator) {
-                Some(abba) => {
-                    let msg = bincode::deserialize(&bundle.payload)?;
-                    abba.receive_message(bundle.initiator, msg)?;
-                    if abba.is_decided() {
-                        if abba.decided_value() {
-                            self.finished = true;
-                        } else {
-                            self.mvba.move_to_next_proposal()?;
+            vcbc::MODULE_NAME => match bundle.target {
+                Some(target) => match self.vcbc_map.get_mut(&target) {
+                    Some(vcbc) => {
+                        let msg = bincode::deserialize(&bundle.payload)?;
+                        vcbc.receive_message(bundle.initiator, msg)?;
+                        if vcbc.is_delivered() {
+                            let (proposal, sig) = vcbc.delivered_message();
+                            self.mvba.set_proposal(target, proposal, sig)?;
                         }
                     }
-                }
-                None => {
-                    return Err(Error::UnknownNodeId(bundle.initiator));
-                }
+                    None => {
+                        return Err(Error::InvalidMessage(format!("target {target} not found")))
+                    }
+                },
+                None => return Err(Error::InvalidMessage("no target is defined".to_string())),
+            },
+
+            abba::MODULE_NAME => match bundle.target {
+                Some(target) => match self.abba_map.get_mut(&target) {
+                    Some(abba) => {
+                        let msg = bincode::deserialize(&bundle.payload)?;
+                        abba.receive_message(bundle.initiator, msg)?;
+                        if abba.is_decided() {
+                            if abba.decided_value() {
+                                self.finished = true;
+                            } else {
+                                self.mvba.move_to_next_proposal()?;
+                            }
+                        }
+                    }
+                    None => {
+                        return Err(Error::InvalidMessage(format!("target {target} not found")))
+                    }
+                },
+                None => return Err(Error::InvalidMessage("no target is defined".to_string())),
             },
             mvba::MODULE_NAME => {
                 let msg = bincode::deserialize(&bundle.payload)?;
                 self.mvba.receive_message(msg)?;
                 if self.mvba.is_completed() {
-                    let abba = self.abba_map.get_mut(&bundle.initiator).unwrap();
+                    let abba = self
+                        .abba_map
+                        .get_mut(&self.mvba.current_proposer())
+                        .unwrap();
                     if self.mvba.completed_vote() {
                         abba.pre_vote_zero()?;
                     } else {

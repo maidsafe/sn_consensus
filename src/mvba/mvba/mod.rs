@@ -78,6 +78,10 @@ impl Mvba {
         self.vote()
     }
 
+    pub fn current_proposer(&self) -> NodeId {
+        *self.parties.get(self.l).unwrap()
+    }
+
     pub fn is_completed(&self) -> bool {
         self.v.is_some()
     }
@@ -87,7 +91,10 @@ impl Mvba {
     }
 
     pub fn completed_vote_one(&self) -> (Proposal, Signature) {
-        self.proposals.get(&self.l).unwrap().clone()
+        self.proposals
+            .get(&self.current_proposer())
+            .unwrap()
+            .clone()
     }
 
     fn check_message(&mut self, msg: &Message) -> Result<()> {
@@ -147,9 +154,12 @@ impl Mvba {
             // (by sending it the message (ID|vcbc.a.0, c-request)).
             let data = vcbc::make_c_request_message(&self.id, msg.vote.proposer)?;
 
-            self.broadcaster
-                .borrow_mut()
-                .send_to(vcbc::MODULE_NAME, data, msg.voter);
+            self.broadcaster.borrow_mut().send_to(
+                vcbc::MODULE_NAME,
+                Some(msg.vote.proposer),
+                data,
+                msg.voter,
+            );
 
             Ok(false)
         } else {
@@ -157,7 +167,7 @@ impl Mvba {
         }
     }
 
-    /// receive_message process the received message 'msg` from `sender`
+    /// receive_message process the received message 'msg`
     pub fn receive_message(&mut self, msg: Message) -> Result<()> {
         self.check_message(&msg)?;
         if !self.add_vote(&msg)? {
@@ -251,7 +261,9 @@ impl Mvba {
             signature: sig,
         };
         let data = bincode::serialize(&msg)?;
-        self.broadcaster.borrow_mut().broadcast(MODULE_NAME, data);
+        self.broadcaster
+            .borrow_mut()
+            .broadcast(MODULE_NAME, None, data);
         self.receive_message(msg)?;
         Ok(())
     }
