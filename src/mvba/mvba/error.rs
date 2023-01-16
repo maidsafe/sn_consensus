@@ -8,6 +8,8 @@ pub enum Error {
     Blsttc(#[from] blsttc::error::Error),
     #[error("invalid message {0}")]
     InvalidMessage(String),
+    #[error("{0}")]
+    Generic(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

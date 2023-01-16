@@ -70,12 +70,17 @@ impl Mvba {
         self.vote()
     }
 
-    pub fn move_to_next_proposal(&mut self) -> Result<()> {
+    pub fn move_to_next_proposal(&mut self) -> Result<bool> {
+        if self.l + 1 == self.parties.len() {
+            // no more proposal
+            return Ok(false)
+        }
         self.l += 1;
         self.v = None;
         self.voted = false;
 
-        self.vote()
+        self.vote()?;
+        Ok(true)
     }
 
     pub fn current_proposer(&self) -> NodeId {
@@ -90,11 +95,8 @@ impl Mvba {
         self.v.unwrap()
     }
 
-    pub fn completed_vote_one(&self) -> (Proposal, Signature) {
-        self.proposals
-            .get(&self.current_proposer())
-            .unwrap()
-            .clone()
+    pub fn completed_vote_one(&self) -> Option<&(Proposal, Signature)> {
+        self.proposals.get(&self.current_proposer())
     }
 
     fn check_message(&mut self, msg: &Message) -> Result<()> {
@@ -123,7 +125,8 @@ impl Mvba {
         }
 
         if let Some((digest, signature)) = &msg.vote.proof {
-            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &self.l, digest).unwrap();
+            let sign_bytes =
+                vcbc::c_ready_bytes_to_sign(&self.id, &msg.vote.proposer, digest).unwrap();
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
@@ -176,18 +179,18 @@ impl Mvba {
 
         // Message is for another proposal, not current one
         // TODO: test me!
-        if msg.vote.proposer != self.l {
+        if msg.vote.proposer != self.current_proposer() {
             return Ok(());
         }
 
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
-        if self.proposals.len() >= self.threshold() {
+        let threshold = self.threshold();
+        if self.proposals.len() >= threshold {
             // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
             // that VID|a (uj , ρj) holds
             let votes = self.must_get_proposer_votes(&msg.vote.proposer);
-            if votes.len() >= self.threshold() {
-                let votes = self.must_get_proposer_votes(&msg.vote.proposer);
+            if votes.len() == threshold {
                 let mut yes_votes = votes.values().filter(|v| v.value);
                 match yes_votes.next() {
                     // if there is some uj = 1 then
@@ -218,14 +221,14 @@ impl Mvba {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         if self.proposals.len() >= self.threshold() && !self.voted {
-            let a = self.parties.get(self.l).unwrap();
-            let vote = match self.proposals.get(a) {
+            let a = self.current_proposer();
+            let vote = match self.proposals.get(&a) {
                 None => {
                     // if wa = ⊥ then
                     // send the message (ID, v-vote, a, 0, ⊥) to all parties
                     Vote {
                         id: self.id.clone(),
-                        proposer: *a,
+                        proposer: a,
                         value: false,
                         proof: None,
                     }
@@ -237,7 +240,7 @@ impl Mvba {
                     let digest = Hash32::calculate(proposal);
                     Vote {
                         id: self.id.clone(),
-                        proposer: *a,
+                        proposer: a,
                         value: true,
                         proof: Some((digest, signature.clone())),
                     }
@@ -245,6 +248,7 @@ impl Mvba {
             };
 
             self.broadcast(vote)?;
+            self.voted = true;
         }
 
         Ok(())

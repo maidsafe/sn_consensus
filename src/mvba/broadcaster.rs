@@ -4,6 +4,7 @@ use super::{
 };
 
 // Broadcaster holds information required to broadcast the messages.
+#[derive(Debug)]
 pub struct Broadcaster {
     self_id: NodeId,
     outgoings: Vec<Outgoing>,

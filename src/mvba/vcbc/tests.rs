@@ -27,6 +27,7 @@ struct Net {
     queue: BTreeMap<NodeId, Vec<Bundle>>,
 }
 
+// TODO: merging Net and TestNet
 impl Net {
     fn new(n: usize, proposer: NodeId) -> Self {
         // we can tolerate < n/3 faults
@@ -206,7 +207,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 }
 
 #[test]
-fn test_ignore_messages_with_wrong_id() {
+fn test_ignore_messages_with_invalid_tag() {
     let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
@@ -214,9 +215,9 @@ fn test_ignore_messages_with_wrong_id() {
     let mut final_msg = t.make_final_msg(&t.d());
     final_msg.tag.id = "another-id".to_string();
 
-    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg);
+    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg.clone());
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid ID. expected: {}, got another-id", t.vcbc.tag.id)));
+        if msg == format!("invalid tag. expected {:?}, got {:?}", t.vcbc.tag, final_msg.tag)));
 }
 
 // --------------------------------------
@@ -325,20 +326,6 @@ impl TestNet {
 
         sec_key_share.sign(sign_bytes)
     }
-}
-
-#[test]
-fn test_ignore_messages_with_wrong_tag() {
-    let i = TestNet::PARTY_X;
-    let j = TestNet::PARTY_B;
-    let mut t = TestNet::new(i, j);
-
-    let mut msg = t.make_send_msg(&t.m);
-    msg.tag.id = "another-id".to_string();
-
-    let result = t.vcbc.receive_message(TestNet::PARTY_B, msg);
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid ID. expected: {}, got another-id", t.vcbc.tag.id)));
 }
 
 #[test]

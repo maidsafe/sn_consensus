@@ -121,16 +121,11 @@ impl Vcbc {
 
     /// receive_message process the received message 'msg` from `initiator`
     pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
-        if msg.tag.id != self.tag.id {
+        if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid ID. expected: {}, got {}",
-                self.tag.id, msg.tag.id
+                "invalid tag. expected {:?}, got {:?}",
+                self.tag, msg.tag
             )));
-        }
-
-        if msg.tag.j != self.tag.j {
-            log::trace!("not ours message.: {:?}. ", msg);
-            return Ok(());
         }
 
         log::debug!(
@@ -219,7 +214,7 @@ impl Vcbc {
                 let d = match self.d {
                     Some(d) => d,
                     None => {
-                        warn!("received c-final before receiving s-send, logging message");
+                        warn!("received c-final before receiving c-send, logging message");
                         try_insert(&mut self.final_messages, initiator, msg)?;
                         // requesting for the proposal
                         let request_msg = Message {
@@ -291,7 +286,7 @@ impl Vcbc {
     }
 
     pub fn delivered_message(&self) -> (Proposal, Signature) {
-        debug_assert!(self.u_bar.is_none(), "message should be delivered");
+        debug_assert!(self.u_bar.is_some(), "message should be delivered");
 
         (
             self.m_bar.as_ref().unwrap().clone(),
@@ -317,7 +312,7 @@ impl Vcbc {
         } else {
             self.broadcaster
                 .borrow_mut()
-                .send_to(MODULE_NAME, Some(self.i), data, to);
+                .send_to(MODULE_NAME, Some(self.tag.j), data, to);
         }
         Ok(())
     }

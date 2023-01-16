@@ -15,6 +15,7 @@ pub struct Bundle {
 }
 
 /// Ongoing messages definition
+#[derive(Debug)]
 pub enum Outgoing {
     Gossip(Bundle),
     Direct(NodeId, Bundle),

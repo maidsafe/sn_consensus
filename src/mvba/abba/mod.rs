@@ -73,12 +73,12 @@ impl Abba {
 
     fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
         // Produce an S-signature share on the message: (ID, pre-vote, r, b).
-        let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
+        let sign_bytes = self.pre_vote_bytes_to_sign(1, &value)?;
         let sig_share = self.sec_key_share.sign(sign_bytes);
 
         // and send to all parties the message (ID, pre-process, Vi , signature share).
         let action = Action::PreVote(PreVoteAction {
-            round: self.r,
+            round: 1,
             value,
             justification,
             sig_share,
@@ -105,11 +105,11 @@ impl Abba {
                 if let Some(existing_decision) = self.decided_value.as_ref() {
                     if existing_decision != agg_main_vote {
                         log::error!(
-                            "Existing decision does not match the decision we received:
+                            "existing decision does not match the decision we received:
                             {existing_decision:?} != {agg_main_vote:?}"
                         );
 
-                        return Err(Error::Generic("Received conflicting decision".into()));
+                        return Err(Error::Generic("received conflicting decision".into()));
                     }
                     return Ok(());
                 }
@@ -209,6 +209,7 @@ impl Abba {
                                 // Coin value bias to 1 in weaker validity mode.
                                 (Value::One, PreVoteJustification::Soft(sig))
                             } else {
+                                print!("asdasdasdsadasd");
                                 return Err(Error::Generic(
                                     "protocol violated, no pre-vote majority".to_string(),
                                 ));
@@ -281,6 +282,7 @@ impl Abba {
                             MainVoteJustification::Abstain(Box::new(just_0), Box::new(just_1)),
                         )
                     } else {
+                        print!("asdasdasdsadasd");
                         return Err(Error::Generic(
                             "protocol violated, no pre-vote majority".to_string(),
                         ));
