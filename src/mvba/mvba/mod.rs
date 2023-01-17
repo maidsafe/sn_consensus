@@ -73,7 +73,7 @@ impl Mvba {
     pub fn move_to_next_proposal(&mut self) -> Result<bool> {
         if self.l + 1 == self.parties.len() {
             // no more proposal
-            return Ok(false)
+            return Ok(false);
         }
         self.l += 1;
         self.v = None;
@@ -186,11 +186,11 @@ impl Mvba {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         let threshold = self.threshold();
-        if self.proposals.len() >= threshold {
+        if self.proposals.len() >= threshold && self.v.is_none() {
             // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
             // that VID|a (uj , ρj) holds
             let votes = self.must_get_proposer_votes(&msg.vote.proposer);
-            if votes.len() == threshold {
+            if votes.len() >= threshold {
                 let mut yes_votes = votes.values().filter(|v| v.value);
                 match yes_votes.next() {
                     // if there is some uj = 1 then
