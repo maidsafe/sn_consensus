@@ -29,6 +29,7 @@ pub(crate) struct Abba {
     j: NodeId,  // this is same as $j$ in spec
     r: usize,   // this is same as $r$ in spec
     voted: bool,
+    weak_validity: Option<(Hash32, Signature)>,
     decided_value: Option<DecisionAction>,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
@@ -52,6 +53,7 @@ impl Abba {
             j: proposer,
             r: 1,
             voted: false,
+            weak_validity: None,
             decided_value: None,
             pub_key_set,
             sec_key_share,
@@ -69,7 +71,7 @@ impl Abba {
 
     /// pre_vote_one starts the abba by broadcasting a pre-vote message with value 1.
     pub fn pre_vote_one(&mut self, digest: Hash32, sig: Signature) -> Result<()> {
-        let justification = PreVoteJustification::FirstRoundOne(digest, sig);
+        let justification = PreVoteJustification::WithValidity(digest, sig);
         self.pre_vote(Value::One, justification)
     }
 
@@ -155,6 +157,12 @@ impl Abba {
                     if main_votes.len() >= self.threshold() {
                         // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
                         if zero_votes.clone().count() >= self.threshold() {
+                            log::info!(
+                                "decided for zero. id={}, r={}, j={}",
+                                self.id,
+                                self.j,
+                                self.r
+                            );
                             let sig_share: HashMap<&NodeId, &SignatureShare> =
                                 zero_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                             let sig = self.pub_key_set.combine_signatures(sig_share)?;
@@ -169,6 +177,12 @@ impl Abba {
                         }
 
                         if one_votes.clone().count() >= self.threshold() {
+                            log::info!(
+                                "decided for one. id={}, r={}, j={}",
+                                self.id,
+                                self.j,
+                                self.r
+                            );
                             let sig_share: HashMap<&NodeId, &SignatureShare> =
                                 one_votes.map(|(n, a)| (n, &a.sig_share)).collect();
                             let sig = self.pub_key_set.combine_signatures(sig_share)?;
@@ -183,7 +197,16 @@ impl Abba {
                         }
 
                         let (value, justification) =
-                            if let Some((_, zero_vote)) = zero_votes.next() {
+                            if let Some((digest, sig)) = &self.weak_validity {
+                                // if all honest parties start with 0, they may still
+                                // decide on 1 if they obtain the corresponding validating data
+                                //  for 1 during the agreement protocol
+
+                                (
+                                    Value::One,
+                                    PreVoteJustification::WithValidity(*digest, sig.clone()),
+                                )
+                            } else if let Some((_, zero_vote)) = zero_votes.next() {
                                 // if there is a main-vote for 0,
                                 let sig =
                                     match &zero_vote.justification {
@@ -241,6 +264,10 @@ impl Abba {
                 if action.round != self.r {
                     return Ok(());
                 }
+
+                if let PreVoteJustification::WithValidity(digest, sig) = &action.justification {
+                    self.weak_validity = Some((*digest, sig.clone()));
+                };
 
                 // 2. MAIN-VOTE. Collect n − t valid and properly justified round-r pre-vote messages.
                 let pre_votes = match self.get_pre_votes_by_round(self.r) {
@@ -358,7 +385,7 @@ impl Abba {
         Ok(true)
     }
 
-    fn check_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<()> {
+    fn check_message(&self, initiator: &NodeId, msg: &Message) -> Result<()> {
         if msg.id != self.id {
             return Err(Error::InvalidMessage(format!(
                 "invalid ID. expected: {}, got {}",
@@ -400,14 +427,7 @@ impl Abba {
                             ));
                         }
                     }
-                    PreVoteJustification::FirstRoundOne(digest, sig) => {
-                        if action.round != 1 {
-                            return Err(Error::InvalidMessage(format!(
-                                "invalid round. expected 1, got {}",
-                                action.round
-                            )));
-                        }
-
+                    PreVoteJustification::WithValidity(digest, sig) => {
                         let sign_bytes =
                             crate::mvba::vcbc::c_ready_bytes_to_sign(&self.id, &self.j, digest)?;
 
@@ -486,6 +506,15 @@ impl Abba {
                         }
                         match just_0.as_ref() {
                             PreVoteJustification::FirstRoundZero => {}
+                            PreVoteJustification::Hard(sig) => {
+                                let sign_bytes =
+                                    self.pre_vote_bytes_to_sign(action.round - 1, &Value::Zero)?;
+                                if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
+                                    return Err(Error::InvalidMessage(
+                                        "invalid abstain justification for value zero".to_string(),
+                                    ));
+                                }
+                            }
                             _ => {
                                 return Err(Error::InvalidMessage(format!(
                                     "invalid justification for value 0 in round 1: {just_0:?}"
@@ -494,7 +523,7 @@ impl Abba {
                         }
 
                         match just_1.as_ref() {
-                            PreVoteJustification::FirstRoundOne(digest, sig) => {
+                            PreVoteJustification::WithValidity(digest, sig) => {
                                 let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
                                     &self.id, &self.j, digest,
                                 )?;
@@ -534,6 +563,8 @@ impl Abba {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, action: Action) -> Result<()> {
+        log::debug!("broadcasting {action:?}");
+
         let msg = Message {
             id: self.id.clone(),
             proposer: self.j,

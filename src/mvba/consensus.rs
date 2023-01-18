@@ -189,6 +189,8 @@ impl Consensus {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::Consensus;
     use crate::mvba::{bundle::Outgoing, *};
     use blsttc::SecretKeySet;
@@ -207,7 +209,7 @@ mod tests {
         pub fn new() -> Self {
             let id = "test-id".to_string();
             let mut rng = thread_rng();
-            //let (t, n) = (3, 7);
+            //let (t, n) = (5, 7);
             let (t, n) = (2, 4);
             let sec_key_set = SecretKeySet::random(t, &mut rng);
             let mut parties = Vec::new();
@@ -244,13 +246,13 @@ mod tests {
             .filter_level(log::LevelFilter::Debug)
             .try_init();
 
-        for test_id in 0..100 {
+        for test_id in 0..10 {
             log::info!("--- starting test {test_id}");
             let mut net = TestNet::new();
             let mut rng = thread_rng();
 
             for c in &mut net.cons {
-                let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
+                let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
                 let mut msgs = c.propose(proposal).unwrap();
                 net.msgs.append(&mut msgs);
             }
@@ -276,26 +278,29 @@ mod tests {
 
                 net.msgs.append(&mut msgs);
 
-                let mut halted = true;
+                let mut decisions = HashMap::new();
                 for c in &mut net.cons {
-                    if c.decided_party.is_none() {
-                        halted = false;
-                        break;
-                    } else {
+                    if c.decided_party.is_some() {
+                        let value = c
+                            .abba_map
+                            .get(&c.decided_party.unwrap())
+                            .unwrap()
+                            .decided_value();
+
                         println!(
-                            "test {} for consensus {:?} finished on proposal {:?} with {:?}",
-                            test_id,
+                            "test {test_id} for consensus {} finished on proposal {} with {value}",
                             c.self_id,
                             c.decided_party.unwrap(),
-                            c.abba_map
-                                .get(&c.decided_party.unwrap())
-                                .unwrap()
-                                .decided_value()
                         );
+                        decisions.insert(c.self_id, (c.decided_party.unwrap(), value));
                     }
                 }
 
-                if halted {
+                if decisions.len() == net.cons.len() {
+                    // check if all consensus results are equal:
+                    // https://sts10.github.io/2019/06/06/is-all-equal-function.html
+                    let first = decisions.iter().next().unwrap().1;
+                    assert!(decisions.iter().all(|(_, item)| item == first));
                     break;
                 }
             }

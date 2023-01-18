@@ -27,12 +27,12 @@ impl MainVoteValue {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteJustification {
-    // Round one, without the justification. The initial value should set to zero
+    // Round one without the justification. The initial value should set to zero
     FirstRoundZero,
-    // Round one, with the justification. The initial value should set to one
+    // with the weak validity. The initial value should set to one
     // The justification is a `c-final` signature of the VCBC protocol for this tuple:
     // `(id, proposer, 0, "c-ready", digest)`
-    FirstRoundOne(Hash32, Signature),
+    WithValidity(Hash32, Signature),
     // In Round r > 1, justification is either hard,...
     Hard(Signature),
     // ... or soft (refer to the spec)

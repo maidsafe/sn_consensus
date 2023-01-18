@@ -140,8 +140,7 @@ impl Vcbc {
                 // if j = l and m̄ = ⊥ then
                 if initiator == self.tag.j && self.m_bar.is_none() {
                     if !(self.message_validity)(initiator, &m) {
-                        log::warn!("invalid proposal: {m:?}");
-                        return Ok(());
+                        return Err(Error::InvalidMessage("invalid proposal".to_string()));
                     }
                     // m̄ ← m
                     self.m_bar = Some(m.clone());
