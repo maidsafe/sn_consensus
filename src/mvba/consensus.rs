@@ -105,8 +105,13 @@ impl Consensus {
                         let msg = bincode::deserialize(&bundle.payload)?;
                         vcbc.receive_message(bundle.initiator, msg)?;
                         if vcbc.is_delivered() {
+                            // Check if we have agreed on this proposal before.
+                            //    There might be a situation that we receive the agreement
+                            //    before receiving the actual proposal.
                             let abba = self.abba_map.get_mut(&target).unwrap();
                             if abba.decided_value().is_some() {
+                                // We re done! We have both proposal and agreement
+                                log::info!("halted. proposer: {target}");
                                 self.decided_party = Some(target);
                             }
 
@@ -130,17 +135,18 @@ impl Consensus {
                             if decided_value {
                                 let vcbc = self.vcbc_map.get_mut(&target).unwrap();
                                 if vcbc.is_delivered() {
+                                    // We re done! We have both proposal and agreement
+                                    log::info!("halted. proposer: {target}");
                                     self.decided_party = Some(target);
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
                                     let data = vcbc::make_c_request_message(&self.id, target)?;
 
-                                    self.broadcaster.borrow_mut().send_to(
+                                    self.broadcaster.borrow_mut().broadcast(
                                         vcbc::MODULE_NAME,
                                         Some(target),
                                         data,
-                                        bundle.initiator,
                                     );
                                 }
                             } else if !self.mvba.move_to_next_proposal()? {
@@ -174,11 +180,15 @@ impl Consensus {
                 .unwrap();
 
             if completed_vote {
+                // The proposal is c-delivered and we have proof for that.
+                // Let's start binary agreement by voting 1
                 if let Some((proposal, sig)) = self.mvba.completed_vote_value() {
                     let digest = Hash32::calculate(proposal);
                     abba.pre_vote_one(digest, sig.clone())?;
                 }
             } else {
+                // The proposal is NOT c-delivered.
+                // Let's start binary agreement by voting 0,
                 abba.pre_vote_zero()?;
             }
         }
@@ -202,7 +212,7 @@ mod tests {
 
     struct TestNet {
         cons: Vec<Consensus>,
-        msgs: Vec<Outgoing>,
+        buffer: Vec<Outgoing>,
     }
 
     impl TestNet {
@@ -234,7 +244,7 @@ mod tests {
 
             Self {
                 cons,
-                msgs: Vec::new(),
+                buffer: Vec::new(),
             }
         }
     }
@@ -254,12 +264,12 @@ mod tests {
             for c in &mut net.cons {
                 let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
                 let mut msgs = c.propose(proposal).unwrap();
-                net.msgs.append(&mut msgs);
+                net.buffer.append(&mut msgs);
             }
 
             loop {
-                let rand_index = rng.gen_range(0..net.msgs.len());
-                let rand_msg = &net.msgs.remove(rand_index);
+                let rand_index = rng.gen_range(0..net.buffer.len());
+                let rand_msg = &net.buffer.remove(rand_index);
                 let mut msgs = Vec::new();
                 log::debug!("random message: {:?}", rand_msg);
 
@@ -276,7 +286,7 @@ mod tests {
                     });
                 }
 
-                net.msgs.append(&mut msgs);
+                net.buffer.append(&mut msgs);
 
                 let mut decisions = HashMap::new();
                 for c in &mut net.cons {
