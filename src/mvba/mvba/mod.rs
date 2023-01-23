@@ -191,18 +191,14 @@ impl Mvba {
             // that VID|a (uj , ρj) holds
             let votes = self.must_get_proposer_votes(&msg.vote.proposer);
             if votes.len() >= threshold {
-                let mut yes_votes = votes.values().filter(|v| v.value);
-                match yes_votes.next() {
+                if votes.values().any(|v| v.value) {
                     // if there is some uj = 1 then
-                    Some(_) => {
-                        // v ← 1; ρ ← ρj
-                        self.v = Some(true);
-                    }
+                    // v ← 1; ρ ← ρj
+                    self.v = Some(true);
+                } else {
                     // else
-                    None => {
-                        // v ← 0; ρ ← ⊥
-                        self.v = Some(false);
-                    }
+                    // v ← 0; ρ ← ⊥
+                    self.v = Some(false);
                 }
             }
         }
