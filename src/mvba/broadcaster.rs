@@ -48,9 +48,7 @@ impl Broadcaster {
     }
 
     pub fn take_outgoings(&mut self) -> Vec<Outgoing> {
-        let out = std::mem::take(&mut self.outgoings);
-        self.outgoings = Vec::new();
-        out
+        std::mem::take(&mut self.outgoings)
     }
 
     #[allow(clippy::type_complexity)]
