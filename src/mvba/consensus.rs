@@ -106,7 +106,7 @@ impl Consensus {
                         vcbc.receive_message(bundle.initiator, msg)?;
                         if vcbc.is_delivered() {
                             let abba = self.abba_map.get_mut(&target).unwrap();
-                            if abba.is_decided() && abba.decided_value() {
+                            if abba.decided_value().is_some() {
                                 self.decided_party = Some(target);
                             }
 
@@ -126,8 +126,8 @@ impl Consensus {
                     Some(abba) => {
                         let msg = bincode::deserialize(&bundle.payload)?;
                         abba.receive_message(bundle.initiator, msg)?;
-                        if abba.is_decided() {
-                            if abba.decided_value() {
+                        if let Some(decided_value) = abba.decided_value() {
+                            if decided_value {
                                 let vcbc = self.vcbc_map.get_mut(&target).unwrap();
                                 if vcbc.is_delivered() {
                                     self.decided_party = Some(target);
@@ -167,14 +167,14 @@ impl Consensus {
             }
         };
 
-        if self.mvba.is_completed() {
+        if let Some(completed_vote) = self.mvba.completed_vote() {
             let abba = self
                 .abba_map
                 .get_mut(&self.mvba.current_proposer())
                 .unwrap();
 
-            if self.mvba.completed_vote() {
-                if let Some((proposal, sig)) = self.mvba.completed_vote_one() {
+            if completed_vote {
+                if let Some((proposal, sig)) = self.mvba.completed_vote_value() {
                     let digest = Hash32::calculate(proposal);
                     abba.pre_vote_one(digest, sig.clone())?;
                 }
@@ -285,7 +285,8 @@ mod tests {
                             .abba_map
                             .get(&c.decided_party.unwrap())
                             .unwrap()
-                            .decided_value();
+                            .decided_value()
+                            .unwrap();
 
                         println!(
                             "test {test_id} for consensus {} finished on proposal {} with {value}",

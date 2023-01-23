@@ -203,7 +203,7 @@ fn test_normal_case() {
     let i = TestNet::PARTY_Y;
     let mut t = TestNet::new(i);
 
-    assert!(!t.mvba.is_completed());
+    assert!(t.mvba.completed_vote().is_none());
 
     let proposal_x = t.proposals.get(&TestNet::PARTY_X).unwrap().clone();
     let proposal_y = t.proposals.get(&TestNet::PARTY_Y).unwrap().clone();
@@ -229,8 +229,7 @@ fn test_normal_case() {
     t.mvba.receive_message(msg_x).unwrap();
     t.mvba.receive_message(msg_s).unwrap();
 
-    assert!(t.mvba.is_completed());
-    assert!(t.mvba.completed_vote());
+    assert!(t.mvba.completed_vote().unwrap());
 }
 
 #[test]
@@ -238,8 +237,6 @@ fn test_normal_case_no_vote() {
     // Node_x is offline
     let i = TestNet::PARTY_Y;
     let mut t = TestNet::new(i);
-
-    assert!(!t.mvba.is_completed());
 
     let proposal_y = t.proposals.get(&TestNet::PARTY_Y).unwrap().clone();
     let proposal_b = t.proposals.get(&TestNet::PARTY_B).unwrap().clone();
@@ -267,8 +264,7 @@ fn test_normal_case_no_vote() {
     t.mvba.receive_message(msg_b_proposal_x).unwrap();
     t.mvba.receive_message(msg_s_proposal_x).unwrap();
 
-    assert!(t.mvba.is_completed());
-    assert!(!t.mvba.completed_vote());
+    assert!(!t.mvba.completed_vote().unwrap());
 
     // Let move to the next proposal
     t.mvba.move_to_next_proposal().unwrap();
@@ -277,8 +273,7 @@ fn test_normal_case_no_vote() {
     t.mvba.receive_message(msg_b_proposal_y).unwrap();
     t.mvba.receive_message(msg_s_proposal_y).unwrap();
 
-    assert!(t.mvba.is_completed());
-    assert!(t.mvba.completed_vote());
+    assert!(t.mvba.completed_vote().unwrap());
 }
 
 #[test]

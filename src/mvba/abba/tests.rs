@@ -360,7 +360,6 @@ fn test_normal_case_one_round() {
         .receive_message(TestNet::PARTY_S, main_vote_s)
         .unwrap();
 
-    assert!(t.abba.is_decided());
     assert_eq!(t.abba.decided_value.unwrap().value, Value::One);
 }
 
@@ -404,7 +403,6 @@ fn test_normal_case_zero() {
         .receive_message(TestNet::PARTY_S, round_1_main_vote_s)
         .unwrap();
 
-    assert!(t.abba.is_decided());
     assert_eq!(t.abba.decided_value.unwrap().value, Value::Zero);
 }
 
@@ -535,7 +533,6 @@ fn test_two_rounds() {
         .receive_message(TestNet::PARTY_S, round_2_main_vote_s)
         .unwrap();
 
-    assert!(t.abba.is_decided());
     assert_eq!(t.abba.decided_value.unwrap().value, Value::One);
 }
 
@@ -732,7 +729,6 @@ fn test_three_rounds() {
         .receive_message(TestNet::PARTY_Y, round_3_main_vote_y)
         .unwrap();
 
-    assert!(t.abba.is_decided());
     assert_eq!(t.abba.decided_value.unwrap().value, Value::One);
 }
 

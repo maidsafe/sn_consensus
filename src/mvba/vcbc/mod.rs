@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
-use log::warn;
 
 use self::error::{Error, Result};
 use self::message::{Action, Message, Tag};
@@ -121,6 +120,13 @@ impl Vcbc {
 
     /// receive_message process the received message 'msg` from `initiator`
     pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
+        log::debug!(
+            "received {} message: {:?} from {}",
+            msg.action_str(),
+            msg,
+            initiator
+        );
+
         if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
                 "invalid tag. expected {:?}, got {:?}",
@@ -128,12 +134,6 @@ impl Vcbc {
             )));
         }
 
-        log::debug!(
-            "received {} message: {:?} from {}",
-            msg.action_str(),
-            msg,
-            initiator
-        );
         match msg.action.clone() {
             Action::Send(m) => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
@@ -169,7 +169,7 @@ impl Vcbc {
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
 
                 if d != msg_d {
-                    warn!("c-ready has unknown digest. expected {d:?}, got {msg_d:?}");
+                    log::warn!("c-ready has unknown digest. expected {d:?}, got {msg_d:?}");
                     return Err(Error::Generic("Invalid digest".to_string()));
                 }
 
@@ -181,7 +181,7 @@ impl Vcbc {
                         .verify(&sig_share, sign_bytes);
 
                     if !valid_sig {
-                        warn!("c-ready has has invalid signature share");
+                        log::warn!("c-ready has has invalid signature share");
                     }
 
                     // if i = j and νl is a valid S1-signature share then
@@ -214,7 +214,7 @@ impl Vcbc {
                 let d = match self.d {
                     Some(d) => d,
                     None => {
-                        warn!("received c-final before receiving c-send, logging message");
+                        log::warn!("received c-final before receiving c-send, logging message");
                         try_insert(&mut self.final_messages, initiator, msg)?;
                         // requesting for the proposal
                         let request_msg = Message {
@@ -230,7 +230,7 @@ impl Vcbc {
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
                 if !valid_sig {
-                    warn!("c-ready has has invalid signature share");
+                    log::warn!("c-ready has has invalid signature share");
                 }
 
                 // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1-signature then

@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
-use log::debug;
 
 use self::error::{Error, Result};
 use self::message::{
@@ -77,6 +76,7 @@ impl Abba {
 
     fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
         if self.voted {
+            log::debug!("we have voted before");
             return Ok(());
         }
 
@@ -139,7 +139,7 @@ impl Abba {
                     let main_votes = match self.get_main_votes_by_round(self.r - 1) {
                         Some(v) => v,
                         None => {
-                            debug!("no main-votes for this round: {}", self.r);
+                            log::debug!("no main-votes for this round: {}", self.r);
                             return Ok(());
                         }
                     };
@@ -273,7 +273,7 @@ impl Abba {
                 let pre_votes = match self.get_pre_votes_by_round(self.r) {
                     Some(v) => v,
                     None => {
-                        debug!("no pre-votes for this round: {}", self.r);
+                        log::debug!("no pre-votes for this round: {}", self.r);
                         return Ok(());
                     }
                 };
@@ -337,10 +337,6 @@ impl Abba {
         }
 
         Ok(())
-    }
-
-    pub fn is_decided(&self) -> bool {
-        self.decided_value.is_some()
     }
 
     pub fn decided_value(&self) -> Option<bool> {

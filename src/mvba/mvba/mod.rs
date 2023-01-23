@@ -87,15 +87,11 @@ impl Mvba {
         *self.parties.get(self.l).unwrap()
     }
 
-    pub fn is_completed(&self) -> bool {
-        self.v.is_some()
+    pub fn completed_vote(&self) -> Option<bool> {
+        self.v
     }
 
-    pub fn completed_vote(&self) -> bool {
-        self.v.unwrap()
-    }
-
-    pub fn completed_vote_one(&self) -> Option<&(Proposal, Signature)> {
+    pub fn completed_vote_value(&self) -> Option<&(Proposal, Signature)> {
         self.proposals.get(&self.current_proposer())
     }
 
@@ -172,6 +168,8 @@ impl Mvba {
 
     /// receive_message process the received message 'msg`
     pub fn receive_message(&mut self, msg: Message) -> Result<()> {
+        log::debug!("received message: {:?}", msg);
+
         self.check_message(&msg)?;
         if !self.add_vote(&msg)? {
             return Ok(());
