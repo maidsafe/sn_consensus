@@ -343,11 +343,11 @@ impl Abba {
         self.decided_value.is_some()
     }
 
-    pub fn decided_value(&self) -> bool {
-        match self.decided_value.as_ref().unwrap().value {
+    pub fn decided_value(&self) -> Option<bool> {
+        self.decided_value.as_ref().map(|v| match v.value {
             Value::One => true,
             Value::Zero => false,
-        }
+        })
     }
 
     fn add_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<bool> {
