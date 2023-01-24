@@ -385,7 +385,7 @@ fn test_normal_case_operation() {
         .receive_message(TestNet::PARTY_Y, ready_msg_y)
         .unwrap();
 
-    assert!(t.vcbc.is_delivered());
+    assert!(t.vcbc.read_delivered().is_some());
 }
 
 #[test]
@@ -400,7 +400,7 @@ fn test_final_message_first() {
     t.vcbc.receive_message(TestNet::PARTY_S, final_msg).unwrap();
     t.vcbc.receive_message(TestNet::PARTY_S, send_msg).unwrap();
 
-    assert!(t.vcbc.is_delivered());
+    assert!(t.vcbc.read_delivered().is_some());
 }
 
 #[test]
@@ -502,5 +502,5 @@ fn test_c_answer() {
         .receive_message(TestNet::PARTY_S, answer_msg)
         .unwrap();
 
-    assert!(t.vcbc.is_delivered());
+    assert!(t.vcbc.read_delivered().is_some());
 }
