@@ -109,10 +109,12 @@ impl Consensus {
                             //    There might be a situation that we receive the agreement
                             //    before receiving the actual proposal.
                             let abba = self.abba_map.get_mut(&target).unwrap();
-                            if abba.decided_value().is_some() {
-                                // We re done! We have both proposal and agreement
-                                log::info!("halted. proposer: {target}");
-                                self.decided_party = Some(target);
+                            if let Some(decided_value) = abba.decided_value() {
+                                if decided_value {
+                                    // We re done! We have both proposal and agreement
+                                    log::info!("halted. proposer: {target}");
+                                    self.decided_party = Some(target);
+                                }
                             }
 
                             let (proposal, sig) = vcbc.delivered_message();
