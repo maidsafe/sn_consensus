@@ -1,22 +1,35 @@
-use super::message::{Action, Message, Tag};
+use super::message::{Action, Message};
+use super::Error;
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
-use blsttc::{SecretKeySet, SignatureShare};
+use crate::mvba::vcbc::c_ready_bytes_to_sign;
+use crate::mvba::Proposal;
+use blsttc::{SecretKeySet, Signature, SignatureShare};
 use quickcheck_macros::quickcheck;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+fn valid_proposal(_: NodeId, _: &Proposal) -> bool {
+    true
+}
+
+fn invalid_proposal(_: NodeId, _: &Proposal) -> bool {
+    false
+}
+
 struct Net {
+    id: String,
     secret_key_set: SecretKeySet,
     nodes: BTreeMap<NodeId, Vcbc>,
     queue: BTreeMap<NodeId, Vec<Bundle>>,
 }
 
+// TODO: merging Net and TestNet
 impl Net {
-    fn new(n: usize, tag: Tag) -> Self {
+    fn new(n: usize, proposer: NodeId) -> Self {
         // we can tolerate < n/3 faults
         let faults = n.saturating_sub(1) / 3;
 
@@ -26,26 +39,25 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let bundle_id = 0; // TODO: what is this?
+        let id = "testing-vcbc".to_string();
 
-        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
-            let key_share = secret_key_set.secret_key_share(node_id);
-            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
-                bundle_id,
-                node_id,
-                key_share.clone(),
-            )));
+        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
+            let key_share = secret_key_set.secret_key_share(self_id);
+            let broadcaster = Rc::new(RefCell::new(Broadcaster::new(self_id)));
             let vcbc = Vcbc::new(
-                node_id,
-                tag.clone(),
+                id.clone(),
+                self_id,
+                proposer,
                 public_key_set.clone(),
                 key_share,
+                valid_proposal,
                 broadcaster,
             );
-            (node_id, vcbc)
+            (self_id, vcbc)
         }));
 
         Net {
+            id,
             secret_key_set,
             nodes,
             queue: Default::default(),
@@ -59,8 +71,7 @@ impl Net {
     fn enqueue_bundles_from(&mut self, id: NodeId) {
         let (send_bundles, bcast_bundles) = {
             let mut broadcaster = self.node_mut(id).broadcaster.borrow_mut();
-            let send_bundles = broadcaster.take_send_bundles();
-            let bcast_bundles = broadcaster.take_broadcast_bundles();
+            let (bcast_bundles, send_bundles) = broadcaster.take_bundles();
             (send_bundles, bcast_bundles)
         };
 
@@ -85,11 +96,11 @@ impl Net {
                 let recipient_node = self.node_mut(recipient);
 
                 for bundle in queue {
-                    let msg: Message = bincode::deserialize(&bundle.message)
+                    let msg: Message = bincode::deserialize(&bundle.payload)
                         .expect("Failed to deserialize message");
 
                     recipient_node
-                        .receive_message(bundle.sender, msg)
+                        .receive_message(bundle.initiator, msg)
                         .expect("Failed to receive msg");
                 }
 
@@ -107,11 +118,11 @@ impl Net {
 
             let bundle = msgs.swap_remove(index);
             let msg: Message =
-                bincode::deserialize(&bundle.message).expect("Failed to deserialize message");
+                bincode::deserialize(&bundle.payload).expect("Failed to deserialize message");
 
             let recipient_node = self.node_mut(recipient);
             recipient_node
-                .receive_message(bundle.sender, msg)
+                .receive_message(bundle.initiator, msg)
                 .expect("Failed to receive message");
             self.enqueue_bundles_from(recipient);
         }
@@ -121,8 +132,7 @@ impl Net {
 #[test]
 fn test_vcbc_happy_path() {
     let proposer = 1;
-    let tag = Tag::new("happy-path-test", proposer, 0);
-    let mut net = Net::new(7, tag.clone());
+    let mut net = Net::new(7, proposer);
 
     // Node 1 (the proposer) will initiate VCBC by broadcasting a value
 
@@ -140,13 +150,10 @@ fn test_vcbc_happy_path() {
     // And check that all nodes have delivered the expected value and signature
 
     let expected_bytes_to_sign: Vec<u8> =
-        bincode::serialize(&(tag, "c-ready", Hash32::calculate("HAPPY-PATH-VALUE")))
+        c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate("HAPPY-PATH-VALUE"))
             .expect("Failed to serialize");
 
-    let expected_sig = net
-        .secret_key_set
-        .secret_key()
-        .sign(&expected_bytes_to_sign);
+    let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
     for (_, node) in net.nodes {
         assert_eq!(
@@ -165,8 +172,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 ) {
     let n = n % 10 + 1; // Large n is wasteful, and n must be > 0
     let proposer = proposer % n + 1; // NodeId's start at 1
-    let tag = Tag::new("randomized-msgs-prop", proposer, 0);
-    let mut net = Net::new(n, tag.clone());
+    let mut net = Net::new(n, proposer);
 
     // First the proposer will initiate VCBC by broadcasting the proposal:
     let proposer_node = net.node_mut(proposer);
@@ -187,13 +193,10 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
     // And finally, check that all nodes have delivered the expected value and signature
 
     let expected_bytes_to_sign: Vec<u8> =
-        bincode::serialize(&(tag, "c-ready", Hash32::calculate(&proposal)))
+        c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate(&proposal))
             .expect("Failed to serialize");
 
-    let expected_sig = net
-        .secret_key_set
-        .secret_key()
-        .sign(&expected_bytes_to_sign);
+    let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
     for (_, node) in net.nodes {
         assert_eq!(
@@ -203,10 +206,24 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
     }
 }
 
+#[test]
+fn test_ignore_messages_with_invalid_tag() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    let mut final_msg = t.make_final_msg(&t.d());
+    final_msg.tag.id = "another-id".to_string();
+
+    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg.clone());
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+        if msg == format!("invalid tag. expected {:?}, got {:?}", t.vcbc.tag, final_msg.tag)));
+}
+
 // --------------------------------------
 // Testing one peers in faulty situations
 
-use rand::{random, thread_rng, Rng};
+use rand::{thread_rng, Rng};
 
 struct TestNet {
     sec_key_set: SecretKeySet,
@@ -222,23 +239,21 @@ impl TestNet {
     const PARTY_S: NodeId = 3;
 
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
-    // The VCBC test instance creates for party `i`, `tag.ID` sets to `test`
-    // and `tag.s` sets to `0`.
+    // The VCBC test instance creates for party `i` with `ID` sets to `test-id`
+    // and `s` sets to `0`.
     pub fn new(i: NodeId, j: NodeId) -> Self {
+        let id = "test-id".to_string();
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
-        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(
-            random(),
-            i,
-            sec_key_share.clone(),
-        )));
-        let tag = Tag::new("test", j, 0);
+        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
         let vcbc = Vcbc::new(
+            id,
             i,
-            tag,
+            j,
             sec_key_set.public_keys(),
             sec_key_share,
+            valid_proposal,
             broadcaster.clone(),
         );
 
@@ -268,47 +283,45 @@ impl TestNet {
         }
     }
 
-    pub fn make_final_msg(&self, d: &Hash32, peer_ids: Vec<NodeId>) -> Message {
-        let mut sig_shares = Vec::new();
-        for peer_id in peer_ids {
-            let sig_share = self.sig_share(d, &peer_id);
-            sig_shares.push((peer_id, sig_share));
-        }
-
-        let sig = self
-            .sec_key_set
-            .public_keys()
-            .combine_signatures(sig_shares)
-            .unwrap();
-
+    pub fn make_final_msg(&self, d: &Hash32) -> Message {
         Message {
             tag: self.vcbc.tag.clone(),
-            action: Action::Final(*d, sig),
+            action: Action::Final(*d, self.u()),
         }
     }
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
             .borrow()
-            .has_broadcast_message(&bincode::serialize(msg).unwrap())
+            .has_gossip_message(&bincode::serialize(msg).unwrap())
     }
 
     pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
         self.broadcaster
             .borrow()
-            .has_send_message(to, &bincode::serialize(msg).unwrap())
+            .has_direct_message(to, &bincode::serialize(msg).unwrap())
     }
 
+    // m is same as proposal
     pub fn m(&self) -> Vec<u8> {
         self.m.clone()
     }
 
+    // d is same as proposal's digest
     pub fn d(&self) -> Hash32 {
         Hash32::calculate(&self.m)
     }
 
+    // u is same as final signature
+    pub fn u(&self) -> Signature {
+        let sign_bytes =
+            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, &self.d()).unwrap();
+        self.sec_key_set.secret_key().sign(sign_bytes)
+    }
+
     fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
-        let sign_bytes = bincode::serialize(&(&self.vcbc.tag, "c-ready", digest)).unwrap();
+        let sign_bytes =
+            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, digest).unwrap();
         let sec_key_share = self.sec_key_set.secret_key_share(id);
 
         sec_key_share.sign(sign_bytes)
@@ -316,18 +329,17 @@ impl TestNet {
 }
 
 #[test]
-fn test_ignore_messages_with_wrong_tag() {
+fn test_invalid_message() {
     let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_B;
     let mut t = TestNet::new(i, j);
+    t.vcbc.message_validity = invalid_proposal;
 
-    let mut msg = t.make_send_msg(&t.m);
-    msg.tag.id = "another-id".to_string();
+    let msg = t.make_send_msg(&t.m);
 
-    t.vcbc.receive_message(TestNet::PARTY_B, msg).unwrap();
-
-    let ready_msg_x = t.make_ready_msg(&t.d(), &i);
-    assert!(!t.is_send_to(&j, &ready_msg_x));
+    let result = t.vcbc.receive_message(TestNet::PARTY_B, msg);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+    if msg == *"invalid proposal"));
 }
 
 #[test]
@@ -378,20 +390,33 @@ fn test_normal_case_operation() {
 
 #[test]
 fn test_final_message_first() {
-    let i = TestNet::PARTY_B;
+    let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_S;
     let mut t = TestNet::new(i, j);
 
     let send_msg = t.make_send_msg(&t.m());
-    let final_msg = t.make_final_msg(
-        &t.d(),
-        [TestNet::PARTY_X, TestNet::PARTY_Y, TestNet::PARTY_S].to_vec(),
-    );
+    let final_msg = t.make_final_msg(&t.d());
 
     t.vcbc.receive_message(TestNet::PARTY_S, final_msg).unwrap();
     t.vcbc.receive_message(TestNet::PARTY_S, send_msg).unwrap();
 
     assert!(t.vcbc.is_delivered());
+}
+
+#[test]
+fn test_request_for_proposal() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_S;
+    let mut t = TestNet::new(i, j);
+
+    let final_msg = t.make_final_msg(&t.d());
+    let request_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Request,
+    };
+
+    t.vcbc.receive_message(TestNet::PARTY_S, final_msg).unwrap();
+    assert!(t.is_send_to(&TestNet::PARTY_S, &request_msg));
 }
 
 #[test]
@@ -432,4 +457,50 @@ fn test_invalid_sig_share() {
         .unwrap();
 
     assert!(!t.vcbc.wd.contains_key(&TestNet::PARTY_B));
+}
+
+#[test]
+fn test_c_request() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    let sig = t.sec_key_set.secret_key().sign(t.m());
+
+    t.vcbc.m_bar = Some(t.m());
+    t.vcbc.u_bar = Some(sig.clone());
+
+    let request_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Request,
+    };
+    let answer_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Answer(t.m(), sig),
+    };
+
+    t.vcbc
+        .receive_message(TestNet::PARTY_S, request_msg)
+        .unwrap();
+
+    assert!(t.is_send_to(&TestNet::PARTY_S, &answer_msg));
+}
+
+#[test]
+fn test_c_answer() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_S;
+    let mut t = TestNet::new(i, j);
+
+    let sig = t.u();
+    let answer_msg = Message {
+        tag: t.vcbc.tag.clone(),
+        action: Action::Answer(t.m(), sig),
+    };
+
+    t.vcbc
+        .receive_message(TestNet::PARTY_S, answer_msg)
+        .unwrap();
+
+    assert!(t.vcbc.is_delivered());
 }

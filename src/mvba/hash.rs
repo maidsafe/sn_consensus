@@ -1,11 +1,10 @@
-use std::fmt::Display;
-
 use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Display};
 use thiserror::Error;
 
 const HASH32_SIZE: usize = 32;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Hash32([u8; HASH32_SIZE]);
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -46,6 +45,16 @@ impl Hash32 {
 impl From<[u8; 32]> for Hash32 {
     fn from(val: [u8; 32]) -> Self {
         Self(val)
+    }
+}
+
+impl Debug for Hash32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for index in 0..4 {
+            f.write_str(&format!("{:02x}", self.0[index]))?;
+        }
+
+        Ok(())
     }
 }
 

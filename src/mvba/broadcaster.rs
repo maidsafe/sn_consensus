@@ -1,23 +1,20 @@
-use super::{bundle::Bundle, NodeId};
-use blsttc::SecretKeyShare;
+use super::{
+    bundle::{Bundle, Outgoing},
+    NodeId,
+};
 
 // Broadcaster holds information required to broadcast the messages.
+#[derive(Debug)]
 pub struct Broadcaster {
-    bundle_id: u32,
     self_id: NodeId,
-    _sec_key_share: SecretKeyShare, // TODO: SecretKeyShare or SecretKey?
-    broadcast_bundles: Vec<Bundle>,
-    send_bundles: Vec<(NodeId, Bundle)>,
+    outgoings: Vec<Outgoing>,
 }
 
 impl Broadcaster {
-    pub fn new(bundle_id: u32, self_id: NodeId, sec_key_share: SecretKeyShare) -> Self {
+    pub fn new(self_id: NodeId) -> Self {
         Self {
-            bundle_id,
             self_id,
-            _sec_key_share: sec_key_share,
-            broadcast_bundles: Vec::new(),
-            send_bundles: Vec::new(),
+            outgoings: Vec::new(),
         }
     }
 
@@ -25,59 +22,71 @@ impl Broadcaster {
         self.self_id
     }
 
-    pub fn send_to(&mut self, module: &str, message: Vec<u8>, recipient: NodeId) {
-        let bdl = Bundle {
-            id: self.bundle_id,
-            sender: self.self_id,
+    pub fn send_to(
+        &mut self,
+        module: &str,
+        target: Option<NodeId>,
+        payload: Vec<u8>,
+        recipient: NodeId,
+    ) {
+        let bdl = self.make_bundle(module, target, payload);
+        self.outgoings.push(Outgoing::Direct(recipient, bdl));
+    }
+
+    pub fn broadcast(&mut self, module: &str, target: Option<NodeId>, payload: Vec<u8>) {
+        let bdl = self.make_bundle(module, target, payload);
+        self.outgoings.push(Outgoing::Gossip(bdl));
+    }
+
+    fn make_bundle(&self, module: &str, target: Option<NodeId>, payload: Vec<u8>) -> Bundle {
+        Bundle {
+            initiator: self.self_id,
+            target,
             module: module.to_string(),
-            message,
-        };
-        self.send_bundles.push((recipient, bdl));
-    }
-
-    pub fn broadcast(&mut self, module: &str, message: Vec<u8>) {
-        let bdl = Bundle {
-            id: self.bundle_id,
-            sender: self.self_id,
-            module: module.to_string(),
-            message,
-        };
-        self.broadcast_bundles.push(bdl);
-    }
-
-    #[allow(dead_code)]
-    pub fn take_broadcast_bundles(&mut self) -> Vec<Vec<u8>> {
-        let mut data = Vec::with_capacity(self.broadcast_bundles.len());
-        for bdl in std::mem::take(&mut self.broadcast_bundles) {
-            data.push(bincode::serialize(&bdl).unwrap())
+            payload,
         }
-        data
     }
 
-    #[allow(dead_code)]
-    pub fn take_send_bundles(&mut self) -> Vec<(NodeId, Vec<u8>)> {
-        let mut data = Vec::with_capacity(self.send_bundles.len());
-        for (recipient, bdl) in std::mem::take(&mut self.send_bundles) {
-            data.push((recipient, bincode::serialize(&bdl).unwrap()))
+    pub fn take_outgoings(&mut self) -> Vec<Outgoing> {
+        std::mem::take(&mut self.outgoings)
+    }
+
+    #[allow(clippy::type_complexity)]
+    #[cfg(test)]
+    pub fn take_bundles(&mut self) -> (Vec<Vec<u8>>, Vec<(NodeId, Vec<u8>)>) {
+        let mut gossips = Vec::with_capacity(self.outgoings.len());
+        let mut directs = Vec::with_capacity(self.outgoings.len());
+
+        for out in std::mem::take(&mut self.outgoings) {
+            match out {
+                Outgoing::Gossip(bdl) => gossips.push(bincode::serialize(&bdl).unwrap()),
+                Outgoing::Direct(recipient, bdl) => {
+                    directs.push((recipient, bincode::serialize(&bdl).unwrap()))
+                }
+            }
         }
-        data
+        (gossips, directs)
     }
 
     #[cfg(test)]
-    pub fn has_broadcast_message(&self, msg: &[u8]) -> bool {
-        for bdl in &self.broadcast_bundles {
-            if bdl.message.eq(&msg) {
-                return true;
+    pub fn has_gossip_message(&self, pld: &[u8]) -> bool {
+        for out in &self.outgoings {
+            if let Outgoing::Gossip(bdl) = out {
+                if bdl.payload.eq(&pld) {
+                    return true;
+                }
             }
         }
         false
     }
 
     #[cfg(test)]
-    pub fn has_send_message(&self, to: &NodeId, msg: &[u8]) -> bool {
-        for (receiver, bdl) in &self.send_bundles {
-            if bdl.message.eq(&msg) {
-                return receiver == to;
+    pub fn has_direct_message(&self, to: &NodeId, pld: &[u8]) -> bool {
+        for out in &self.outgoings {
+            if let Outgoing::Direct(recipient, bdl) = out {
+                if bdl.payload == pld && recipient == to {
+                    return true;
+                }
             }
         }
         false

@@ -1,10 +1,22 @@
 use super::NodeId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+/// Bundle is a wrapper around the actual message
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bundle {
-    pub id: u32,
-    pub sender: NodeId,
-    pub module: String,   // TODO: use enum
-    pub message: Vec<u8>, // TODO: use enum
+    /// This is the initiator node and in the most cases is same as `i` in specs.
+    pub initiator: NodeId,
+    /// This is the target node and in the most cases is same as `j` in specs.
+    pub target: Option<NodeId>,
+    /// This is the destination  module, it can be ABBA, VCBC or MVBA.
+    pub module: String,
+    /// This is the actual message
+    pub payload: Vec<u8>,
+}
+
+/// Ongoing messages definition
+#[derive(Debug)]
+pub enum Outgoing {
+    Gossip(Bundle),
+    Direct(NodeId, Bundle),
 }

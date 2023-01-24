@@ -1,6 +1,8 @@
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
+use crate::mvba::{hash::Hash32, NodeId};
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Value {
     One,
@@ -25,11 +27,12 @@ impl MainVoteValue {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PreVoteJustification {
-    // Round one, without the justification. The initial value should set to zero
+    // Round one without the justification. The initial value should set to zero
     FirstRoundZero,
-    // Round one, with the justification. The initial value should set to one
-    // The justification is `c-final` message of the VCBC protocol.
-    FirstRoundOne(crate::mvba::vcbc::message::Message),
+    // with the weak validity. The initial value should set to one
+    // The justification is a `c-final` signature of the VCBC protocol for this tuple:
+    // `(id, proposer, 0, "c-ready", digest)`
+    WithValidity(Hash32, Signature),
     // In Round r > 1, justification is either hard,...
     Hard(Signature),
     // ... or soft (refer to the spec)
@@ -63,7 +66,7 @@ pub struct MainVoteAction {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct DecisionAction {
     pub round: usize,
-    pub value: MainVoteValue,
+    pub value: Value,
     pub sig: Signature,
 }
 
@@ -76,7 +79,8 @@ pub enum Action {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub id: String,
+    pub id: String,       // this is same as $id$ in spec
+    pub proposer: NodeId, // this is same as $j$ or $a$ in spec
     pub action: Action,
 }
 
