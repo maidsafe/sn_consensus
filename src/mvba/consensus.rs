@@ -104,7 +104,7 @@ impl Consensus {
                     Some(vcbc) => {
                         let msg = bincode::deserialize(&bundle.payload)?;
                         vcbc.receive_message(bundle.initiator, msg)?;
-                        if vcbc.is_delivered() {
+                        if let Some((proposal, sig)) = vcbc.read_delivered() {
                             // Check if we have agreed on this proposal before.
                             //    There might be a situation that we receive the agreement
                             //    before receiving the actual proposal.
@@ -117,7 +117,6 @@ impl Consensus {
                                 }
                             }
 
-                            let (proposal, sig) = vcbc.delivered_message();
                             self.mvba.set_proposal(target, proposal, sig)?;
                         }
                     }
@@ -136,7 +135,7 @@ impl Consensus {
                         if let Some(decided_value) = abba.decided_value() {
                             if decided_value {
                                 let vcbc = self.vcbc_map.get_mut(&target).unwrap();
-                                if vcbc.is_delivered() {
+                                if vcbc.read_delivered().is_some() {
                                     // We re done! We have both proposal and agreement
                                     log::info!("halted. proposer: {target}");
                                     self.decided_party = Some(target);

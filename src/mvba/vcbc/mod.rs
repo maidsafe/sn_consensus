@@ -281,23 +281,9 @@ impl Vcbc {
         Ok(())
     }
 
-    pub fn is_delivered(&self) -> bool {
-        self.u_bar.is_some()
-    }
-
-    pub fn delivered_message(&self) -> (Proposal, Signature) {
-        debug_assert!(self.u_bar.is_some(), "message should be delivered");
-
-        (
-            self.m_bar.as_ref().unwrap().clone(),
-            self.u_bar.as_ref().unwrap().clone(),
-        )
-    }
-
-    #[cfg(test)]
-    fn read_delivered(&self) -> Option<(Vec<u8>, Signature)> {
-        if let (Some(m), Some(u)) = (&self.m_bar, &self.u_bar) {
-            Some((m.clone(), u.clone()))
+    pub fn read_delivered(&self) -> Option<(Proposal, Signature)> {
+        if let (Some(proposal), Some(sig)) = (self.m_bar.clone(), self.u_bar.clone()) {
+            Some((proposal, sig))
         } else {
             None
         }
