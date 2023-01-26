@@ -292,6 +292,8 @@ impl Vcbc {
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
     fn send_to(&mut self, msg: self::Message, to: NodeId) -> Result<()> {
+        log::debug!("sending {msg:?} from {} to {}", self.i, to);
+
         let data = bincode::serialize(&msg)?;
         if to == self.i {
             self.receive_message(self.i, msg)?;
@@ -306,6 +308,8 @@ impl Vcbc {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, msg: self::Message) -> Result<()> {
+        log::debug!("broadcasting {msg:?} from {}", self.i);
+
         let data = bincode::serialize(&msg)?;
         self.broadcaster
             .borrow_mut()

@@ -322,6 +322,124 @@ fn test_pre_vote_round_1_invalid_value_zero() {
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
     if msg == "initial value should be zero"));
 }
+#[test]
+fn test_prevent_double_pre_vote() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_B;
+    let mut t = TestNet::new(i, j);
+
+    // -- round 1
+    // First we don't have the proposal, so we pre-vote for zero
+    t.abba.pre_vote_zero().unwrap();
+
+    let round_1_pre_vote_x = t.make_pre_vote_msg(
+        1,
+        Value::Zero,
+        &PreVoteJustification::FirstRoundZero,
+        &TestNet::PARTY_X,
+    );
+    assert!(t.is_broadcasted(&round_1_pre_vote_x));
+
+    let round_1_pre_vote_y = t.make_pre_vote_msg(
+        1,
+        Value::Zero,
+        &PreVoteJustification::FirstRoundZero,
+        &TestNet::PARTY_Y,
+    );
+
+    let round_1_pre_vote_s = t.make_pre_vote_msg(
+        1,
+        Value::Zero,
+        &PreVoteJustification::FirstRoundZero,
+        &TestNet::PARTY_S,
+    );
+
+    t.abba
+        .receive_message(TestNet::PARTY_Y, round_1_pre_vote_y)
+        .unwrap();
+    t.abba
+        .receive_message(TestNet::PARTY_S, round_1_pre_vote_s)
+        .unwrap();
+
+    let sign_bytes = t.abba.pre_vote_bytes_to_sign(1, &Value::Zero).unwrap();
+    let round_1_just_sig = t.sec_key_set.secret_key().sign(sign_bytes);
+    let round_1_main_vote_just_no_abstain = MainVoteJustification::NoAbstain(round_1_just_sig.clone());
+
+    let round_1_main_vote_x = t.make_main_vote_msg(
+        1,
+        MainVoteValue::zero(),
+        &round_1_main_vote_just_no_abstain,
+        &TestNet::PARTY_X,
+    );
+    assert!(t.is_broadcasted(&round_1_main_vote_x));
+
+    // Other parties, receive the proposal, therefore they main-vote for abstain
+    let weak_validity_just =
+        PreVoteJustification::WithValidity(t.proposal_digest, t.proposal_sig.clone());
+    let round_1_main_vote_just_abstain = MainVoteJustification::Abstain(
+        Box::new(PreVoteJustification::FirstRoundZero),
+        Box::new(weak_validity_just.clone()),
+    );
+
+    let round_1_main_vote_y = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Abstain,
+        &round_1_main_vote_just_abstain,
+        &TestNet::PARTY_Y,
+    );
+    let round_1_main_vote_s = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Abstain,
+        &round_1_main_vote_just_abstain,
+        &TestNet::PARTY_S,
+    );
+
+    t.abba
+        .receive_message(TestNet::PARTY_Y, round_1_main_vote_y)
+        .unwrap();
+    t.abba
+        .receive_message(TestNet::PARTY_S, round_1_main_vote_s)
+        .unwrap();
+
+    // -- round 1
+    // Still we don't have the proposal, again pre-vote for zero
+    let round_2_pre_vote_x = t.make_pre_vote_msg(
+        2,
+        Value::Zero,
+        &PreVoteJustification::Hard(round_1_just_sig),
+        &TestNet::PARTY_X,
+    );
+    assert!(t.is_broadcasted(&round_2_pre_vote_x));
+
+    // Now we pre-votes from other parties with the weak validity info
+    assert!(t.abba.weak_validity.is_none());
+
+    let pre_vote_just =
+        PreVoteJustification::WithValidity(t.proposal_digest, t.proposal_sig.clone());
+    let pre_vote_b = t.make_pre_vote_msg(2, Value::One, &pre_vote_just, &TestNet::PARTY_B);
+
+    t.abba
+        .receive_message(TestNet::PARTY_B, pre_vote_b)
+        .unwrap();
+
+    assert!(t.abba.weak_validity.is_some());
+
+    let round_1_main_vote_b = t.make_main_vote_msg(
+        1,
+        MainVoteValue::Abstain,
+        &round_1_main_vote_just_abstain,
+        &TestNet::PARTY_B,
+    );
+
+    // t.abba
+    //     .receive_message(TestNet::PARTY_B, round_1_main_vote_b)
+    //     .unwrap();
+
+    // let round_1_main_vote_just = MainVoteJustification::Abstain(
+    //     Box::new(round_1_just_0),
+    //     Box::new(weak_validity_just.clone()),
+    // );
+}
 
 #[test]
 fn test_normal_case_one_round() {

@@ -259,24 +259,22 @@ mod tests {
             .filter_level(log::LevelFilter::Debug)
             .try_init();
 
-        use rand::SeedableRng;
-        let mut seed_buf = [0u8; 32];
-        seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
-        let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
+        for test_id in 0..10000 {
+            log::info!("--- starting test {test_id}");
+            let mut net = TestNet::new();
+            let mut rng = thread_rng();
 
-        let mut net = TestNet::new();
+            for c in &mut net.cons {
+                let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+                let mut msgs = c.propose(proposal).unwrap();
+                net.buffer.append(&mut msgs);
+            }
 
-        for c in &mut net.cons {
-            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
-            let mut msgs = c.propose(proposal).unwrap();
-            net.buffer.append(&mut msgs);
-        }
-
-        while !net.buffer.is_empty() {
-            let rand_index = rng.gen_range(0..net.buffer.len());
-            let rand_msg = &net.buffer.remove(rand_index);
-            let mut msgs = Vec::new();
-            log::debug!("random message: {:?}", rand_msg);
+            loop {
+                let rand_index = rng.gen_range(0..net.buffer.len());
+                let rand_msg = &net.buffer.remove(rand_index);
+                let mut msgs = Vec::new();
+                log::debug!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {

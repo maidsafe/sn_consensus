@@ -59,7 +59,7 @@ impl Mvba {
         debug_assert!(self.parties.contains(&proposer));
 
         let digest = Hash32::calculate(&proposal);
-        let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &proposer, &digest).unwrap();
+        let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &proposer, &digest)?;
         if !self.pub_key_set.public_key().verify(&signature, sign_bytes) {
             return Err(Error::InvalidMessage(
                 "proposal with an invalid proof".to_string(),
@@ -151,6 +151,12 @@ impl Mvba {
             // If a v-vote from Pj indicates 1 but Pi has not yet received Pa ’s proposal,
             // ignore the vote and ask Pj to supply Pa ’s proposal
             // (by sending it the message (ID|vcbc.a.0, c-request)).
+
+            log::debug!(
+                "requesting proposal from {} to {}",
+                self.i,
+                msg.vote.proposer,
+            );
             let data = vcbc::make_c_request_message(&self.id, msg.vote.proposer)?;
 
             self.broadcaster.borrow_mut().send_to(
@@ -251,6 +257,8 @@ impl Mvba {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, vote: Vote) -> Result<()> {
+        log::debug!("broadcasting {vote:?} from {}", self.i);
+
         let sign_bytes = bincode::serialize(&vote)?;
         let sig = self.sec_key_share.sign(sign_bytes);
         let msg = Message {
