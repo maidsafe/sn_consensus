@@ -97,6 +97,11 @@ impl Abba {
 
     // receive_message process the received message 'msg` from `initiator`
     pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
+        if self.decided_value.is_some() {
+            // ignore the incoming messages if we have decided
+            return Ok(());
+        }
+
         log::debug!(
             "received {} message: {:?} from {}",
             msg.action_str(),
@@ -559,7 +564,7 @@ impl Abba {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, action: Action) -> Result<()> {
-        log::debug!("broadcasting {action:?}");
+        log::debug!("broadcasting {action:?} from {}", self.i);
 
         let msg = Message {
             id: self.id.clone(),
