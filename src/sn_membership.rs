@@ -121,9 +121,7 @@ impl<T: Proposition> Membership<T> {
             let decision = if let Some(decision) = consensus.decision.as_ref() {
                 decision
             } else {
-                panic!(
-                    "historical consensus entry without decision {history_gen}: {consensus:?}"
-                );
+                panic!("historical consensus entry without decision {history_gen}: {consensus:?}");
             };
 
             for (reconfig, _sig) in decision.proposals.iter() {
