@@ -368,8 +368,7 @@ impl Abba {
                 if let Some(exist) = pre_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
-                            "double pre-vote detected from {:?}",
-                            initiator
+                            "double pre-vote detected from {initiator:?}"
                         )));
                     }
                     return Ok(false);
@@ -382,8 +381,7 @@ impl Abba {
                 if let Some(exist) = main_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
-                            "double main-vote detected from {:?}",
-                            initiator
+                            "double main-vote detected from {initiator:?}"
                         )));
                     }
                     return Ok(false);

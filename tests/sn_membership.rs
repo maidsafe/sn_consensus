@@ -146,7 +146,7 @@ fn test_membership_split_vote() -> Result<()> {
 
         assert!(net.packets.is_empty());
 
-        net.generate_msc(&format!("split_vote_{}.msc", nprocs))?;
+        net.generate_msc(&format!("split_vote_{nprocs}.msc"))?;
 
         let expected_members = net.procs[0].members(1)?;
         assert_ne!(expected_members.len(), 0);
@@ -180,7 +180,7 @@ fn test_membership_round_robin_split_vote() -> Result<()> {
             }
         }
 
-        net.generate_msc(&format!("round_robin_split_vote_{}.msc", nprocs))?;
+        net.generate_msc(&format!("round_robin_split_vote_{nprocs}.msc"))?;
 
         let proc_0_gen = net.procs[0].gen;
         let expected_members = net.procs[0].members(proc_0_gen)?;
@@ -280,7 +280,7 @@ impl Arbitrary for Instruction {
             1 => Instruction::RequestLeave(member, elder),
             2 => Instruction::DeliverPacketFromSource(elder),
             3 => Instruction::AntiEntropy(gen, elder, other_elder),
-            i => panic!("unexpected instruction index {}", i),
+            i => panic!("unexpected instruction index {i}"),
         }
     }
 
@@ -505,8 +505,7 @@ fn test_membership_interpreter_qc4() -> Result<()> {
             assert_eq!(
                 first.members(first.gen)?,
                 proc.members(proc.gen)?,
-                "gen: {}",
-                gen
+                "gen: {gen}"
             );
         }
     }
@@ -1206,8 +1205,7 @@ fn test_membership_ensure_we_are_validating_super_majority_proposals() -> Result
             assert_eq!(
                 first.members(first.gen)?,
                 proc.members(proc.gen)?,
-                "gen: {}",
-                gen
+                "gen: {gen}"
             );
         }
     }
@@ -1271,7 +1269,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                     }
                     Err(err) => {
                         // invalid request.
-                        panic!("Failure to reconfig is not handled yet: {:?}", err);
+                        panic!("Failure to reconfig is not handled yet: {err:?}");
                     }
                 }
             }
@@ -1304,7 +1302,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
                     }
                     Err(err) => {
                         // invalid request.
-                        panic!("Leave Failure is not handled yet: {:?}", err);
+                        panic!("Leave Failure is not handled yet: {err:?}");
                     }
                 }
             }
@@ -1353,8 +1351,7 @@ fn prop_interpreter(n: u8, instructions: Vec<Instruction>, seed: u128) -> eyre::
             assert_eq!(
                 first.members(first.gen)?,
                 proc.members(proc.gen)?,
-                "gen: {}",
-                gen
+                "gen: {gen}"
             );
         }
     }
