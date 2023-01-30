@@ -201,53 +201,63 @@ impl Abba {
                             return Ok(());
                         }
 
-                        let (value, justification) =
-                            if let Some((digest, sig)) = &self.weak_validity {
-                                // if all honest parties start with 0, they may still
-                                // decide on 1 if they obtain the corresponding validating data
-                                //  for 1 during the agreement protocol
-
-                                (
-                                    Value::One,
-                                    PreVoteJustification::WithValidity(*digest, sig.clone()),
-                                )
-                            } else if let Some((_, zero_vote)) = zero_votes.next() {
-                                // if there is a main-vote for 0,
-                                let sig =
-                                    match &zero_vote.justification {
-                                        MainVoteJustification::NoAbstain(sig) => sig,
-                                        _ => return Err(Error::Generic(
-                                            "protocol violated, invalid main-vote justification"
-                                                .to_string(),
-                                        )),
-                                    };
-                                // hard pre-vote for 0
-                                (Value::Zero, PreVoteJustification::Hard(sig.clone()))
-                            } else if let Some((_, one_vote)) = one_votes.next() {
-                                // if there is a main-vote for 1,
-                                let sig =
-                                    match &one_vote.justification {
-                                        MainVoteJustification::NoAbstain(sig) => sig,
-                                        _ => return Err(Error::Generic(
-                                            "protocol violated, invalid main-vote justification"
-                                                .to_string(),
-                                        )),
-                                    };
-                                // hard pre-vote for 1
-                                (Value::One, PreVoteJustification::Hard(sig.clone()))
-                            } else if abstain_votes.clone().count() == main_votes.len() {
-                                // if all main-votes are abstain,
-                                let sig_share: HashMap<&NodeId, &SignatureShare> =
-                                    abstain_votes.map(|(n, a)| (n, &a.sig_share)).collect();
-                                let sig = self.pub_key_set.combine_signatures(sig_share)?;
-                                // soft pre-vote for 1
-                                // Coin value bias to 1 in weaker validity mode.
-                                (Value::One, PreVoteJustification::Soft(sig))
-                            } else {
-                                return Err(Error::Generic(
-                                    "protocol violated, no pre-vote majority".to_string(),
-                                ));
+                        let (value, justification) = if let Some((digest, sig)) =
+                            &self.weak_validity
+                        {
+                            if let Some(v) = self.get_pre_votes_by_round(self.r) {
+                                if v.contains_key(&self.i) {
+                                    log::debug!("we obtained the corresponding validating data after voting for zero");
+                                    return Ok(());
+                                }
                             };
+
+                            // if all honest parties start with 0, they may still
+                            // decide on 1 if they obtain the corresponding validating data
+                            //  for 1 during the agreement protocol
+
+                            (
+                                Value::One,
+                                PreVoteJustification::WithValidity(*digest, sig.clone()),
+                            )
+                        } else if let Some((_, zero_vote)) = zero_votes.next() {
+                            // if there is a main-vote for 0,
+                            let sig = match &zero_vote.justification {
+                                MainVoteJustification::NoAbstain(sig) => sig,
+                                _ => {
+                                    return Err(Error::Generic(
+                                        "protocol violated, invalid main-vote justification"
+                                            .to_string(),
+                                    ))
+                                }
+                            };
+                            // hard pre-vote for 0
+                            (Value::Zero, PreVoteJustification::Hard(sig.clone()))
+                        } else if let Some((_, one_vote)) = one_votes.next() {
+                            // if there is a main-vote for 1,
+                            let sig = match &one_vote.justification {
+                                MainVoteJustification::NoAbstain(sig) => sig,
+                                _ => {
+                                    return Err(Error::Generic(
+                                        "protocol violated, invalid main-vote justification"
+                                            .to_string(),
+                                    ))
+                                }
+                            };
+                            // hard pre-vote for 1
+                            (Value::One, PreVoteJustification::Hard(sig.clone()))
+                        } else if abstain_votes.clone().count() == main_votes.len() {
+                            // if all main-votes are abstain,
+                            let sig_share: HashMap<&NodeId, &SignatureShare> =
+                                abstain_votes.map(|(n, a)| (n, &a.sig_share)).collect();
+                            let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                            // soft pre-vote for 1
+                            // Coin value bias to 1 in weaker validity mode.
+                            (Value::One, PreVoteJustification::Soft(sig))
+                        } else {
+                            return Err(Error::Generic(
+                                "protocol violated, no pre-vote majority".to_string(),
+                            ));
+                        };
 
                         // Produce an S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
