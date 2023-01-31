@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::mvba::{hash::Hash32, NodeId, Proposal};
 use blsttc::{Signature, SignatureShare};
 
@@ -6,6 +8,12 @@ pub struct Tag {
     pub domain: String,   // this is same as $id$ in spec
     pub proposer: NodeId, // this is same as $j$ in spec
     pub s: usize,         // this is same as $s$ in spec
+}
+
+impl Display for Tag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.domain, self.proposer, self.s)
+    }
 }
 
 impl Tag {

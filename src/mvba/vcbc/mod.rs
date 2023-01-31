@@ -68,17 +68,14 @@ fn try_insert(map: &mut HashMap<NodeId, Message>, k: NodeId, v: Message) -> Resu
 
 impl Vcbc {
     pub fn new(
-        id: String,
+        tag: Tag,
         self_id: NodeId,
-        proposer: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         message_validity: MessageValidity,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         debug_assert_eq!(self_id, broadcaster.borrow().self_id());
-
-        let tag = Tag::new(&id, proposer, 0);
 
         Self {
             tag,

@@ -31,10 +31,9 @@ impl TestNet {
     const PARTY_S: NodeId = 3;
 
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
-    // The ABBA test instance creates for party `i`, `ID` sets to `test-id`
+    // The ABBA test instance created for party `i`, `Tag` set to `test-domain.j.0`
     pub fn new(i: NodeId, j: NodeId) -> Self {
-        let domain = "test-id".to_string();
-        let tag = Tag::new(&domain, j, 0);
+        let tag = Tag::new("test-domain", j, 0);
 
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
@@ -46,9 +45,8 @@ impl TestNet {
 
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
         let abba = Abba::new(
-            domain,
+            tag,
             i,
-            j,
             sec_key_set.public_keys(),
             sec_key_share,
             broadcaster.clone(),
@@ -73,8 +71,8 @@ impl TestNet {
         let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
-            id: self.abba.id.clone(),
-            proposer: self.abba.j,
+            id: self.abba.tag.domain.clone(),
+            proposer: self.abba.tag.proposer,
             action: Action::PreVote(PreVoteAction {
                 round,
                 value,
@@ -94,8 +92,8 @@ impl TestNet {
         let sign_bytes = self.abba.main_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
-            id: self.abba.id.clone(),
-            proposer: self.abba.j,
+            id: self.abba.tag.domain.clone(),
+            proposer: self.abba.tag.proposer,
             action: Action::MainVote(MainVoteAction {
                 round,
                 value,
@@ -174,18 +172,23 @@ fn test_should_publish_main_vote_message() {
 }
 
 #[test]
-fn test_ignore_messages_with_wrong_id() {
+fn test_ignore_messages_with_wrong_domain() {
     let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
 
     let just = PreVoteJustification::WithValidity(t.proposal_digest, t.proposal_sig.clone());
     let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
-    pre_vote_x.id = "another-id".to_string();
+    pre_vote_x.id = "another-domain".to_string();
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid ID. expected: {}, got another-id", t.abba.id)));
+    match result {
+        Err(Error::InvalidMessage(msg)) => assert_eq!(
+            msg,
+            "invalid domain. expected: test-domain, got another-domain",
+        ),
+        other => panic!("Expected invalid message, got: {other:?}"),
+    }
 }
 
 #[test]
@@ -200,7 +203,7 @@ fn test_ignore_messages_with_wrong_proposer() {
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid proposer. expected: {}, got 2", t.abba.j)));
+        if msg == format!("invalid proposer. expected: {}, got 2", t.abba.tag.proposer)));
 }
 
 #[test]
@@ -209,8 +212,8 @@ fn test_absent_main_vote_round_one_invalid_justification() {
     let j = TestNet::PARTY_B;
     let mut t = TestNet::new(i, j);
 
-    let tag = Tag::new(&t.abba.id, t.abba.j, 0);
-    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &t.proposal_digest).unwrap();
+    let sign_bytes =
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.abba.tag, &t.proposal_digest).unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
 
     let just_0 = PreVoteJustification::FirstRoundZero;
@@ -236,8 +239,8 @@ fn test_pre_vote_invalid_sig_share() {
         .secret_key_share(TestNet::PARTY_B)
         .sign("invalid-msg");
     let msg = Message {
-        id: t.abba.id.clone(),
-        proposer: t.abba.j,
+        id: t.abba.tag.domain.clone(),
+        proposer: t.abba.tag.proposer,
         action: Action::PreVote(PreVoteAction {
             round: 1,
             justification: just,
@@ -284,8 +287,8 @@ fn test_pre_vote_round_1_invalid_c_final_signature() {
     let j = TestNet::PARTY_B;
     let mut t = TestNet::new(i, j);
 
-    let tag = Tag::new(&t.abba.id, t.abba.j, 0);
-    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &t.proposal_digest).unwrap();
+    let sign_bytes =
+        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.abba.tag, &t.proposal_digest).unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
 
     let just = PreVoteJustification::WithValidity(t.proposal_digest, invalid_sig);
@@ -853,7 +856,7 @@ fn test_three_rounds() {
 }
 
 struct Net {
-    id: String,
+    tag: Tag,
     secret_key_set: SecretKeySet,
     nodes: BTreeMap<NodeId, Abba>,
     queue: BTreeMap<NodeId, Vec<Bundle>>,
@@ -870,15 +873,14 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let id = "test-id".to_string();
+        let tag = Tag::new("test-domain", proposer, 0);
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
             let key_share = secret_key_set.secret_key_share(node_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(node_id)));
             let vcbc = Abba::new(
-                id.clone(),
+                tag.clone(),
                 node_id,
-                proposer,
                 public_key_set.clone(),
                 key_share,
                 broadcaster,
@@ -887,7 +889,7 @@ impl Net {
         }));
 
         Net {
-            id,
+            tag,
             secret_key_set,
             nodes,
             queue: Default::default(),
@@ -966,9 +968,8 @@ fn test_net_happy_path() {
     let proposer = 1;
     let mut net = Net::new(4, proposer);
 
-    let tag = Tag::new(&net.id, proposer, 0);
     let proposal_digest = Hash32::calculate("test-data".as_bytes());
-    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &proposal_digest).unwrap();
+    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&net.tag, &proposal_digest).unwrap();
     let proposal_sig = net.secret_key_set.secret_key().sign(sign_bytes);
 
     // All nodes pre-vote one

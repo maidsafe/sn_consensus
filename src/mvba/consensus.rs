@@ -38,10 +38,10 @@ impl Consensus {
         let mut vcbc_map = HashMap::new();
 
         for party in &parties {
+            let tag = Tag::new(&domain, *party, 0);
             let vcbc = Vcbc::new(
-                domain.clone(),
+                tag.clone(),
                 self_id,
-                *party,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 message_validity,
@@ -50,9 +50,8 @@ impl Consensus {
             vcbc_map.insert(*party, vcbc);
 
             let abba = Abba::new(
-                domain.clone(),
+                tag,
                 self_id,
-                *party,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),

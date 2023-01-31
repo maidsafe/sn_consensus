@@ -44,10 +44,10 @@ impl Net {
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
             let key_share = secret_key_set.secret_key_share(self_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(self_id)));
+            let tag = Tag::new(&domain, proposer, 0);
             let vcbc = Vcbc::new(
-                domain.clone(),
+                tag,
                 self_id,
-                proposer,
                 public_key_set.clone(),
                 key_share,
                 valid_proposal,
@@ -243,15 +243,14 @@ impl TestNet {
     // The VCBC test instance creates for party `i` with `ID` sets to `test-id`
     // and `s` sets to `0`.
     pub fn new(i: NodeId, j: NodeId) -> Self {
-        let id = "test-id".to_string();
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
+        let tag = Tag::new("test-domain", j, 0);
         let vcbc = Vcbc::new(
-            id,
+            tag,
             i,
-            j,
             sec_key_set.public_keys(),
             sec_key_share,
             valid_proposal,
