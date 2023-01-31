@@ -406,17 +406,10 @@ impl Abba {
     }
 
     fn check_message(&self, initiator: &NodeId, msg: &Message) -> Result<()> {
-        if msg.id != self.tag.domain {
+        if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid domain. expected: {}, got {}",
-                self.tag.domain, msg.id
-            )));
-        }
-
-        if msg.proposer != self.tag.proposer {
-            return Err(Error::InvalidMessage(format!(
-                "invalid proposer. expected: {}, got {}",
-                self.tag.proposer, msg.proposer
+                "invalid tag. expected: {}, got {}",
+                self.tag, msg.tag
             )));
         }
 
@@ -585,8 +578,7 @@ impl Abba {
         log::debug!("party {} broadcasts {action:?}", self.i);
 
         let msg = Message {
-            id: self.tag.domain.clone(),
-            proposer: self.tag.proposer,
+            tag: self.tag.clone(),
             action,
         };
         let data = bincode::serialize(&msg)?;

@@ -71,8 +71,7 @@ impl TestNet {
         let sign_bytes = self.abba.pre_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
-            id: self.abba.tag.domain.clone(),
-            proposer: self.abba.tag.proposer,
+            tag: self.abba.tag.clone(),
             action: Action::PreVote(PreVoteAction {
                 round,
                 value,
@@ -92,8 +91,7 @@ impl TestNet {
         let sign_bytes = self.abba.main_vote_bytes_to_sign(round, &value).unwrap();
         let sig_share = self.sec_key_set.secret_key_share(peer_id).sign(sign_bytes);
         Message {
-            id: self.abba.tag.domain.clone(),
-            proposer: self.abba.tag.proposer,
+            tag: self.abba.tag.clone(),
             action: Action::MainVote(MainVoteAction {
                 round,
                 value,
@@ -179,13 +177,13 @@ fn test_ignore_messages_with_wrong_domain() {
 
     let just = PreVoteJustification::WithValidity(t.proposal_digest, t.proposal_sig.clone());
     let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
-    pre_vote_x.id = "another-domain".to_string();
+    pre_vote_x.tag.domain = "another-domain".to_string();
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
     match result {
         Err(Error::InvalidMessage(msg)) => assert_eq!(
             msg,
-            "invalid domain. expected: test-domain, got another-domain",
+            format!("invalid tag. expected: test-domain.{j}.0, got another-domain.{j}.0"),
         ),
         other => panic!("Expected invalid message, got: {other:?}"),
     }
@@ -199,11 +197,11 @@ fn test_ignore_messages_with_wrong_proposer() {
 
     let just = PreVoteJustification::WithValidity(t.proposal_digest, t.proposal_sig.clone());
     let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
-    pre_vote_x.proposer = TestNet::PARTY_B;
+    pre_vote_x.tag.proposer = TestNet::PARTY_B;
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid proposer. expected: {}, got 2", t.abba.tag.proposer)));
+        if msg == format!("invalid tag. expected: test-domain.{j}.0, got test-domain.2.0")));
 }
 
 #[test]
@@ -239,8 +237,7 @@ fn test_pre_vote_invalid_sig_share() {
         .secret_key_share(TestNet::PARTY_B)
         .sign("invalid-msg");
     let msg = Message {
-        id: t.abba.tag.domain.clone(),
-        proposer: t.abba.tag.proposer,
+        tag: t.abba.tag.clone(),
         action: Action::PreVote(PreVoteAction {
             round: 1,
             justification: just,
