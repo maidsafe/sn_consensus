@@ -5,7 +5,7 @@ use super::{
     error::Result,
     hash::Hash32,
     mvba::{self, Mvba},
-    vcbc::{self},
+    vcbc::{self, message::Tag},
     Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
@@ -144,7 +144,8 @@ impl Consensus {
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
-                                    let data = vcbc::make_c_request_message(&self.domain, target)?;
+                                    let tag = Tag::new(&self.domain, target, 0);
+                                    let data = vcbc::make_c_request_message(tag)?;
 
                                     self.broadcaster.borrow_mut().broadcast(
                                         vcbc::MODULE_NAME,

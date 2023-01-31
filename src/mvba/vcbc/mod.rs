@@ -18,16 +18,9 @@ pub(crate) const MODULE_NAME: &str = "vcbc";
 
 // make_c_request_message creates the payload message to request a proposal
 // from the the proposer
-pub fn make_c_request_message(
-    domain: &str,
-    proposer: NodeId,
-) -> std::result::Result<Vec<u8>, bincode::Error> {
+pub fn make_c_request_message(tag: Tag) -> std::result::Result<Vec<u8>, bincode::Error> {
     let msg = Message {
-        tag: Tag {
-            domain: domain.to_string(),
-            proposer,
-            s: 0,
-        },
+        tag,
         action: Action::Request,
     };
     bincode::serialize(&msg)

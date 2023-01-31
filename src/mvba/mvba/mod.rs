@@ -164,7 +164,8 @@ impl Mvba {
                 self.i,
                 msg.vote.proposer,
             );
-            let data = vcbc::make_c_request_message(&self.id, msg.vote.proposer)?;
+            let tag = Tag::new(&self.id, msg.vote.proposer, 0); // TODO: should this vote.proposer be self.j?
+            let data = vcbc::make_c_request_message(tag)?;
 
             self.broadcaster.borrow_mut().send_to(
                 vcbc::MODULE_NAME,

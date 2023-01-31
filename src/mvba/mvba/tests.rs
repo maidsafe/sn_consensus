@@ -287,7 +287,8 @@ fn test_request_proposal() {
 
     t.mvba.receive_message(msg_x).unwrap();
 
-    let data = vcbc::make_c_request_message(&t.mvba.id, TestNet::PARTY_X).unwrap();
+    let tag = Tag::new(t.mvba.id, TestNet::PARTY_X, 0);
+    let data = vcbc::make_c_request_message(tag).unwrap();
 
     assert!(t
         .broadcaster
