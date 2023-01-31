@@ -21,7 +21,7 @@ fn invalid_proposal(_: NodeId, _: &Proposal) -> bool {
 }
 
 struct Net {
-    id: String,
+    domain: String,
     secret_key_set: SecretKeySet,
     nodes: BTreeMap<NodeId, Vcbc>,
     queue: BTreeMap<NodeId, Vec<Bundle>>,
@@ -39,13 +39,13 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let id = "testing-vcbc".to_string();
+        let domain = "testing-vcbc".to_string();
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
             let key_share = secret_key_set.secret_key_share(self_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(self_id)));
             let vcbc = Vcbc::new(
-                id.clone(),
+                domain.clone(),
                 self_id,
                 proposer,
                 public_key_set.clone(),
@@ -57,7 +57,7 @@ impl Net {
         }));
 
         Net {
-            id,
+            domain,
             secret_key_set,
             nodes,
             queue: Default::default(),
@@ -149,9 +149,12 @@ fn test_vcbc_happy_path() {
 
     // And check that all nodes have delivered the expected value and signature
 
-    let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate("HAPPY-PATH-VALUE"))
-            .expect("Failed to serialize");
+    let expected_bytes_to_sign: Vec<u8> = c_ready_bytes_to_sign(
+        &net.domain,
+        &proposer,
+        &Hash32::calculate("HAPPY-PATH-VALUE"),
+    )
+    .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
@@ -193,7 +196,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
     // And finally, check that all nodes have delivered the expected value and signature
 
     let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate(&proposal))
+        c_ready_bytes_to_sign(&net.domain, &proposer, &Hash32::calculate(&proposal))
             .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
@@ -213,7 +216,7 @@ fn test_ignore_messages_with_invalid_tag() {
     let mut t = TestNet::new(i, j);
 
     let mut final_msg = t.make_final_msg(&t.d());
-    final_msg.tag.id = "another-id".to_string();
+    final_msg.tag.domain = "another-domain".to_string();
 
     let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg.clone());
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
@@ -315,13 +318,14 @@ impl TestNet {
     // u is same as final signature
     pub fn u(&self) -> Signature {
         let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.proposer, &self.d()).unwrap();
+            c_ready_bytes_to_sign(&self.vcbc.tag.domain, &self.vcbc.tag.proposer, &self.d())
+                .unwrap();
         self.sec_key_set.secret_key().sign(sign_bytes)
     }
 
     fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
         let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.proposer, digest).unwrap();
+            c_ready_bytes_to_sign(&self.vcbc.tag.domain, &self.vcbc.tag.proposer, digest).unwrap();
         let sec_key_share = self.sec_key_set.secret_key_share(id);
 
         sec_key_share.sign(sign_bytes)

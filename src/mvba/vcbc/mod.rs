@@ -19,12 +19,12 @@ pub(crate) const MODULE_NAME: &str = "vcbc";
 // make_c_request_message creates the payload message to request a proposal
 // from the the proposer
 pub fn make_c_request_message(
-    id: &str,
+    domain: &str,
     proposer: NodeId,
 ) -> std::result::Result<Vec<u8>, bincode::Error> {
     let msg = Message {
         tag: Tag {
-            id: id.to_string(),
+            domain: domain.to_string(),
             proposer,
             s: 0,
         },
@@ -37,11 +37,11 @@ pub fn make_c_request_message(
 // as a witness of receiving the message.
 // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec
 pub fn c_ready_bytes_to_sign(
-    id: &str,
+    domain: &str,
     proposer: &NodeId,
     digest: &Hash32,
 ) -> std::result::Result<Vec<u8>, bincode::Error> {
-    bincode::serialize(&(id, proposer, 0, "c-ready", digest))
+    bincode::serialize(&(domain, proposer, 0, "c-ready", digest))
 }
 
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
@@ -150,7 +150,8 @@ impl Vcbc {
                     self.d = Some(d);
 
                     // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
-                    let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.proposer, &d)?;
+                    let sign_bytes =
+                        c_ready_bytes_to_sign(&self.tag.domain, &self.tag.proposer, &d)?;
                     let s1 = self.sec_key_share.sign(sign_bytes);
 
                     let ready_msg = Message {
@@ -167,7 +168,7 @@ impl Vcbc {
                     Some(d) => d,
                     None => return Err(Error::Generic("protocol violated. no digest".to_string())),
                 };
-                let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.proposer, &d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag.domain, &self.tag.proposer, &d)?;
 
                 if d != msg_d {
                     log::warn!("party {} received c-ready with unknown digest. expected {d:?}, got {msg_d:?}", self.i);
@@ -234,7 +235,7 @@ impl Vcbc {
                     }
                 };
 
-                let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.proposer, &d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag.domain, &self.tag.proposer, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
                 if !valid_sig {
                     log::warn!(
@@ -272,7 +273,8 @@ impl Vcbc {
                 if self.u_bar.is_none() {
                     // if µ̄ = ⊥ and ...
                     let d = Hash32::calculate(&m);
-                    let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.proposer, &d)?;
+                    let sign_bytes =
+                        c_ready_bytes_to_sign(&self.tag.domain, &self.tag.proposer, &d)?;
                     if self.pub_key_set.public_key().verify(&u, sign_bytes) {
                         // ... µ is a valid S1 -signature on (ID.j.s, c-ready, H(m)) then
                         // µ̄ ← µ
