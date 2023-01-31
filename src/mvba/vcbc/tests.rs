@@ -315,13 +315,13 @@ impl TestNet {
     // u is same as final signature
     pub fn u(&self) -> Signature {
         let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, &self.d()).unwrap();
+            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.proposer, &self.d()).unwrap();
         self.sec_key_set.secret_key().sign(sign_bytes)
     }
 
     fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
         let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, digest).unwrap();
+            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.proposer, digest).unwrap();
         let sec_key_share = self.sec_key_set.secret_key_share(id);
 
         sec_key_share.sign(sign_bytes)
