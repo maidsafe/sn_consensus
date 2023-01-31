@@ -13,7 +13,7 @@ use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
-    id: String,
+    domain: String,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
@@ -25,7 +25,7 @@ pub struct Consensus {
 
 impl Consensus {
     pub fn init(
-        id: String,
+        domain: String,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -39,7 +39,7 @@ impl Consensus {
 
         for party in &parties {
             let vcbc = Vcbc::new(
-                id.clone(),
+                domain.clone(),
                 self_id,
                 *party,
                 pub_key_set.clone(),
@@ -50,7 +50,7 @@ impl Consensus {
             vcbc_map.insert(*party, vcbc);
 
             let abba = Abba::new(
-                id.clone(),
+                domain.clone(),
                 self_id,
                 *party,
                 pub_key_set.clone(),
@@ -61,7 +61,7 @@ impl Consensus {
         }
 
         let mvba = Mvba::new(
-            id.clone(),
+            domain.clone(),
             self_id,
             sec_key_share,
             pub_key_set,
@@ -70,7 +70,7 @@ impl Consensus {
         );
 
         Consensus {
-            id,
+            domain,
             self_id,
             vcbc_map,
             abba_map,
@@ -144,7 +144,7 @@ impl Consensus {
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
-                                    let data = vcbc::make_c_request_message(&self.id, target)?;
+                                    let data = vcbc::make_c_request_message(&self.domain, target)?;
 
                                     self.broadcaster.borrow_mut().broadcast(
                                         vcbc::MODULE_NAME,
