@@ -1,4 +1,4 @@
-use super::message::{Action, Message};
+use super::message::{Action, Message, Tag};
 use super::Error;
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
@@ -134,10 +134,11 @@ fn test_vcbc_happy_path() {
     let proposer = 1;
     let mut net = Net::new(7, proposer);
 
+    let tag = Tag::new(&net.domain, proposer, 0);
+
     // Node 1 (the proposer) will initiate VCBC by broadcasting a value
 
-    let proposer_node = net.node_mut(proposer);
-    proposer_node
+    net.node_mut(proposer)
         .c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec())
         .expect("Failed to c-broadcast");
 
@@ -149,12 +150,9 @@ fn test_vcbc_happy_path() {
 
     // And check that all nodes have delivered the expected value and signature
 
-    let expected_bytes_to_sign: Vec<u8> = c_ready_bytes_to_sign(
-        &net.domain,
-        &proposer,
-        &Hash32::calculate("HAPPY-PATH-VALUE"),
-    )
-    .expect("Failed to serialize");
+    let expected_bytes_to_sign: Vec<u8> =
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate("HAPPY-PATH-VALUE"))
+            .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
@@ -195,9 +193,9 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 
     // And finally, check that all nodes have delivered the expected value and signature
 
+    let tag = Tag::new(&net.domain, proposer, 0);
     let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&net.domain, &proposer, &Hash32::calculate(&proposal))
-            .expect("Failed to serialize");
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate(&proposal)).expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
@@ -317,15 +315,12 @@ impl TestNet {
 
     // u is same as final signature
     pub fn u(&self) -> Signature {
-        let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.domain, &self.vcbc.tag.proposer, &self.d())
-                .unwrap();
+        let sign_bytes = c_ready_bytes_to_sign(&self.vcbc.tag, &self.d()).unwrap();
         self.sec_key_set.secret_key().sign(sign_bytes)
     }
 
     fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
-        let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.domain, &self.vcbc.tag.proposer, digest).unwrap();
+        let sign_bytes = c_ready_bytes_to_sign(&self.vcbc.tag, digest).unwrap();
         let sec_key_share = self.sec_key_set.secret_key_share(id);
 
         sec_key_share.sign(sign_bytes)

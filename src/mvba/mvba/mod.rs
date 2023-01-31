@@ -6,6 +6,7 @@ use self::message::{Message, Vote};
 use self::{error::Error, error::Result};
 use super::vcbc;
 use super::{hash::Hash32, Proposal};
+use crate::mvba::vcbc::message::Tag;
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -58,8 +59,9 @@ impl Mvba {
     ) -> Result<()> {
         debug_assert!(self.parties.contains(&proposer));
 
+        let tag = Tag::new(&self.id, proposer, 0); // TODO: this should be self.tag
         let digest = Hash32::calculate(&proposal);
-        let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.id, &proposer, &digest)?;
+        let sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest)?;
         if !self.pub_key_set.public_key().verify(&signature, sign_bytes) {
             return Err(Error::InvalidMessage(
                 "proposal with an invalid proof".to_string(),
@@ -126,8 +128,8 @@ impl Mvba {
         }
 
         if let Some((digest, signature)) = &msg.vote.proof {
-            let sign_bytes =
-                vcbc::c_ready_bytes_to_sign(&self.id, &msg.vote.proposer, digest).unwrap();
+            let tag = Tag::new(&self.id, msg.vote.proposer, 0); // TODO: I think this is a bug, shouldn't this be self.tag
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, digest).unwrap();
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),

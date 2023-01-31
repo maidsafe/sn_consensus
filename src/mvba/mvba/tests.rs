@@ -3,6 +3,7 @@ use super::NodeId;
 use super::{Error, Mvba};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::hash::Hash32;
+use crate::mvba::vcbc::message::Tag;
 use crate::mvba::{vcbc, Proposal};
 use blsttc::{SecretKey, SecretKeySet, Signature, SignatureShare};
 use rand::{thread_rng, Rng};
@@ -38,7 +39,8 @@ impl TestNet {
         for p in &parties {
             let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
             let digest = Hash32::calculate(&proposal);
-            let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&id, p, &digest).unwrap();
+            let tag = Tag::new(&id, *p, 0);
+            let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest).unwrap();
             let sig = sec_key_set.secret_key().sign(proposal_sign_bytes);
 
             proposals.insert(*p, (proposal, sig));

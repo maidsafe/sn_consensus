@@ -13,6 +13,7 @@ use super::{
     Abba,
 };
 use crate::mvba::hash::Hash32;
+use crate::mvba::vcbc::message::Tag;
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
 
 struct TestNet {
@@ -32,18 +33,20 @@ impl TestNet {
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
     // The ABBA test instance creates for party `i`, `ID` sets to `test-id`
     pub fn new(i: NodeId, j: NodeId) -> Self {
-        let id = "test-id".to_string();
+        let domain = "test-id".to_string();
+        let tag = Tag::new(&domain, j, 0);
+
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
+
         let proposal_digest = Hash32::calculate("test-data".as_bytes());
-        let sign_bytes =
-            crate::mvba::vcbc::c_ready_bytes_to_sign(&id, &j, &proposal_digest).unwrap();
+        let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &proposal_digest).unwrap();
         let proposal_sig = sec_key_set.secret_key().sign(sign_bytes);
 
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
         let abba = Abba::new(
-            id,
+            domain,
             i,
             j,
             sec_key_set.public_keys(),
@@ -206,9 +209,8 @@ fn test_absent_main_vote_round_one_invalid_justification() {
     let j = TestNet::PARTY_B;
     let mut t = TestNet::new(i, j);
 
-    let sign_bytes =
-        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.abba.id, &t.abba.j, &t.proposal_digest)
-            .unwrap();
+    let tag = Tag::new(&t.abba.id, t.abba.j, 0);
+    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &t.proposal_digest).unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
 
     let just_0 = PreVoteJustification::FirstRoundZero;
@@ -282,9 +284,8 @@ fn test_pre_vote_round_1_invalid_c_final_signature() {
     let j = TestNet::PARTY_B;
     let mut t = TestNet::new(i, j);
 
-    let sign_bytes =
-        crate::mvba::vcbc::c_ready_bytes_to_sign(&t.abba.id, &t.abba.j, &t.proposal_digest)
-            .unwrap();
+    let tag = Tag::new(&t.abba.id, t.abba.j, 0);
+    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &t.proposal_digest).unwrap();
     let invalid_sig = SecretKey::random().sign(sign_bytes);
 
     let just = PreVoteJustification::WithValidity(t.proposal_digest, invalid_sig);
@@ -965,9 +966,9 @@ fn test_net_happy_path() {
     let proposer = 1;
     let mut net = Net::new(4, proposer);
 
+    let tag = Tag::new(&net.id, proposer, 0);
     let proposal_digest = Hash32::calculate("test-data".as_bytes());
-    let sign_bytes =
-        crate::mvba::vcbc::c_ready_bytes_to_sign(&net.id, &proposer, &proposal_digest).unwrap();
+    let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &proposal_digest).unwrap();
     let proposal_sig = net.secret_key_set.secret_key().sign(sign_bytes);
 
     // All nodes pre-vote one

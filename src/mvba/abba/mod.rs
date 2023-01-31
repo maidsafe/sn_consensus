@@ -15,6 +15,7 @@ use self::message::{
     PreVoteJustification, Value,
 };
 use super::hash::Hash32;
+use super::vcbc::message::Tag;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
@@ -452,8 +453,8 @@ impl Abba {
                         }
                     }
                     PreVoteJustification::WithValidity(digest, sig) => {
-                        let sign_bytes =
-                            crate::mvba::vcbc::c_ready_bytes_to_sign(&self.id, &self.j, digest)?;
+                        let tag = Tag::new(&self.id, self.j, 0); // TODO: this should be self.tag
+                        let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, digest)?;
 
                         if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                             return Err(Error::InvalidMessage(
@@ -548,9 +549,9 @@ impl Abba {
 
                         match just_1.as_ref() {
                             PreVoteJustification::WithValidity(digest, sig) => {
-                                let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                    &self.id, &self.j, digest,
-                                )?;
+                                let tag = Tag::new(&self.id, self.j, 0); // TODO: this should be self.tag
+                                let sign_bytes =
+                                    crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, digest)?;
 
                                 if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                                     return Err(Error::InvalidMessage(
