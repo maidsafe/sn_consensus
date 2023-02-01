@@ -13,7 +13,7 @@ use super::{
     Abba,
 };
 use crate::mvba::hash::Hash32;
-use crate::mvba::vcbc::message::Tag;
+use crate::mvba::tag::Tag;
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
 
 struct TestNet {

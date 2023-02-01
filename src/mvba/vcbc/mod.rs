@@ -9,8 +9,9 @@ use std::rc::Rc;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 
 use self::error::{Error, Result};
-use self::message::{Action, Message, Tag};
+use self::message::{Action, Message};
 use super::hash::Hash32;
+use super::tag::Tag;
 use super::{MessageValidity, NodeId, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
 

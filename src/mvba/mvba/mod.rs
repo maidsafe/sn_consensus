@@ -6,7 +6,7 @@ use self::message::{Message, Vote};
 use self::{error::Error, error::Result};
 use super::vcbc;
 use super::{hash::Hash32, Proposal};
-use crate::mvba::vcbc::message::Tag;
+use crate::mvba::tag::Tag;
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};

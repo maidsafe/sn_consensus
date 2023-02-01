@@ -1,9 +1,10 @@
-use super::message::{Action, Message, Tag};
+use super::message::{Action, Message};
 use super::Error;
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
+use crate::mvba::tag::Tag;
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
 use crate::mvba::Proposal;
 use blsttc::{SecretKeySet, Signature, SignatureShare};

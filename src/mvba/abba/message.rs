@@ -1,7 +1,7 @@
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
-use crate::mvba::{hash::Hash32, vcbc::message::Tag};
+use crate::mvba::{hash::Hash32, tag::Tag};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Value {

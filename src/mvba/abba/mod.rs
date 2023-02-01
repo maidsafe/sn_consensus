@@ -15,7 +15,7 @@ use self::message::{
     PreVoteJustification, Value,
 };
 use super::hash::Hash32;
-use super::vcbc::message::Tag;
+use super::tag::Tag;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;

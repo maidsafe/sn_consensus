@@ -5,8 +5,8 @@ use super::{
     error::Result,
     hash::Hash32,
     mvba::{self, Mvba},
-    vcbc::{self, message::Tag},
-    Proposal,
+    tag::Tag,
+    vcbc, Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};

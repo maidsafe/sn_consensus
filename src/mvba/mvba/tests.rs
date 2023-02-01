@@ -3,7 +3,7 @@ use super::NodeId;
 use super::{Error, Mvba};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::hash::Hash32;
-use crate::mvba::vcbc::message::Tag;
+use crate::mvba::tag::Tag;
 use crate::mvba::{vcbc, Proposal};
 use blsttc::{SecretKey, SecretKeySet, Signature, SignatureShare};
 use rand::{thread_rng, Rng};
@@ -28,7 +28,7 @@ impl TestNet {
     // The MVBA test instance creates for party `i` with `ID` sets to `test-id`
     // and `tag.s` sets to `0`.
     pub fn new(i: NodeId) -> Self {
-        let id = "test-id".to_string();
+        let domain = "test-domain".to_string();
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
@@ -39,7 +39,7 @@ impl TestNet {
         for p in &parties {
             let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
             let digest = Hash32::calculate(&proposal);
-            let tag = Tag::new(&id, *p, 0);
+            let tag = Tag::new(&domain, *p, 0);
             let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest).unwrap();
             let sig = sec_key_set.secret_key().sign(proposal_sign_bytes);
 
@@ -47,7 +47,7 @@ impl TestNet {
         }
 
         let mvba = Mvba::new(
-            id,
+            domain,
             i,
             sec_key_share,
             sec_key_set.public_keys(),
