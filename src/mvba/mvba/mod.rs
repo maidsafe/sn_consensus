@@ -14,7 +14,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 pub(crate) const MODULE_NAME: &str = "mvba";
 
 pub struct Mvba {
-    id: String,      // this is same as $ID$ in spec
+    domain: String,  // this is same as $ID$ in spec
     i: NodeId,       // this is same as $i$ in spec
     l: usize,        // this is same as $a$ in spec
     v: Option<bool>, // this is same as $v$ in spec
@@ -37,7 +37,7 @@ impl Mvba {
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            id,
+            domain: id,
             i: self_id,
             l: 0,
             v: None,
@@ -58,8 +58,7 @@ impl Mvba {
         signature: Signature,
     ) -> Result<()> {
         debug_assert!(self.parties.contains(&proposer));
-
-        let tag = Tag::new(&self.id, proposer, 0); // TODO: this should be self.tag
+        let tag = Tag::new(&self.domain, proposer, 0); // TODO: this should be self.tag
         let digest = Hash32::calculate(&proposal);
         let sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest)?;
         if !self.pub_key_set.public_key().verify(&signature, sign_bytes) {
@@ -90,6 +89,11 @@ impl Mvba {
         Ok(true)
     }
 
+    pub fn tag(&self) -> Tag {
+        let proposer = self.current_proposer();
+        Tag::new(&self.domain, proposer, 0)
+    }
+
     pub fn current_proposer(&self) -> NodeId {
         *self.parties.get(self.l).unwrap()
     }
@@ -103,10 +107,11 @@ impl Mvba {
     }
 
     fn check_message(&mut self, msg: &Message) -> Result<()> {
-        if msg.vote.id != self.id {
+        let tag = self.tag();
+        if msg.vote.tag != tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid ID. expected: {}, got {}",
-                self.id, msg.vote.id
+                "invalid tag. expected: {tag}, got {}",
+                msg.vote.tag
             )));
         }
 
@@ -128,8 +133,7 @@ impl Mvba {
         }
 
         if let Some((digest, signature)) = &msg.vote.proof {
-            let tag = Tag::new(&self.id, msg.vote.proposer, 0); // TODO: I think this is a bug, shouldn't this be self.tag
-            let sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, digest).unwrap();
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.tag(), digest).unwrap();
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
@@ -141,7 +145,7 @@ impl Mvba {
     }
 
     pub fn add_vote(&mut self, msg: &Message) -> Result<bool> {
-        let votes = self.must_get_proposer_votes(&msg.vote.proposer);
+        let votes = self.must_get_proposer_votes(&msg.vote.tag.proposer);
         if let Some(exist) = votes.get(&msg.voter) {
             if exist != &msg.vote {
                 return Err(Error::InvalidMessage(format!(
@@ -154,7 +158,7 @@ impl Mvba {
 
         votes.insert(msg.voter, msg.vote.clone());
 
-        if msg.vote.value && !self.proposals.contains_key(&msg.vote.proposer) {
+        if msg.vote.value && !self.proposals.contains_key(&msg.vote.tag.proposer) {
             // If a v-vote from Pj indicates 1 but Pi has not yet received Pa ’s proposal,
             // ignore the vote and ask Pj to supply Pa ’s proposal
             // (by sending it the message (ID|vcbc.a.0, c-request)).
@@ -164,12 +168,11 @@ impl Mvba {
                 self.i,
                 msg.vote.proposer,
             );
-            let tag = Tag::new(&self.id, msg.vote.proposer, 0); // TODO: should this vote.proposer be self.j?
-            let data = vcbc::make_c_request_message(tag)?;
+            let data = vcbc::make_c_request_message(self.tag())?;
 
             self.broadcaster.borrow_mut().send_to(
                 vcbc::MODULE_NAME,
-                Some(msg.vote.proposer),
+                Some(msg.vote.tag.proposer),
                 data,
                 msg.voter,
             );
@@ -189,19 +192,13 @@ impl Mvba {
             return Ok(());
         }
 
-        // Message is for another proposal, not current one
-        // TODO: test me!
-        if msg.vote.proposer != self.current_proposer() {
-            return Ok(());
-        }
-
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         let threshold = self.threshold();
         if self.proposals.len() >= threshold && self.v.is_none() {
             // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
             // that VID|a (uj , ρj) holds
-            let votes = self.must_get_proposer_votes(&msg.vote.proposer);
+            let votes = self.must_get_proposer_votes(&msg.vote.tag.proposer);
             if votes.len() >= threshold {
                 if votes.values().any(|v| v.value) {
                     log::debug!(
@@ -230,18 +227,18 @@ impl Mvba {
         }
         self.votes_per_proposer.get_mut(proposer).unwrap()
     }
+
     fn vote(&mut self) -> Result<()> {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         if self.proposals.len() >= self.threshold() && !self.voted {
-            let a = self.current_proposer();
-            let vote = match self.proposals.get(&a) {
+            let tag = self.tag();
+            let vote = match self.proposals.get(&tag.proposer) {
                 None => {
                     // if wa = ⊥ then
                     // send the message (ID, v-vote, a, 0, ⊥) to all parties
                     Vote {
-                        id: self.id.clone(),
-                        proposer: a,
+                        tag,
                         value: false,
                         proof: None,
                     }
@@ -252,8 +249,7 @@ impl Mvba {
                     // send the message (ID, v-vote, a, 1, ρ) to all parties
                     let digest = Hash32::calculate(proposal);
                     Vote {
-                        id: self.id.clone(),
-                        proposer: a,
+                        tag,
                         value: true,
                         proof: Some((digest, signature.clone())),
                     }
