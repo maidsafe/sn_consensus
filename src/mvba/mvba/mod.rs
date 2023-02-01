@@ -15,6 +15,7 @@ pub(crate) const MODULE_NAME: &str = "mvba";
 
 pub struct Mvba {
     domain: String,  // this is same as $ID$ in spec
+    seq: usize,      // this is same as $s$ in spec
     i: NodeId,       // this is same as $i$ in spec
     l: usize,        // this is same as $a$ in spec
     v: Option<bool>, // this is same as $v$ in spec
@@ -29,7 +30,8 @@ pub struct Mvba {
 
 impl Mvba {
     pub fn new(
-        id: String,
+        domain: String,
+        seq: usize,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -37,7 +39,8 @@ impl Mvba {
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            domain: id,
+            domain,
+            seq,
             i: self_id,
             l: 0,
             v: None,
@@ -58,7 +61,7 @@ impl Mvba {
         signature: Signature,
     ) -> Result<()> {
         debug_assert!(self.parties.contains(&proposer));
-        let tag = Tag::new(&self.domain, proposer, 0); // TODO: this should be self.tag
+        let tag = self.build_tag(proposer);
         let digest = Hash32::calculate(&proposal);
         let sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest)?;
         if !self.pub_key_set.public_key().verify(&signature, sign_bytes) {
@@ -89,9 +92,12 @@ impl Mvba {
         Ok(true)
     }
 
-    pub fn tag(&self) -> Tag {
-        let proposer = self.current_proposer();
-        Tag::new(&self.domain, proposer, 0)
+    pub fn current_tag(&self) -> Tag {
+        self.build_tag(self.current_proposer())
+    }
+
+    pub fn build_tag(&self, proposer: NodeId) -> Tag {
+        Tag::new(&self.domain, proposer, self.seq)
     }
 
     pub fn current_proposer(&self) -> NodeId {
@@ -107,7 +113,7 @@ impl Mvba {
     }
 
     fn check_message(&mut self, msg: &Message) -> Result<()> {
-        let tag = self.tag();
+        let tag = self.current_tag();
         if msg.vote.tag != tag {
             return Err(Error::InvalidMessage(format!(
                 "invalid tag. expected: {tag}, got {}",
@@ -133,7 +139,7 @@ impl Mvba {
         }
 
         if let Some((digest, signature)) = &msg.vote.proof {
-            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.tag(), digest).unwrap();
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.current_tag(), digest).unwrap();
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
@@ -168,7 +174,7 @@ impl Mvba {
                 self.i,
                 msg.vote.proposer,
             );
-            let data = vcbc::make_c_request_message(self.tag())?;
+            let data = vcbc::make_c_request_message(self.current_tag())?;
 
             self.broadcaster.borrow_mut().send_to(
                 vcbc::MODULE_NAME,
@@ -232,7 +238,7 @@ impl Mvba {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         if self.proposals.len() >= self.threshold() && !self.voted {
-            let tag = self.tag();
+            let tag = self.current_tag();
             let vote = match self.proposals.get(&tag.proposer) {
                 None => {
                     // if wa = ⊥ then

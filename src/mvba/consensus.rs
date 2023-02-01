@@ -14,6 +14,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
     domain: String,
+    seq: usize,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
@@ -26,6 +27,7 @@ pub struct Consensus {
 impl Consensus {
     pub fn init(
         domain: String,
+        seq: usize,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -38,7 +40,7 @@ impl Consensus {
         let mut vcbc_map = HashMap::new();
 
         for party in &parties {
-            let tag = Tag::new(&domain, *party, 0);
+            let tag = Tag::new(&domain, *party, seq);
             let vcbc = Vcbc::new(
                 tag.clone(),
                 self_id,
@@ -61,6 +63,7 @@ impl Consensus {
 
         let mvba = Mvba::new(
             domain.clone(),
+            seq,
             self_id,
             sec_key_share,
             pub_key_set,
@@ -70,6 +73,7 @@ impl Consensus {
 
         Consensus {
             domain,
+            seq,
             self_id,
             vcbc_map,
             abba_map,
@@ -143,7 +147,7 @@ impl Consensus {
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
-                                    let tag = Tag::new(&self.domain, target, 0);
+                                    let tag = Tag::new(&self.domain, target, self.seq);
                                     let data = vcbc::make_c_request_message(tag)?;
 
                                     self.broadcaster.borrow_mut().broadcast(
@@ -239,6 +243,7 @@ mod tests {
             for p in &parties {
                 let consensus = Consensus::init(
                     id.clone(),
+                    0,
                     *p,
                     sec_key_set.secret_key_share(p),
                     sec_key_set.public_keys(),

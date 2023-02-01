@@ -29,6 +29,7 @@ impl TestNet {
     // and `tag.s` sets to `0`.
     pub fn new(i: NodeId) -> Self {
         let domain = "test-domain".to_string();
+        let seq = 0;
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
@@ -39,7 +40,7 @@ impl TestNet {
         for p in &parties {
             let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
             let digest = Hash32::calculate(&proposal);
-            let tag = Tag::new(&domain, *p, 0);
+            let tag = Tag::new(&domain, *p, seq);
             let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest).unwrap();
             let sig = sec_key_set.secret_key().sign(proposal_sign_bytes);
 
@@ -48,6 +49,7 @@ impl TestNet {
 
         let mvba = Mvba::new(
             domain,
+            seq,
             i,
             sec_key_share,
             sec_key_set.public_keys(),
@@ -63,8 +65,8 @@ impl TestNet {
     }
 
     pub fn make_vote_msg(&self, voter: NodeId, proposer: NodeId, value: bool) -> Message {
-        let mut tag = self.mvba.tag();
-        tag.proposer = proposer;
+        let tag = self.mvba.build_tag(proposer);
+
         let proof = if !value {
             None
         } else {
