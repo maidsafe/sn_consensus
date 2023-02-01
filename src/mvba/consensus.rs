@@ -5,7 +5,7 @@ use super::{
     error::Result,
     hash::Hash32,
     mvba::{self, Mvba},
-    tag::Tag,
+    tag::{Domain, Tag},
     vcbc, Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
@@ -13,8 +13,7 @@ use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
-    domain: String,
-    seq: usize,
+    domain: Domain,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
@@ -26,8 +25,7 @@ pub struct Consensus {
 
 impl Consensus {
     pub fn init(
-        domain: String,
-        seq: usize,
+        domain: Domain,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -40,7 +38,7 @@ impl Consensus {
         let mut vcbc_map = HashMap::new();
 
         for party in &parties {
-            let tag = Tag::new(&domain, *party, seq);
+            let tag = Tag::new(domain.clone(), *party);
             let vcbc = Vcbc::new(
                 tag.clone(),
                 self_id,
@@ -63,7 +61,6 @@ impl Consensus {
 
         let mvba = Mvba::new(
             domain.clone(),
-            seq,
             self_id,
             sec_key_share,
             pub_key_set,
@@ -73,7 +70,6 @@ impl Consensus {
 
         Consensus {
             domain,
-            seq,
             self_id,
             vcbc_map,
             abba_map,
@@ -147,7 +143,7 @@ impl Consensus {
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
-                                    let tag = Tag::new(&self.domain, target, self.seq);
+                                    let tag = Tag::new(self.domain.clone(), target);
                                     let data = vcbc::make_c_request_message(tag)?;
 
                                     self.broadcaster.borrow_mut().broadcast(
@@ -211,7 +207,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::Consensus;
-    use crate::mvba::{bundle::Outgoing, *};
+    use crate::mvba::{bundle::Outgoing, tag::Domain, *};
 
     use blsttc::SecretKeySet;
     use quickcheck_macros::quickcheck;
@@ -228,7 +224,7 @@ mod tests {
 
     impl TestNet {
         pub fn new() -> Self {
-            let id = "test-id".to_string();
+            let domain = Domain::new("test-domain", 0);
             let mut rng = thread_rng();
             //let (t, n) = (5, 7);
             let (t, n) = (2, 4);
@@ -242,8 +238,7 @@ mod tests {
 
             for p in &parties {
                 let consensus = Consensus::init(
-                    id.clone(),
-                    0,
+                    domain.clone(),
                     *p,
                     sec_key_set.secret_key_share(p),
                     sec_key_set.public_keys(),

@@ -4,6 +4,7 @@ mod message;
 use self::message::{Message, Vote};
 
 use self::{error::Error, error::Result};
+use super::tag::Domain;
 use super::vcbc;
 use super::{hash::Hash32, Proposal};
 use crate::mvba::tag::Tag;
@@ -14,8 +15,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 pub(crate) const MODULE_NAME: &str = "mvba";
 
 pub struct Mvba {
-    domain: String,  // this is same as $ID$ in spec
-    seq: usize,      // this is same as $s$ in spec
+    domain: Domain,  // this is same as $ID.s$ in spec
     i: NodeId,       // this is same as $i$ in spec
     l: usize,        // this is same as $a$ in spec
     v: Option<bool>, // this is same as $v$ in spec
@@ -30,8 +30,7 @@ pub struct Mvba {
 
 impl Mvba {
     pub fn new(
-        domain: String,
-        seq: usize,
+        domain: Domain,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -40,7 +39,6 @@ impl Mvba {
     ) -> Self {
         Self {
             domain,
-            seq,
             i: self_id,
             l: 0,
             v: None,
@@ -97,7 +95,7 @@ impl Mvba {
     }
 
     pub fn build_tag(&self, proposer: NodeId) -> Tag {
-        Tag::new(&self.domain, proposer, self.seq)
+        Tag::new(self.domain.clone(), proposer)
     }
 
     pub fn current_proposer(&self) -> NodeId {

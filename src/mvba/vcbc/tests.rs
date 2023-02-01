@@ -4,7 +4,7 @@ use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
-use crate::mvba::tag::Tag;
+use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
 use crate::mvba::Proposal;
 use blsttc::{SecretKeySet, Signature, SignatureShare};
@@ -22,7 +22,7 @@ fn invalid_proposal(_: NodeId, _: &Proposal) -> bool {
 }
 
 struct Net {
-    domain: String,
+    domain: Domain,
     secret_key_set: SecretKeySet,
     nodes: BTreeMap<NodeId, Vcbc>,
     queue: BTreeMap<NodeId, Vec<Bundle>>,
@@ -40,12 +40,12 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let domain = "testing-vcbc".to_string();
+        let domain = Domain::new("testing-vcbc", 0);
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
             let key_share = secret_key_set.secret_key_share(self_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(self_id)));
-            let tag = Tag::new(&domain, proposer, 0);
+            let tag = Tag::new(domain.clone(), proposer);
             let vcbc = Vcbc::new(
                 tag,
                 self_id,
@@ -135,7 +135,7 @@ fn test_vcbc_happy_path() {
     let proposer = 1;
     let mut net = Net::new(7, proposer);
 
-    let tag = Tag::new(&net.domain, proposer, 0);
+    let tag = Tag::new(net.domain.clone(), proposer);
 
     // Node 1 (the proposer) will initiate VCBC by broadcasting a value
 
@@ -194,7 +194,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 
     // And finally, check that all nodes have delivered the expected value and signature
 
-    let tag = Tag::new(&net.domain, proposer, 0);
+    let tag = Tag::new(net.domain.clone(), proposer);
     let expected_bytes_to_sign: Vec<u8> =
         c_ready_bytes_to_sign(&tag, &Hash32::calculate(&proposal)).expect("Failed to serialize");
 
@@ -215,11 +215,11 @@ fn test_ignore_messages_with_invalid_tag() {
     let mut t = TestNet::new(i, j);
 
     let mut final_msg = t.make_final_msg(&t.d());
-    final_msg.tag.domain = "another-domain".to_string();
+    final_msg.tag.domain = Domain::new("another-domain", 0);
 
     let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg.clone());
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid tag. expected {:?}, got {:?}", t.vcbc.tag, final_msg.tag)));
+        if msg == "invalid tag. expected test-domain[0].0, got another-domain[0].0"));
 }
 
 // --------------------------------------
@@ -248,7 +248,7 @@ impl TestNet {
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
-        let tag = Tag::new("test-domain", j, 0);
+        let tag = Tag::new(Domain::new("test-domain", 0), j);
         let vcbc = Vcbc::new(
             tag,
             i,

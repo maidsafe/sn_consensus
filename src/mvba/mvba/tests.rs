@@ -3,7 +3,7 @@ use super::NodeId;
 use super::{Error, Mvba};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::hash::Hash32;
-use crate::mvba::tag::Tag;
+use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::{vcbc, Proposal};
 use blsttc::{SecretKey, SecretKeySet, Signature, SignatureShare};
 use rand::{thread_rng, Rng};
@@ -28,8 +28,7 @@ impl TestNet {
     // The MVBA test instance creates for party `i` with `ID` sets to `test-id`
     // and `tag.s` sets to `0`.
     pub fn new(i: NodeId) -> Self {
-        let domain = "test-domain".to_string();
-        let seq = 0;
+        let domain = Domain::new("test-domain", 0);
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
@@ -40,7 +39,7 @@ impl TestNet {
         for p in &parties {
             let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
             let digest = Hash32::calculate(&proposal);
-            let tag = Tag::new(&domain, *p, seq);
+            let tag = Tag::new(domain.clone(), *p);
             let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest).unwrap();
             let sig = sec_key_set.secret_key().sign(proposal_sign_bytes);
 
@@ -49,7 +48,6 @@ impl TestNet {
 
         let mvba = Mvba::new(
             domain,
-            seq,
             i,
             sec_key_share,
             sec_key_set.public_keys(),
@@ -105,11 +103,11 @@ fn test_ignore_messages_with_wrong_id() {
     let mut t = TestNet::new(i);
 
     let mut msg = t.make_vote_msg(voter, proposer, true);
-    msg.vote.tag.domain = "another-domain".to_string();
+    msg.vote.tag.domain = Domain::new("another-domain", 0);
 
     let result = t.mvba.receive_message(msg);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == "invalid tag. expected: test-domain.0.0, got another-domain.0.0"));
+        if msg == "invalid tag. expected: test-domain[0].0, got another-domain[0].0"));
 }
 
 #[test]
@@ -283,7 +281,7 @@ fn test_request_proposal() {
 
     t.mvba.receive_message(msg_x).unwrap();
 
-    let tag = Tag::new(t.mvba.domain, TestNet::PARTY_X, 0);
+    let tag = Tag::new(t.mvba.domain.clone(), TestNet::PARTY_X);
     let data = vcbc::make_c_request_message(tag).unwrap();
 
     assert!(t

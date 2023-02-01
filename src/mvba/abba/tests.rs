@@ -13,7 +13,7 @@ use super::{
     Abba,
 };
 use crate::mvba::hash::Hash32;
-use crate::mvba::tag::Tag;
+use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
 
 struct TestNet {
@@ -33,7 +33,7 @@ impl TestNet {
     // There are 4 parties: X, Y, B, S (B is Byzantine and S is Slow)
     // The ABBA test instance created for party `i`, `Tag` set to `test-domain.j.0`
     pub fn new(i: NodeId, j: NodeId) -> Self {
-        let tag = Tag::new("test-domain", j, 0);
+        let tag = Tag::new(Domain::new("test-domain", 0), j);
 
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
@@ -177,13 +177,13 @@ fn test_ignore_messages_with_wrong_domain() {
 
     let just = PreVoteJustification::WithValidity(t.proposal_digest, t.proposal_sig.clone());
     let mut pre_vote_x = t.make_pre_vote_msg(1, Value::One, &just, &TestNet::PARTY_B);
-    pre_vote_x.tag.domain = "another-domain".to_string();
+    pre_vote_x.tag.domain = Domain::new("another-domain", 0);
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
     match result {
         Err(Error::InvalidMessage(msg)) => assert_eq!(
             msg,
-            format!("invalid tag. expected: test-domain.{j}.0, got another-domain.{j}.0"),
+            format!("invalid tag. expected: test-domain[0].{j}, got another-domain[0].{j}"),
         ),
         other => panic!("Expected invalid message, got: {other:?}"),
     }
@@ -870,7 +870,7 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let tag = Tag::new("test-domain", proposer, 0);
+        let tag = Tag::new(Domain::new("test-domain", 0), proposer);
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
             let key_share = secret_key_set.secret_key_share(node_id);
