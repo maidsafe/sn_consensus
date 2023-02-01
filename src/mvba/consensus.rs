@@ -261,6 +261,11 @@ mod tests {
         do_prop_random_msg_delivery(239389896331702023721706851822556999354)
     }
 
+    #[test]
+    fn test_prevent_double_pre_vote() {
+        do_prop_random_msg_delivery(321606964118541147451444878468141021383)
+    }
+
     #[quickcheck]
     fn prop_random_msg_delivery(seed: u128) {
         do_prop_random_msg_delivery(seed)
