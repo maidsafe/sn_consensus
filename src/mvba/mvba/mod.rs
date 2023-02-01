@@ -71,6 +71,11 @@ impl Mvba {
     }
 
     pub fn move_to_next_proposal(&mut self) -> Result<bool> {
+        log::debug!(
+            "party {} moves to the next proposer: {}",
+            self.i,
+            self.current_proposer()
+        );
         if self.l + 1 == self.parties.len() {
             // no more proposal
             return Ok(false);
@@ -153,7 +158,7 @@ impl Mvba {
             // (by sending it the message (ID|vcbc.a.0, c-request)).
 
             log::debug!(
-                "requesting proposal from {} to {}",
+                "party {} requests proposal from {}",
                 self.i,
                 msg.vote.proposer,
             );
@@ -174,7 +179,7 @@ impl Mvba {
 
     /// receive_message process the received message 'msg`
     pub fn receive_message(&mut self, msg: Message) -> Result<()> {
-        log::debug!("received message: {:?}", msg);
+        log::trace!("party {} received message: {:?}", self.i, msg);
 
         self.check_message(&msg)?;
         if !self.add_vote(&msg)? {
@@ -196,6 +201,11 @@ impl Mvba {
             let votes = self.must_get_proposer_votes(&msg.vote.proposer);
             if votes.len() >= threshold {
                 if votes.values().any(|v| v.value) {
+                    log::debug!(
+                        "party {} completed for proposer {}.",
+                        self.i,
+                        self.current_proposer()
+                    );
                     // if there is some uj = 1 then
                     // v ← 1; ρ ← ρj
                     self.v = Some(true);
@@ -257,7 +267,7 @@ impl Mvba {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, vote: Vote) -> Result<()> {
-        log::debug!("broadcasting {vote:?} from {}", self.i);
+        log::debug!("party {} broadcasts {vote:?}", self.i);
 
         let sign_bytes = bincode::serialize(&vote)?;
         let sig = self.sec_key_share.sign(sign_bytes);

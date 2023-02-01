@@ -76,7 +76,7 @@ impl Abba {
 
     fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
         if self.voted {
-            log::debug!("we have voted before");
+            log::trace!("party {} voted before", self.i);
             return Ok(());
         }
 
@@ -102,8 +102,9 @@ impl Abba {
             return Ok(());
         }
 
-        log::debug!(
-            "received {} message: {:?} from {}",
+        log::trace!(
+            "party {} received {} message: {:?} from {}",
+            self.i,
             msg.action_str(),
             msg,
             initiator
@@ -119,8 +120,9 @@ impl Abba {
                 if let Some(existing_decision) = self.decided_value.as_ref() {
                     if existing_decision != agg_main_vote {
                         log::error!(
-                            "existing decision does not match the decision we received:
-                            {existing_decision:?} != {agg_main_vote:?}"
+                            "party {}'s existing decision does not match the decision we received:
+                            {existing_decision:?} != {agg_main_vote:?}",
+                            self.i,
                         );
 
                         return Err(Error::Generic("received conflicting decision".into()));
@@ -144,7 +146,11 @@ impl Abba {
                     let main_votes = match self.get_main_votes_by_round(self.r - 1) {
                         Some(v) => v,
                         None => {
-                            log::debug!("no main-votes for this round: {}", self.r);
+                            log::debug!(
+                                "party {} has no main-votes for this round: {}",
+                                self.i,
+                                self.r
+                            );
                             return Ok(());
                         }
                     };
@@ -163,7 +169,8 @@ impl Abba {
                         // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
                         if zero_votes.clone().count() >= self.threshold() {
                             log::info!(
-                                "decided for zero. id={}, r={}, j={}",
+                                "party {} decided for zero. id={}, r={}, j={}",
+                                self.i,
                                 self.id,
                                 self.j,
                                 self.r
@@ -183,7 +190,8 @@ impl Abba {
 
                         if one_votes.clone().count() >= self.threshold() {
                             log::info!(
-                                "decided for one. id={}, r={}, j={}",
+                                "party {} decided for one. id={}, r={}, j={}",
+                                self.i,
                                 self.id,
                                 self.j,
                                 self.r
@@ -206,7 +214,7 @@ impl Abba {
                         {
                             if let Some(v) = self.get_pre_votes_by_round(self.r) {
                                 if v.contains_key(&self.i) {
-                                    log::debug!("we obtained the corresponding validating data after voting for zero");
+                                    log::debug!("party {} obtained the corresponding validating data after voting for zero", self.i);
                                     return Ok(());
                                 }
                             };
@@ -288,7 +296,11 @@ impl Abba {
                 let pre_votes = match self.get_pre_votes_by_round(self.r) {
                     Some(v) => v,
                     None => {
-                        log::debug!("no pre-votes for this round: {}", self.r);
+                        log::debug!(
+                            "party {} has no pre-votes for this round: {}",
+                            self.i,
+                            self.r
+                        );
                         return Ok(());
                     }
                 };
@@ -355,10 +367,13 @@ impl Abba {
     }
 
     pub fn decided_value(&self) -> Option<bool> {
-        self.decided_value.as_ref().map(|v| match v.value {
-            Value::One => true,
-            Value::Zero => false,
-        })
+        match &self.decided_value {
+            Some(v) => match v.value {
+                Value::One => Some(true),
+                Value::Zero => Some(false),
+            },
+            None => None,
+        }
     }
 
     fn add_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<bool> {
@@ -572,7 +587,7 @@ impl Abba {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, action: Action) -> Result<()> {
-        log::debug!("broadcasting {action:?} from {}", self.i);
+        log::debug!("party {} broadcasts {action:?}", self.i);
 
         let msg = Message {
             id: self.id.clone(),
