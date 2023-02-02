@@ -1,22 +1,5 @@
-use crate::mvba::{hash::Hash32, Proposal};
+use crate::mvba::{hash::Hash32, tag::Tag, Proposal};
 use blsttc::{Signature, SignatureShare};
-
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Tag {
-    pub id: String, // this is same as $id$ in spec
-    pub j: usize,   // this is same as $j$ in spec
-    pub s: usize,   // this is same as $s$ in spec
-}
-
-impl Tag {
-    pub fn new(id: &str, j: usize, s: usize) -> Self {
-        Self {
-            id: id.to_string(),
-            j,
-            s,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Action {

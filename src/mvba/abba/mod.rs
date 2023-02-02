@@ -15,6 +15,7 @@ use self::message::{
     PreVoteJustification, Value,
 };
 use super::hash::Hash32;
+use super::tag::Tag;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
@@ -23,10 +24,9 @@ pub(crate) const MODULE_NAME: &str = "abba";
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
-    id: String, // this is same as $ID$ in spec
-    i: NodeId,  // this is same as $i$ in spec
-    j: NodeId,  // this is same as $j$ in spec
-    r: usize,   // this is same as $r$ in spec
+    tag: Tag,  // this is same as ID.j.s in the spec
+    i: NodeId, // this is same as $i$ in spec
+    r: usize,  // this is same as $r$ in spec
     voted: bool,
     weak_validity: Option<(Hash32, Signature)>,
     decided_value: Option<DecisionAction>,
@@ -39,17 +39,15 @@ pub(crate) struct Abba {
 
 impl Abba {
     pub fn new(
-        id: String,
+        tag: Tag,
         self_id: NodeId,
-        proposer: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
-            id,
+            tag,
             i: self_id,
-            j: proposer,
             r: 1,
             voted: false,
             weak_validity: None,
@@ -169,10 +167,9 @@ impl Abba {
                         // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
                         if zero_votes.clone().count() >= self.threshold() {
                             log::info!(
-                                "party {} decided for zero. id={}, r={}, j={}",
+                                "party {} decided for zero. tag={}, r={}",
                                 self.i,
-                                self.id,
-                                self.j,
+                                self.tag,
                                 self.r
                             );
                             let sig_share: HashMap<&NodeId, &SignatureShare> =
@@ -190,10 +187,9 @@ impl Abba {
 
                         if one_votes.clone().count() >= self.threshold() {
                             log::info!(
-                                "party {} decided for one. id={}, r={}, j={}",
+                                "party {} decided for one. tag={}, r={}",
                                 self.i,
-                                self.id,
-                                self.j,
+                                self.tag,
                                 self.r
                             );
                             let sig_share: HashMap<&NodeId, &SignatureShare> =
@@ -410,17 +406,10 @@ impl Abba {
     }
 
     fn check_message(&self, initiator: &NodeId, msg: &Message) -> Result<()> {
-        if msg.id != self.id {
+        if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid ID. expected: {}, got {}",
-                self.id, msg.id
-            )));
-        }
-
-        if msg.proposer != self.j {
-            return Err(Error::InvalidMessage(format!(
-                "invalid proposer. expected: {}, got {}",
-                self.j, msg.proposer
+                "invalid tag. expected: {}, got {}",
+                self.tag, msg.tag
             )));
         }
 
@@ -453,7 +442,7 @@ impl Abba {
                     }
                     PreVoteJustification::WithValidity(digest, sig) => {
                         let sign_bytes =
-                            crate::mvba::vcbc::c_ready_bytes_to_sign(&self.id, &self.j, digest)?;
+                            crate::mvba::vcbc::c_ready_bytes_to_sign(&self.tag, digest)?;
 
                         if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                             return Err(Error::InvalidMessage(
@@ -548,9 +537,8 @@ impl Abba {
 
                         match just_1.as_ref() {
                             PreVoteJustification::WithValidity(digest, sig) => {
-                                let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(
-                                    &self.id, &self.j, digest,
-                                )?;
+                                let sign_bytes =
+                                    crate::mvba::vcbc::c_ready_bytes_to_sign(&self.tag, digest)?;
 
                                 if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
                                     return Err(Error::InvalidMessage(
@@ -590,14 +578,13 @@ impl Abba {
         log::debug!("party {} broadcasts {action:?}", self.i);
 
         let msg = Message {
-            id: self.id.clone(),
-            proposer: self.j,
+            tag: self.tag.clone(),
             action,
         };
         let data = bincode::serialize(&msg)?;
         self.broadcaster
             .borrow_mut()
-            .broadcast(MODULE_NAME, Some(self.j), data);
+            .broadcast(MODULE_NAME, Some(self.tag.proposer), data);
         self.receive_message(self.i, msg)?;
         Ok(())
     }
@@ -605,23 +592,13 @@ impl Abba {
     // pre_vote_bytes_to_sign generates bytes for Pre-Vote signature share.
     // pre_vote_bytes_to_sign is same as serialized of $(ID, pre-vote, r, b)$ in spec.
     fn pre_vote_bytes_to_sign(&self, round: usize, v: &Value) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            self.id.clone(),
-            "pre-vote",
-            round,
-            v,
-        ))?)
+        Ok(bincode::serialize(&(&self.tag, "pre-vote", round, v))?)
     }
 
     // main_vote_bytes_to_sign generates bytes for Main-Vote signature share.
     // main_vote_bytes_to_sign is same as serialized of $(ID, main-vote, r, v)$ in spec.
     fn main_vote_bytes_to_sign(&self, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(
-            self.id.clone(),
-            "main-vote",
-            round,
-            v,
-        ))?)
+        Ok(bincode::serialize(&(&self.tag, "main-vote", round, v))?)
     }
 
     // threshold return the threshold of the public key set.

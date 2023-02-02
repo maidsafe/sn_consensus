@@ -4,6 +4,7 @@ use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
 use crate::mvba::hash::Hash32;
+use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
 use crate::mvba::Proposal;
 use blsttc::{SecretKeySet, Signature, SignatureShare};
@@ -21,7 +22,7 @@ fn invalid_proposal(_: NodeId, _: &Proposal) -> bool {
 }
 
 struct Net {
-    id: String,
+    domain: Domain,
     secret_key_set: SecretKeySet,
     nodes: BTreeMap<NodeId, Vcbc>,
     queue: BTreeMap<NodeId, Vec<Bundle>>,
@@ -39,15 +40,15 @@ impl Net {
         let threshold = (n - faults).saturating_sub(1);
         let secret_key_set = blsttc::SecretKeySet::random(threshold, &mut rand::thread_rng());
         let public_key_set = secret_key_set.public_keys();
-        let id = "testing-vcbc".to_string();
+        let domain = Domain::new("testing-vcbc", 0);
 
         let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
             let key_share = secret_key_set.secret_key_share(self_id);
             let broadcaster = Rc::new(RefCell::new(Broadcaster::new(self_id)));
+            let tag = Tag::new(domain.clone(), proposer);
             let vcbc = Vcbc::new(
-                id.clone(),
+                tag,
                 self_id,
-                proposer,
                 public_key_set.clone(),
                 key_share,
                 valid_proposal,
@@ -57,7 +58,7 @@ impl Net {
         }));
 
         Net {
-            id,
+            domain,
             secret_key_set,
             nodes,
             queue: Default::default(),
@@ -134,10 +135,11 @@ fn test_vcbc_happy_path() {
     let proposer = 1;
     let mut net = Net::new(7, proposer);
 
+    let tag = Tag::new(net.domain.clone(), proposer);
+
     // Node 1 (the proposer) will initiate VCBC by broadcasting a value
 
-    let proposer_node = net.node_mut(proposer);
-    proposer_node
+    net.node_mut(proposer)
         .c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec())
         .expect("Failed to c-broadcast");
 
@@ -150,7 +152,7 @@ fn test_vcbc_happy_path() {
     // And check that all nodes have delivered the expected value and signature
 
     let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate("HAPPY-PATH-VALUE"))
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate("HAPPY-PATH-VALUE"))
             .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
@@ -192,9 +194,9 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 
     // And finally, check that all nodes have delivered the expected value and signature
 
+    let tag = Tag::new(net.domain.clone(), proposer);
     let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&net.id, &proposer, &Hash32::calculate(&proposal))
-            .expect("Failed to serialize");
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate(&proposal)).expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
@@ -213,11 +215,16 @@ fn test_ignore_messages_with_invalid_tag() {
     let mut t = TestNet::new(i, j);
 
     let mut final_msg = t.make_final_msg(&t.d());
-    final_msg.tag.id = "another-id".to_string();
+    final_msg.tag.domain = Domain::new("another-domain", 0);
 
-    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg.clone());
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid tag. expected {:?}, got {:?}", t.vcbc.tag, final_msg.tag)));
+    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg);
+    match result {
+        Err(Error::InvalidMessage(msg)) => assert_eq!(
+            msg,
+            "invalid tag. expected test-domain[0].0, got another-domain[0].0"
+        ),
+        res => panic!("Unexpected result: {res:?}"),
+    }
 }
 
 // --------------------------------------
@@ -242,15 +249,14 @@ impl TestNet {
     // The VCBC test instance creates for party `i` with `ID` sets to `test-id`
     // and `s` sets to `0`.
     pub fn new(i: NodeId, j: NodeId) -> Self {
-        let id = "test-id".to_string();
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
         let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
+        let tag = Tag::new(Domain::new("test-domain", 0), j);
         let vcbc = Vcbc::new(
-            id,
+            tag,
             i,
-            j,
             sec_key_set.public_keys(),
             sec_key_share,
             valid_proposal,
@@ -314,14 +320,12 @@ impl TestNet {
 
     // u is same as final signature
     pub fn u(&self) -> Signature {
-        let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, &self.d()).unwrap();
+        let sign_bytes = c_ready_bytes_to_sign(&self.vcbc.tag, &self.d()).unwrap();
         self.sec_key_set.secret_key().sign(sign_bytes)
     }
 
     fn sig_share(&self, digest: &Hash32, id: &NodeId) -> SignatureShare {
-        let sign_bytes =
-            c_ready_bytes_to_sign(&self.vcbc.tag.id, &self.vcbc.tag.j, digest).unwrap();
+        let sign_bytes = c_ready_bytes_to_sign(&self.vcbc.tag, digest).unwrap();
         let sec_key_share = self.sec_key_set.secret_key_share(id);
 
         sec_key_share.sign(sign_bytes)

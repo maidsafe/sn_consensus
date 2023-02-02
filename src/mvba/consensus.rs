@@ -5,15 +5,15 @@ use super::{
     error::Result,
     hash::Hash32,
     mvba::{self, Mvba},
-    vcbc::{self},
-    Proposal,
+    tag::{Domain, Tag},
+    vcbc, Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub struct Consensus {
-    id: String,
+    domain: Domain,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
@@ -25,7 +25,7 @@ pub struct Consensus {
 
 impl Consensus {
     pub fn init(
-        id: String,
+        domain: Domain,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
@@ -38,10 +38,10 @@ impl Consensus {
         let mut vcbc_map = HashMap::new();
 
         for party in &parties {
+            let tag = Tag::new(domain.clone(), *party);
             let vcbc = Vcbc::new(
-                id.clone(),
+                tag.clone(),
                 self_id,
-                *party,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 message_validity,
@@ -50,9 +50,8 @@ impl Consensus {
             vcbc_map.insert(*party, vcbc);
 
             let abba = Abba::new(
-                id.clone(),
+                tag,
                 self_id,
-                *party,
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 broadcaster_rc.clone(),
@@ -61,7 +60,7 @@ impl Consensus {
         }
 
         let mvba = Mvba::new(
-            id.clone(),
+            domain.clone(),
             self_id,
             sec_key_share,
             pub_key_set,
@@ -70,7 +69,7 @@ impl Consensus {
         );
 
         Consensus {
-            id,
+            domain,
             self_id,
             vcbc_map,
             abba_map,
@@ -144,7 +143,8 @@ impl Consensus {
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
-                                    let data = vcbc::make_c_request_message(&self.id, target)?;
+                                    let tag = Tag::new(self.domain.clone(), target);
+                                    let data = vcbc::make_c_request_message(tag)?;
 
                                     self.broadcaster.borrow_mut().broadcast(
                                         vcbc::MODULE_NAME,
@@ -207,7 +207,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::Consensus;
-    use crate::mvba::{bundle::Outgoing, *};
+    use crate::mvba::{bundle::Outgoing, tag::Domain, *};
 
     use blsttc::SecretKeySet;
     use quickcheck_macros::quickcheck;
@@ -224,7 +224,7 @@ mod tests {
 
     impl TestNet {
         pub fn new() -> Self {
-            let id = "test-id".to_string();
+            let domain = Domain::new("test-domain", 0);
             let mut rng = thread_rng();
             //let (t, n) = (5, 7);
             let (t, n) = (2, 4);
@@ -238,7 +238,7 @@ mod tests {
 
             for p in &parties {
                 let consensus = Consensus::init(
-                    id.clone(),
+                    domain.clone(),
                     *p,
                     sec_key_set.secret_key_share(p),
                     sec_key_set.public_keys(),
@@ -274,6 +274,74 @@ mod tests {
         while !net.buffer.is_empty() {
             let rand_index = rng.gen_range(0..net.buffer.len());
             let rand_msg = &net.buffer.remove(rand_index);
+            let mut msgs = Vec::new();
+            log::trace!("random message: {:?}", rand_msg);
+
+            for c in &mut net.cons {
+                msgs.append(&mut match rand_msg {
+                    Outgoing::Direct(id, bundle) => {
+                        if id == &c.self_id {
+                            c.process_bundle(bundle).unwrap()
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    Outgoing::Gossip(bundle) => c.process_bundle(bundle).unwrap(),
+                });
+            }
+
+            net.buffer.append(&mut msgs);
+        }
+
+        let mut decisions = HashMap::new();
+        for c in &mut net.cons {
+            if c.decided_proposer.is_some() {
+                let value = c
+                    .abba_map
+                    .get(&c.decided_proposer.unwrap())
+                    .unwrap()
+                    .decided_value()
+                    .unwrap();
+
+                log::debug!(
+                    "test for consensus {} finished on proposal {} with {value}",
+                    c.self_id,
+                    c.decided_proposer.unwrap(),
+                );
+                decisions.insert(c.self_id, (c.decided_proposer.unwrap(), value));
+            }
+        }
+
+        // check if all consensus results are equal:
+        assert_eq!(decisions.len(), net.cons.len());
+        // https://sts10.github.io/2019/06/06/is-all-equal-function.html
+        let first = decisions.iter().next().unwrap().1;
+        assert!(decisions.iter().all(|(_, item)| item == first));
+    }
+
+    #[test]
+    fn test_random_msg_mvba_accepts_messages_from_previous_proposer() {
+        let seed: u128 = 31637883178971836821716406404683523;
+        let _ = env_logger::builder()
+            .is_test(true)
+            .filter_level(log::LevelFilter::Trace)
+            .try_init();
+
+        let mut seed_buf = [0u8; 32];
+        seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
+        let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
+
+        let mut net = TestNet::new();
+
+        for c in &mut net.cons {
+            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let mut msgs = c.propose(proposal).unwrap();
+            net.buffer.append(&mut msgs);
+        }
+
+        while !net.buffer.is_empty() {
+            let rand_index = rng.gen_range(0..net.buffer.len());
+            let rand_msg = &net.buffer.remove(dbg!(rand_index));
             let mut msgs = Vec::new();
             log::trace!("random message: {:?}", rand_msg);
 

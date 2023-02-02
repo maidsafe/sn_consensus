@@ -9,8 +9,9 @@ use std::rc::Rc;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 
 use self::error::{Error, Result};
-use self::message::{Action, Message, Tag};
+use self::message::{Action, Message};
 use super::hash::Hash32;
+use super::tag::Tag;
 use super::{MessageValidity, NodeId, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
 
@@ -18,30 +19,22 @@ pub(crate) const MODULE_NAME: &str = "vcbc";
 
 // make_c_request_message creates the payload message to request a proposal
 // from the the proposer
-pub fn make_c_request_message(
-    id: &str,
-    proposer: NodeId,
-) -> std::result::Result<Vec<u8>, bincode::Error> {
+pub fn make_c_request_message(tag: Tag) -> std::result::Result<Vec<u8>, bincode::Error> {
     let msg = Message {
-        tag: Tag {
-            id: id.to_string(),
-            j: proposer,
-            s: 0,
-        },
+        tag,
         action: Action::Request,
     };
     bincode::serialize(&msg)
 }
 
 // c_ready_bytes_to_sign generates bytes that should be signed by each party
-// as a wittiness of receiving the message.
+// as a witness of receiving the message.
 // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec
 pub fn c_ready_bytes_to_sign(
-    id: &str,
-    proposer: &NodeId,
+    tag: &Tag,
     digest: &Hash32,
 ) -> std::result::Result<Vec<u8>, bincode::Error> {
-    bincode::serialize(&(id, proposer, 0, "c-ready", digest))
+    bincode::serialize(&(tag, "c-ready", digest))
 }
 
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
@@ -76,17 +69,14 @@ fn try_insert(map: &mut HashMap<NodeId, Message>, k: NodeId, v: Message) -> Resu
 
 impl Vcbc {
     pub fn new(
-        id: String,
+        tag: Tag,
         self_id: NodeId,
-        proposer: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         message_validity: MessageValidity,
         broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         debug_assert_eq!(self_id, broadcaster.borrow().self_id());
-
-        let tag = Tag::new(&id, proposer, 0);
 
         Self {
             tag,
@@ -107,7 +97,7 @@ impl Vcbc {
     /// c_broadcast sends the messages `m` to all other parties.
     /// It also adds the message to message_log and process it.
     pub fn c_broadcast(&mut self, m: Proposal) -> Result<()> {
-        debug_assert_eq!(self.i, self.tag.j);
+        debug_assert_eq!(self.i, self.tag.proposer);
 
         // Upon receiving message (ID.j.s, in, c-broadcast, m):
         // send (ID.j.s, c-send, m) to all parties
@@ -130,7 +120,7 @@ impl Vcbc {
 
         if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid tag. expected {:?}, got {:?}",
+                "invalid tag. expected {}, got {}",
                 self.tag, msg.tag
             )));
         }
@@ -139,7 +129,7 @@ impl Vcbc {
             Action::Send(m) => {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
                 // if j = l and m̄ = ⊥ then
-                if initiator == self.tag.j && self.m_bar.is_none() {
+                if initiator == self.tag.proposer && self.m_bar.is_none() {
                     if !(self.message_validity)(initiator, &m) {
                         return Err(Error::InvalidMessage("invalid proposal".to_string()));
                     }
@@ -150,7 +140,7 @@ impl Vcbc {
                     self.d = Some(d);
 
                     // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
-                    let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
+                    let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
                     let s1 = self.sec_key_share.sign(sign_bytes);
 
                     let ready_msg = Message {
@@ -159,7 +149,7 @@ impl Vcbc {
                     };
 
                     // send (ID.j.s, c-ready, H(m), ν) to Pj
-                    self.send_to(ready_msg, self.tag.j)?;
+                    self.send_to(ready_msg, self.tag.proposer)?;
                 }
             }
             Action::Ready(msg_d, sig_share) => {
@@ -167,7 +157,7 @@ impl Vcbc {
                     Some(d) => d,
                     None => return Err(Error::Generic("protocol violated. no digest".to_string())),
                 };
-                let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
 
                 if d != msg_d {
                     log::warn!("party {} received c-ready with unknown digest. expected {d:?}, got {msg_d:?}", self.i);
@@ -189,7 +179,7 @@ impl Vcbc {
                     }
 
                     // if i = j and νl is a valid S1-signature share then
-                    if self.i == msg.tag.j && valid_sig {
+                    if self.i == msg.tag.proposer && valid_sig {
                         // Wd ← Wd ∪ {νl}
                         e.insert(sig_share);
 
@@ -234,7 +224,7 @@ impl Vcbc {
                     }
                 };
 
-                let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
+                let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
                 if !valid_sig {
                     log::warn!(
@@ -272,7 +262,7 @@ impl Vcbc {
                 if self.u_bar.is_none() {
                     // if µ̄ = ⊥ and ...
                     let d = Hash32::calculate(&m);
-                    let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
+                    let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
                     if self.pub_key_set.public_key().verify(&u, sign_bytes) {
                         // ... µ is a valid S1 -signature on (ID.j.s, c-ready, H(m)) then
                         // µ̄ ← µ
@@ -310,7 +300,7 @@ impl Vcbc {
         } else {
             self.broadcaster
                 .borrow_mut()
-                .send_to(MODULE_NAME, Some(self.tag.j), data, to);
+                .send_to(MODULE_NAME, Some(self.tag.proposer), data, to);
         }
         Ok(())
     }

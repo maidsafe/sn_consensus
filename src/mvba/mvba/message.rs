@@ -2,14 +2,13 @@ use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
 use super::NodeId;
-use crate::mvba::hash::Hash32;
+use crate::mvba::{hash::Hash32, tag::Tag};
 
 /// VoteAction definition.
 /// This is same as `v-vote` message in spec: (ID, v-vote, a, uj, ρj)
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Vote {
-    pub id: String,                         // this is same as $id$ in spec
-    pub proposer: NodeId,                   // this is same as $a$ in spec
+    pub tag: Tag,                           // this is same as $id.a.s$ in spec
     pub value: bool,                        // this is same as $0$ or $1$ in spec
     pub proof: Option<(Hash32, Signature)>, // this is same as $ρ$ in spec
 }
