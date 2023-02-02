@@ -34,9 +34,6 @@ impl Display for Tag {
 
 impl Tag {
     pub fn new(domain: Domain, proposer: usize) -> Self {
-        Self {
-            domain: domain.into(),
-            proposer,
-        }
+        Self { domain, proposer }
     }
 }
