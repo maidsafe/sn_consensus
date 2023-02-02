@@ -195,7 +195,7 @@ fn test_double_vote() {
     t.mvba.receive_message(msg_1).unwrap();
     let result = t.mvba.receive_message(msg_2);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("double vote detected from {:?}", voter)));
+        if msg == format!("double vote detected from {voter:?}")));
 }
 
 #[test]

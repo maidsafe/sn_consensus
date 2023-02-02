@@ -61,7 +61,7 @@ impl Debug for Hash32 {
 impl Display for Hash32 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for v in self.0 {
-            f.write_str(&format!("{:02x}", v))?;
+            f.write_str(&format!("{v:02x}"))?;
         }
 
         Ok(())
@@ -81,7 +81,7 @@ mod tests {
     fn test_calc() {
         let hash = Hash32::calculate("abcd");
         assert_eq!(
-            format!("{}", hash),
+            format!("{hash}"),
             "6f6f129471590d2c91804c812b5750cd44cbdfb7238541c451e1ea2bc0193177"
         );
     }

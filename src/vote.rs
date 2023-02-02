@@ -23,8 +23,8 @@ pub enum Ballot<T: Proposition> {
 impl<T: Proposition> Debug for Ballot<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Ballot::Propose(r) => write!(f, "P({:?})", r),
-            Ballot::Merge(votes) => write!(f, "M{:?}", votes),
+            Ballot::Propose(r) => write!(f, "P({r:?})"),
+            Ballot::Merge(votes) => write!(f, "M{votes:?}"),
             Ballot::SuperMajority { votes, proposals } => write!(
                 f,
                 "SM{:?}-{:?}",

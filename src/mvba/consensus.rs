@@ -18,7 +18,8 @@ pub struct Consensus {
     abba_map: HashMap<NodeId, Abba>,
     vcbc_map: HashMap<NodeId, Vcbc>,
     mvba: Mvba,
-    decided_party: Option<NodeId>,
+    decided_proposer: Option<NodeId>,
+    decided_proposal: Option<Proposal>,
     broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
@@ -74,7 +75,8 @@ impl Consensus {
             vcbc_map,
             abba_map,
             mvba,
-            decided_party: None,
+            decided_proposer: None,
+            decided_proposal: None,
             broadcaster: broadcaster_rc,
         }
     }
@@ -94,7 +96,7 @@ impl Consensus {
     }
 
     pub fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
-        if self.decided_party.is_some() {
+        if self.decided_proposal.is_some() {
             return Ok(vec![]);
         }
 
@@ -108,16 +110,14 @@ impl Consensus {
                             // Check if we have agreed on this proposal before.
                             //    There might be a situation that we receive the agreement
                             //    before receiving the actual proposal.
-                            let abba = self.abba_map.get_mut(&target).unwrap();
-                            if let Some(decided_value) = abba.decided_value() {
-                                if decided_value {
-                                    // We re done! We have both proposal and agreement
-                                    log::info!("halted. proposer: {target}");
-                                    self.decided_party = Some(target);
-                                }
-                            }
 
-                            self.mvba.set_proposal(target, proposal, sig)?;
+                            if self.decided_proposer.is_some() {
+                                // We re done! We have both proposal and agreement
+                                log::info!("halted. proposer: {target}");
+                                self.decided_proposal = Some(proposal);
+                            } else {
+                                self.mvba.set_proposal(target, proposal, sig)?;
+                            }
                         }
                     }
                     None => {
@@ -134,11 +134,13 @@ impl Consensus {
                         abba.receive_message(bundle.initiator, msg)?;
                         if let Some(decided_value) = abba.decided_value() {
                             if decided_value {
+                                self.decided_proposer = Some(target);
+
                                 let vcbc = self.vcbc_map.get_mut(&target).unwrap();
-                                if vcbc.read_delivered().is_some() {
+                                if let Some((proposal, _)) = vcbc.read_delivered() {
                                     // We re done! We have both proposal and agreement
                                     log::info!("halted. proposer: {target}");
-                                    self.decided_party = Some(target);
+                                    self.decided_proposal = Some(proposal);
                                 } else {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
@@ -150,8 +152,10 @@ impl Consensus {
                                         data,
                                     );
                                 }
-                            } else if !self.mvba.move_to_next_proposal()? {
-                                log::warn!("no more proposal");
+                            } else if self.mvba.current_proposer() == target
+                                && !self.mvba.move_to_next_proposal()?
+                            {
+                                log::warn!("party {} has no more proposal", self.self_id);
                             }
                         }
                     }
@@ -204,10 +208,10 @@ mod tests {
 
     use super::Consensus;
     use crate::mvba::{bundle::Outgoing, *};
-    use blsttc::SecretKeySet;
-    use rand::{thread_rng, Rng};
 
+    use blsttc::SecretKeySet;
     use quickcheck_macros::quickcheck;
+    use rand::{thread_rng, Rng, SeedableRng};
 
     fn valid_proposal(_id: NodeId, _: &Proposal) -> bool {
         true
@@ -252,14 +256,9 @@ mod tests {
         }
     }
 
-    #[quickcheck]
-    fn prop_random_msg_delivery(seed: u128) {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .filter_level(log::LevelFilter::Debug)
-            .try_init();
-
-        use rand::SeedableRng;
+    #[test]
+    fn test_prevent_decision_conflict() {
+        let seed: u128 = 239389896331702023721706851822556999354;
         let mut seed_buf = [0u8; 32];
         seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
         let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
@@ -276,7 +275,7 @@ mod tests {
             let rand_index = rng.gen_range(0..net.buffer.len());
             let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::debug!("random message: {:?}", rand_msg);
+            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -296,20 +295,87 @@ mod tests {
 
         let mut decisions = HashMap::new();
         for c in &mut net.cons {
-            if c.decided_party.is_some() {
+            if c.decided_proposer.is_some() {
                 let value = c
                     .abba_map
-                    .get(&c.decided_party.unwrap())
+                    .get(&c.decided_proposer.unwrap())
                     .unwrap()
                     .decided_value()
                     .unwrap();
 
-                println!(
+                log::debug!(
                     "test for consensus {} finished on proposal {} with {value}",
                     c.self_id,
-                    c.decided_party.unwrap(),
+                    c.decided_proposer.unwrap(),
                 );
-                decisions.insert(c.self_id, (c.decided_party.unwrap(), value));
+                decisions.insert(c.self_id, (c.decided_proposer.unwrap(), value));
+            }
+        }
+
+        // check if all consensus results are equal:
+        assert_eq!(decisions.len(), net.cons.len());
+        // https://sts10.github.io/2019/06/06/is-all-equal-function.html
+        let first = decisions.iter().next().unwrap().1;
+        assert!(decisions.iter().all(|(_, item)| item == first));
+    }
+
+    #[quickcheck]
+    fn prop_random_msg_delivery(seed: u128) {
+        let _ = env_logger::builder()
+            .is_test(true)
+            .filter_level(log::LevelFilter::Debug)
+            .try_init();
+
+        let mut seed_buf = [0u8; 32];
+        seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
+        let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
+
+        let mut net = TestNet::new();
+
+        for c in &mut net.cons {
+            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let mut msgs = c.propose(proposal).unwrap();
+            net.buffer.append(&mut msgs);
+        }
+
+        while !net.buffer.is_empty() {
+            let rand_index = rng.gen_range(0..net.buffer.len());
+            let rand_msg = &net.buffer.remove(rand_index);
+            let mut msgs = Vec::new();
+            log::trace!("random message: {:?}", rand_msg);
+
+            for c in &mut net.cons {
+                msgs.append(&mut match rand_msg {
+                    Outgoing::Direct(id, bundle) => {
+                        if id == &c.self_id {
+                            c.process_bundle(bundle).unwrap()
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    Outgoing::Gossip(bundle) => c.process_bundle(bundle).unwrap(),
+                });
+            }
+
+            net.buffer.append(&mut msgs);
+        }
+
+        let mut decisions = HashMap::new();
+        for c in &mut net.cons {
+            if c.decided_proposer.is_some() {
+                let value = c
+                    .abba_map
+                    .get(&c.decided_proposer.unwrap())
+                    .unwrap()
+                    .decided_value()
+                    .unwrap();
+
+                log::debug!(
+                    "test for consensus {} finished on proposal {} with {value}",
+                    c.self_id,
+                    c.decided_proposer.unwrap(),
+                );
+                decisions.insert(c.self_id, (c.decided_proposer.unwrap(), value));
             }
         }
 

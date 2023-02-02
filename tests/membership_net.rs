@@ -278,7 +278,7 @@ msc {\n
             .map(|p| p.id())
             .collect::<BTreeSet<_>>() // sort by actor id
             .into_iter()
-            .map(|id| format!("{}", id))
+            .map(|id| format!("{id}"))
             .collect::<Vec<_>>()
             .join(",");
         msc.push_str(&procs);

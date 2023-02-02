@@ -229,7 +229,7 @@ fn test_handover_round_robin_split_vote() -> eyre::Result<()> {
         }
 
         // generate msc file
-        net.generate_msc(&format!("handover_round_robin_split_vote_{}.msc", nprocs))?;
+        net.generate_msc(&format!("handover_round_robin_split_vote_{nprocs}.msc"))?;
 
         // make sure they all reach the same conclusion
         let max_proposed_value = nprocs - 1;

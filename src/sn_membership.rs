@@ -29,8 +29,8 @@ pub enum Reconfig<T: Proposition> {
 impl<T: Proposition> Debug for Reconfig<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Reconfig::Join(a) => write!(f, "J{:?}", a),
-            Reconfig::Leave(a) => write!(f, "L{:?}", a),
+            Reconfig::Join(a) => write!(f, "J{a:?}"),
+            Reconfig::Leave(a) => write!(f, "L{a:?}"),
         }
     }
 }
@@ -121,10 +121,7 @@ impl<T: Proposition> Membership<T> {
             let decision = if let Some(decision) = consensus.decision.as_ref() {
                 decision
             } else {
-                panic!(
-                    "historical consensus entry without decision {}: {:?}",
-                    history_gen, consensus
-                );
+                panic!("historical consensus entry without decision {history_gen}: {consensus:?}");
             };
 
             for (reconfig, _sig) in decision.proposals.iter() {

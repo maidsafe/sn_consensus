@@ -76,7 +76,7 @@ impl Abba {
 
     fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
         if self.voted {
-            log::debug!("we have voted before");
+            log::trace!("party {} voted before", self.i);
             return Ok(());
         }
 
@@ -102,8 +102,9 @@ impl Abba {
             return Ok(());
         }
 
-        log::debug!(
-            "received {} message: {:?} from {}",
+        log::trace!(
+            "party {} received {} message: {:?} from {}",
+            self.i,
             msg.action_str(),
             msg,
             initiator
@@ -119,8 +120,9 @@ impl Abba {
                 if let Some(existing_decision) = self.decided_value.as_ref() {
                     if existing_decision != agg_main_vote {
                         log::error!(
-                            "existing decision does not match the decision we received:
-                            {existing_decision:?} != {agg_main_vote:?}"
+                            "party {}'s existing decision does not match the decision we received:
+                            {existing_decision:?} != {agg_main_vote:?}",
+                            self.i,
                         );
 
                         return Err(Error::Generic("received conflicting decision".into()));
@@ -144,7 +146,11 @@ impl Abba {
                     let main_votes = match self.get_main_votes_by_round(self.r - 1) {
                         Some(v) => v,
                         None => {
-                            log::debug!("no main-votes for this round: {}", self.r);
+                            log::debug!(
+                                "party {} has no main-votes for this round: {}",
+                                self.i,
+                                self.r
+                            );
                             return Ok(());
                         }
                     };
@@ -163,7 +169,8 @@ impl Abba {
                         // If these are all main-votes for b ∈ {0, 1}, then decide the value b for ID
                         if zero_votes.clone().count() >= self.threshold() {
                             log::info!(
-                                "decided for zero. id={}, r={}, j={}",
+                                "party {} decided for zero. id={}, r={}, j={}",
+                                self.i,
                                 self.id,
                                 self.j,
                                 self.r
@@ -183,7 +190,8 @@ impl Abba {
 
                         if one_votes.clone().count() >= self.threshold() {
                             log::info!(
-                                "decided for one. id={}, r={}, j={}",
+                                "party {} decided for one. id={}, r={}, j={}",
+                                self.i,
                                 self.id,
                                 self.j,
                                 self.r
@@ -201,53 +209,63 @@ impl Abba {
                             return Ok(());
                         }
 
-                        let (value, justification) =
-                            if let Some((digest, sig)) = &self.weak_validity {
-                                // if all honest parties start with 0, they may still
-                                // decide on 1 if they obtain the corresponding validating data
-                                //  for 1 during the agreement protocol
-
-                                (
-                                    Value::One,
-                                    PreVoteJustification::WithValidity(*digest, sig.clone()),
-                                )
-                            } else if let Some((_, zero_vote)) = zero_votes.next() {
-                                // if there is a main-vote for 0,
-                                let sig =
-                                    match &zero_vote.justification {
-                                        MainVoteJustification::NoAbstain(sig) => sig,
-                                        _ => return Err(Error::Generic(
-                                            "protocol violated, invalid main-vote justification"
-                                                .to_string(),
-                                        )),
-                                    };
-                                // hard pre-vote for 0
-                                (Value::Zero, PreVoteJustification::Hard(sig.clone()))
-                            } else if let Some((_, one_vote)) = one_votes.next() {
-                                // if there is a main-vote for 1,
-                                let sig =
-                                    match &one_vote.justification {
-                                        MainVoteJustification::NoAbstain(sig) => sig,
-                                        _ => return Err(Error::Generic(
-                                            "protocol violated, invalid main-vote justification"
-                                                .to_string(),
-                                        )),
-                                    };
-                                // hard pre-vote for 1
-                                (Value::One, PreVoteJustification::Hard(sig.clone()))
-                            } else if abstain_votes.clone().count() == main_votes.len() {
-                                // if all main-votes are abstain,
-                                let sig_share: HashMap<&NodeId, &SignatureShare> =
-                                    abstain_votes.map(|(n, a)| (n, &a.sig_share)).collect();
-                                let sig = self.pub_key_set.combine_signatures(sig_share)?;
-                                // soft pre-vote for 1
-                                // Coin value bias to 1 in weaker validity mode.
-                                (Value::One, PreVoteJustification::Soft(sig))
-                            } else {
-                                return Err(Error::Generic(
-                                    "protocol violated, no pre-vote majority".to_string(),
-                                ));
+                        let (value, justification) = if let Some((digest, sig)) =
+                            &self.weak_validity
+                        {
+                            if let Some(v) = self.get_pre_votes_by_round(self.r) {
+                                if v.contains_key(&self.i) {
+                                    log::debug!("party {} obtained the corresponding validating data after voting for zero", self.i);
+                                    return Ok(());
+                                }
                             };
+
+                            // if all honest parties start with 0, they may still
+                            // decide on 1 if they obtain the corresponding validating data
+                            //  for 1 during the agreement protocol
+
+                            (
+                                Value::One,
+                                PreVoteJustification::WithValidity(*digest, sig.clone()),
+                            )
+                        } else if let Some((_, zero_vote)) = zero_votes.next() {
+                            // if there is a main-vote for 0,
+                            let sig = match &zero_vote.justification {
+                                MainVoteJustification::NoAbstain(sig) => sig,
+                                _ => {
+                                    return Err(Error::Generic(
+                                        "protocol violated, invalid main-vote justification"
+                                            .to_string(),
+                                    ))
+                                }
+                            };
+                            // hard pre-vote for 0
+                            (Value::Zero, PreVoteJustification::Hard(sig.clone()))
+                        } else if let Some((_, one_vote)) = one_votes.next() {
+                            // if there is a main-vote for 1,
+                            let sig = match &one_vote.justification {
+                                MainVoteJustification::NoAbstain(sig) => sig,
+                                _ => {
+                                    return Err(Error::Generic(
+                                        "protocol violated, invalid main-vote justification"
+                                            .to_string(),
+                                    ))
+                                }
+                            };
+                            // hard pre-vote for 1
+                            (Value::One, PreVoteJustification::Hard(sig.clone()))
+                        } else if abstain_votes.clone().count() == main_votes.len() {
+                            // if all main-votes are abstain,
+                            let sig_share: HashMap<&NodeId, &SignatureShare> =
+                                abstain_votes.map(|(n, a)| (n, &a.sig_share)).collect();
+                            let sig = self.pub_key_set.combine_signatures(sig_share)?;
+                            // soft pre-vote for 1
+                            // Coin value bias to 1 in weaker validity mode.
+                            (Value::One, PreVoteJustification::Soft(sig))
+                        } else {
+                            return Err(Error::Generic(
+                                "protocol violated, no pre-vote majority".to_string(),
+                            ));
+                        };
 
                         // Produce an S-signature share on the message `(ID, pre-vote, r, b)`
                         let sign_bytes = self.pre_vote_bytes_to_sign(self.r, &value)?;
@@ -278,7 +296,11 @@ impl Abba {
                 let pre_votes = match self.get_pre_votes_by_round(self.r) {
                     Some(v) => v,
                     None => {
-                        log::debug!("no pre-votes for this round: {}", self.r);
+                        log::debug!(
+                            "party {} has no pre-votes for this round: {}",
+                            self.i,
+                            self.r
+                        );
                         return Ok(());
                     }
                 };
@@ -345,10 +367,13 @@ impl Abba {
     }
 
     pub fn decided_value(&self) -> Option<bool> {
-        self.decided_value.as_ref().map(|v| match v.value {
-            Value::One => true,
-            Value::Zero => false,
-        })
+        match &self.decided_value {
+            Some(v) => match v.value {
+                Value::One => Some(true),
+                Value::Zero => Some(false),
+            },
+            None => None,
+        }
     }
 
     fn add_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<bool> {
@@ -358,8 +383,7 @@ impl Abba {
                 if let Some(exist) = pre_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
-                            "double pre-vote detected from {:?}",
-                            initiator
+                            "double pre-vote detected from {initiator:?}"
                         )));
                     }
                     return Ok(false);
@@ -372,8 +396,7 @@ impl Abba {
                 if let Some(exist) = main_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
-                            "double main-vote detected from {:?}",
-                            initiator
+                            "double main-vote detected from {initiator:?}"
                         )));
                     }
                     return Ok(false);
@@ -564,7 +587,7 @@ impl Abba {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, action: Action) -> Result<()> {
-        log::debug!("broadcasting {action:?} from {}", self.i);
+        log::debug!("party {} broadcasts {action:?}", self.i);
 
         let msg = Message {
             id: self.id.clone(),

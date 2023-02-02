@@ -120,8 +120,9 @@ impl Vcbc {
 
     /// receive_message process the received message 'msg` from `initiator`
     pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
-        log::debug!(
-            "received {} message: {:?} from {}",
+        log::trace!(
+            "party {} received {} message: {:?} from {}",
+            self.i,
             msg.action_str(),
             msg,
             initiator
@@ -169,7 +170,7 @@ impl Vcbc {
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
 
                 if d != msg_d {
-                    log::warn!("c-ready has unknown digest. expected {d:?}, got {msg_d:?}");
+                    log::warn!("party {} received c-ready with unknown digest. expected {d:?}, got {msg_d:?}", self.i);
                     return Err(Error::Generic("Invalid digest".to_string()));
                 }
 
@@ -181,7 +182,10 @@ impl Vcbc {
                         .verify(&sig_share, sign_bytes);
 
                     if !valid_sig {
-                        log::warn!("c-ready has has invalid signature share");
+                        log::warn!(
+                            "party {} received c-ready with invalid signature share",
+                            self.i
+                        );
                     }
 
                     // if i = j and νl is a valid S1-signature share then
@@ -214,7 +218,10 @@ impl Vcbc {
                 let d = match self.d {
                     Some(d) => d,
                     None => {
-                        log::warn!("received c-final before receiving c-send, logging message");
+                        log::warn!(
+                            "party {} received c-final before receiving c-send, logging message",
+                            self.i
+                        );
                         try_insert(&mut self.final_messages, initiator, msg)?;
                         // requesting for the proposal
                         let request_msg = Message {
@@ -230,7 +237,10 @@ impl Vcbc {
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag.id, &self.tag.j, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
                 if !valid_sig {
-                    log::warn!("c-ready has has invalid signature share");
+                    log::warn!(
+                        "party {} received c-ready with invalid signature share",
+                        self.i
+                    );
                 }
 
                 // if H(m̄) = d and µ̄ = ⊥ and µ is a valid S1-signature then
@@ -292,6 +302,8 @@ impl Vcbc {
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
     fn send_to(&mut self, msg: self::Message, to: NodeId) -> Result<()> {
+        log::debug!("party {} sends {msg:?} to {}", self.i, to);
+
         let data = bincode::serialize(&msg)?;
         if to == self.i {
             self.receive_message(self.i, msg)?;
@@ -306,6 +318,8 @@ impl Vcbc {
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
     fn broadcast(&mut self, msg: self::Message) -> Result<()> {
+        log::debug!("party {} broadcasts {msg:?}", self.i);
+
         let data = bincode::serialize(&msg)?;
         self.broadcaster
             .borrow_mut()
