@@ -170,7 +170,7 @@ impl Mvba {
             log::debug!(
                 "party {} requests proposal from {}",
                 self.i,
-                msg.vote.proposer,
+                msg.vote.tag.proposer,
             );
             let data = vcbc::make_c_request_message(self.current_tag())?;
 

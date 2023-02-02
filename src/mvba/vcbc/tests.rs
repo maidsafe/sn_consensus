@@ -217,9 +217,14 @@ fn test_ignore_messages_with_invalid_tag() {
     let mut final_msg = t.make_final_msg(&t.d());
     final_msg.tag.domain = Domain::new("another-domain", 0);
 
-    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg.clone());
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == "invalid tag. expected test-domain[0].0, got another-domain[0].0"));
+    let result = t.vcbc.receive_message(TestNet::PARTY_B, final_msg);
+    match result {
+        Err(Error::InvalidMessage(msg)) => assert_eq!(
+            msg,
+            "invalid tag. expected test-domain[0].0, got another-domain[0].0"
+        ),
+        res => panic!("Unexpected result: {res:?}"),
+    }
 }
 
 // --------------------------------------

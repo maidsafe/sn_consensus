@@ -200,8 +200,13 @@ fn test_ignore_messages_with_wrong_proposer() {
     pre_vote_x.tag.proposer = TestNet::PARTY_B;
 
     let result = t.abba.receive_message(TestNet::PARTY_B, pre_vote_x);
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == format!("invalid tag. expected: test-domain.{j}.0, got test-domain.2.0")));
+    match result {
+        Err(Error::InvalidMessage(msg)) => assert_eq!(
+            msg,
+            "invalid tag. expected: test-domain[0].0, got test-domain[0].2"
+        ),
+        res => panic!("Should not have accepted the message: {res:?}"),
+    }
 }
 
 #[test]

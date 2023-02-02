@@ -120,7 +120,7 @@ impl Vcbc {
 
         if msg.tag != self.tag {
             return Err(Error::InvalidMessage(format!(
-                "invalid tag. expected {:?}, got {:?}",
+                "invalid tag. expected {}, got {}",
                 self.tag, msg.tag
             )));
         }
