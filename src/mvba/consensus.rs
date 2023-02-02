@@ -319,6 +319,74 @@ mod tests {
         assert!(decisions.iter().all(|(_, item)| item == first));
     }
 
+    #[test]
+    fn test_random_msg_mvba_accepts_messages_from_previous_proposer() {
+        let seed: u128 = 31637883178971836821716406404683523;
+        let _ = env_logger::builder()
+            .is_test(true)
+            .filter_level(log::LevelFilter::Trace)
+            .try_init();
+
+        let mut seed_buf = [0u8; 32];
+        seed_buf[0..16].copy_from_slice(&seed.to_le_bytes());
+        let mut rng = rand::rngs::StdRng::from_seed(seed_buf);
+
+        let mut net = TestNet::new();
+
+        for c in &mut net.cons {
+            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let mut msgs = c.propose(proposal).unwrap();
+            net.buffer.append(&mut msgs);
+        }
+
+        while !net.buffer.is_empty() {
+            let rand_index = rng.gen_range(0..net.buffer.len());
+            let rand_msg = &net.buffer.remove(dbg!(rand_index));
+            let mut msgs = Vec::new();
+            log::trace!("random message: {:?}", rand_msg);
+
+            for c in &mut net.cons {
+                msgs.append(&mut match rand_msg {
+                    Outgoing::Direct(id, bundle) => {
+                        if id == &c.self_id {
+                            c.process_bundle(bundle).unwrap()
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    Outgoing::Gossip(bundle) => c.process_bundle(bundle).unwrap(),
+                });
+            }
+
+            net.buffer.append(&mut msgs);
+        }
+
+        let mut decisions = HashMap::new();
+        for c in &mut net.cons {
+            if c.decided_proposer.is_some() {
+                let value = c
+                    .abba_map
+                    .get(&c.decided_proposer.unwrap())
+                    .unwrap()
+                    .decided_value()
+                    .unwrap();
+
+                log::debug!(
+                    "test for consensus {} finished on proposal {} with {value}",
+                    c.self_id,
+                    c.decided_proposer.unwrap(),
+                );
+                decisions.insert(c.self_id, (c.decided_proposer.unwrap(), value));
+            }
+        }
+
+        // check if all consensus results are equal:
+        assert_eq!(decisions.len(), net.cons.len());
+        // https://sts10.github.io/2019/06/06/is-all-equal-function.html
+        let first = decisions.iter().next().unwrap().1;
+        assert!(decisions.iter().all(|(_, item)| item == first));
+    }
+
     #[quickcheck]
     fn prop_random_msg_delivery(seed: u128) {
         let _ = env_logger::builder()

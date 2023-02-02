@@ -136,7 +136,7 @@ impl Mvba {
         }
 
         if let Some((digest, signature)) = &msg.vote.proof {
-            let sign_bytes = vcbc::c_ready_bytes_to_sign(&self.current_tag(), digest).unwrap();
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&msg.vote.tag, digest).unwrap();
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
