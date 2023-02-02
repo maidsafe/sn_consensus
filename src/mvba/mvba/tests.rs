@@ -106,8 +106,15 @@ fn test_ignore_messages_with_wrong_id() {
     msg.vote.tag.domain = Domain::new("another-domain", 0);
 
     let result = t.mvba.receive_message(msg);
-    assert!(matches!(result, Err(Error::InvalidMessage(msg))
-        if msg == "invalid tag. expected: test-domain[0].0, got another-domain[0].0"));
+    match result {
+        Err(Error::InvalidMessage(msg)) => {
+            assert_eq!(
+                msg,
+                "invalid domain. expected: test-domain[0], got another-domain[0]"
+            )
+        }
+        res => panic!("Unexpected result: {res:?}"),
+    }
 }
 
 #[test]

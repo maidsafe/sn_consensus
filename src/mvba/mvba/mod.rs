@@ -111,11 +111,10 @@ impl Mvba {
     }
 
     fn check_message(&mut self, msg: &Message) -> Result<()> {
-        let tag = self.current_tag();
-        if msg.vote.tag != tag {
+        if msg.vote.tag.domain != self.domain {
             return Err(Error::InvalidMessage(format!(
-                "invalid tag. expected: {tag}, got {}",
-                msg.vote.tag
+                "invalid domain. expected: {}, got {}",
+                self.domain, msg.vote.tag.domain
             )));
         }
 
