@@ -227,7 +227,7 @@ impl Mvba {
         Ok(())
     }
 
-    fn must_get_proposer_votes(&mut self, proposer: &NodeId) -> Result<&mut HashMap<NodeId, Vote>> {
+    fn proposer_votes_mut(&mut self, proposer: &NodeId) -> Result<&mut HashMap<NodeId, Vote>> {
         if !self.votes_per_proposer.contains_key(proposer) {
             self.votes_per_proposer.insert(*proposer, HashMap::new());
         }
