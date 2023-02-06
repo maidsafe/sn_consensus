@@ -101,9 +101,7 @@ impl Mvba {
     pub fn current_proposer(&self) -> Result<NodeId> {
         match self.parties.get(self.l) {
             Some(p) => Ok(*p),
-            None => {
-                return Err(Error::Generic("parties is not initialized".to_string()));
-            }
+            None => Err(Error::Generic("parties is not initialized".to_string())),
         }
     }
 
