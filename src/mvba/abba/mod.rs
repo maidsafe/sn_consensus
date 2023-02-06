@@ -33,7 +33,7 @@ pub(crate) struct Abba {
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     broadcaster: Rc<RefCell<Broadcaster>>,
-    round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>, // TODO: prevent an attack when receive round with big number
+    round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>,
     round_main_votes: Vec<HashMap<NodeId, MainVoteAction>>,
 }
 
@@ -375,7 +375,7 @@ impl Abba {
     fn add_message(&mut self, initiator: &NodeId, msg: &Message) -> Result<bool> {
         match &msg.action {
             Action::PreVote(action) => {
-                let pre_votes = self.get_mut_pre_votes_by_round(action.round);
+                let pre_votes = self.get_mut_pre_votes_by_round(action.round)?;
                 if let Some(exist) = pre_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
@@ -388,7 +388,7 @@ impl Abba {
                 pre_votes.insert(*initiator, action.clone());
             }
             Action::MainVote(action) => {
-                let main_votes = self.get_mut_main_votes_by_round(action.round);
+                let main_votes = self.get_mut_main_votes_by_round(action.round)?;
                 if let Some(exist) = main_votes.get(initiator) {
                     if exist != action {
                         return Err(Error::InvalidMessage(format!(
@@ -621,14 +621,22 @@ impl Abba {
 
     /// returns the pre votes for the given `round`.
     /// If there is not votes for the `round`, it expand the `round_pre_votes`.
-    fn get_mut_pre_votes_by_round(&mut self, round: usize) -> &mut HashMap<NodeId, PreVoteAction> {
+    fn get_mut_pre_votes_by_round(
+        &mut self,
+        round: usize,
+    ) -> Result<&mut HashMap<NodeId, PreVoteAction>> {
         // make sure we have the round messages
         while self.round_pre_votes.len() < round {
             self.round_pre_votes.push(HashMap::new());
         }
-        self.round_pre_votes
-            .get_mut(round - 1) // rounds start from 1 based on spec
-            .unwrap()
+
+        // rounds start from 1 based on spec
+        match self.round_pre_votes.get_mut(round - 1) {
+            Some(v) => Ok(v),
+            None => Err(Error::Generic(format!(
+                "round_pre_votes is not initialized for round {round}"
+            ))),
+        }
     }
 
     /// returns the main votes for the given `round`.
@@ -636,15 +644,19 @@ impl Abba {
     fn get_mut_main_votes_by_round(
         &mut self,
         round: usize,
-    ) -> &mut HashMap<NodeId, MainVoteAction> {
+    ) -> Result<&mut HashMap<NodeId, MainVoteAction>> {
         // make sure we have the round messages
         while self.round_main_votes.len() < round {
             self.round_main_votes.push(HashMap::new());
         }
 
-        self.round_main_votes
-            .get_mut(round - 1) // rounds start from 1 based on spec
-            .unwrap()
+        // rounds start from 1 based on spec
+        match self.round_main_votes.get_mut(round - 1) {
+            Some(v) => Ok(v),
+            None => Err(Error::Generic(format!(
+                "round_main_votes is not initialized for round {round}"
+            ))),
+        }
     }
 }
 

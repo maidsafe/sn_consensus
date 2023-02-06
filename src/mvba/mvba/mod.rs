@@ -76,7 +76,7 @@ impl Mvba {
         log::debug!(
             "party {} moves to the next proposer: {}",
             self.i,
-            self.current_proposer()
+            self.current_proposer()?
         );
         if self.l + 1 == self.parties.len() {
             // no more proposal
@@ -90,24 +90,27 @@ impl Mvba {
         Ok(true)
     }
 
-    pub fn current_tag(&self) -> Tag {
-        self.build_tag(self.current_proposer())
+    pub fn current_tag(&self) -> Result<Tag> {
+        Ok(self.build_tag(self.current_proposer()?))
     }
 
     pub fn build_tag(&self, proposer: NodeId) -> Tag {
         Tag::new(self.domain.clone(), proposer)
     }
 
-    pub fn current_proposer(&self) -> NodeId {
-        *self.parties.get(self.l).unwrap()
+    pub fn current_proposer(&self) -> Result<NodeId> {
+        match self.parties.get(self.l) {
+            Some(p) => Ok(*p),
+            None => Err(Error::Generic("parties is not initialized".to_string())),
+        }
     }
 
     pub fn completed_vote(&self) -> Option<bool> {
         self.v
     }
 
-    pub fn completed_vote_value(&self) -> Option<&(Proposal, Signature)> {
-        self.proposals.get(&self.current_proposer())
+    pub fn completed_vote_value(&self) -> Result<Option<&(Proposal, Signature)>> {
+        Ok(self.proposals.get(&self.current_proposer()?))
     }
 
     fn check_message(&mut self, msg: &Message) -> Result<()> {
@@ -136,7 +139,8 @@ impl Mvba {
         }
 
         if let Some((digest, signature)) = &msg.vote.proof {
-            let sign_bytes = vcbc::c_ready_bytes_to_sign(&msg.vote.tag, digest).unwrap();
+            let sign_bytes = vcbc::c_ready_bytes_to_sign(&msg.vote.tag, digest)
+                .map_err(|e| Error::Generic(e.to_string()))?;
             if !self.pub_key_set.public_key().verify(signature, sign_bytes) {
                 return Err(Error::InvalidMessage(
                     "proposal with an invalid proof".to_string(),
@@ -148,7 +152,7 @@ impl Mvba {
     }
 
     pub fn add_vote(&mut self, msg: &Message) -> Result<bool> {
-        let votes = self.must_get_proposer_votes(&msg.vote.tag.proposer);
+        let votes = self.proposer_votes_mut(&msg.vote.tag.proposer);
         if let Some(exist) = votes.get(&msg.voter) {
             if exist != &msg.vote {
                 return Err(Error::InvalidMessage(format!(
@@ -171,7 +175,7 @@ impl Mvba {
                 self.i,
                 msg.vote.tag.proposer,
             );
-            let data = vcbc::make_c_request_message(self.current_tag())?;
+            let data = vcbc::make_c_request_message(self.current_tag()?)?;
 
             self.broadcaster.borrow_mut().send_to(
                 vcbc::MODULE_NAME,
@@ -201,13 +205,13 @@ impl Mvba {
         if self.proposals.len() >= threshold && self.v.is_none() {
             // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
             // that VID|a (uj , ρj) holds
-            let votes = self.must_get_proposer_votes(&msg.vote.tag.proposer);
+            let votes = self.proposer_votes_mut(&msg.vote.tag.proposer);
             if votes.len() >= threshold {
                 if votes.values().any(|v| v.value) {
                     log::debug!(
                         "party {} completed for proposer {}.",
                         self.i,
-                        self.current_proposer()
+                        self.current_proposer()?
                     );
                     // if there is some uj = 1 then
                     // v ← 1; ρ ← ρj
@@ -223,19 +227,15 @@ impl Mvba {
         Ok(())
     }
 
-    // TODO: make me better, no unwrap?
-    fn must_get_proposer_votes(&mut self, proposer: &NodeId) -> &mut HashMap<NodeId, Vote> {
-        if !self.votes_per_proposer.contains_key(proposer) {
-            self.votes_per_proposer.insert(*proposer, HashMap::new());
-        }
-        self.votes_per_proposer.get_mut(proposer).unwrap()
+    fn proposer_votes_mut(&mut self, proposer: &NodeId) -> &mut HashMap<NodeId, Vote> {
+        self.votes_per_proposer.entry(*proposer).or_default()
     }
 
     fn vote(&mut self) -> Result<()> {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         if self.proposals.len() >= self.threshold() && !self.voted {
-            let tag = self.current_tag();
+            let tag = self.current_tag()?;
             let vote = match self.proposals.get(&tag.proposer) {
                 None => {
                     // if wa = ⊥ then
