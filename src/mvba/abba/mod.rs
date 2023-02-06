@@ -634,7 +634,7 @@ impl Abba {
         match self.round_pre_votes.get_mut(round - 1) {
             Some(v) => Ok(v),
             None => Err(Error::Generic(
-                "round_main_votes is not initialized".to_string(),
+                format!("round_pre_votes is not initialized for round {round}"),
             )),
         }
     }
