@@ -135,7 +135,10 @@ impl Consensus {
                             if decided_value {
                                 self.decided_proposer = Some(target);
 
-                                let vcbc = self.vcbc_map.get_mut(&target).unwrap();
+                                let vcbc = self
+                                    .vcbc_map
+                                    .get_mut(&target)
+                                    .expect("vcbc_map is not initialized");
                                 if let Some((proposal, _)) = vcbc.read_delivered() {
                                     // We re done! We have both proposal and agreement
                                     log::info!("halted. proposer: {target}");
@@ -152,7 +155,7 @@ impl Consensus {
                                         data,
                                     );
                                 }
-                            } else if self.mvba.current_proposer() == target
+                            } else if self.mvba.current_proposer()? == target
                                 && !self.mvba.move_to_next_proposal()?
                             {
                                 log::warn!("party {} has no more proposal", self.self_id);
@@ -181,13 +184,13 @@ impl Consensus {
         if let Some(completed_vote) = self.mvba.completed_vote() {
             let abba = self
                 .abba_map
-                .get_mut(&self.mvba.current_proposer())
-                .unwrap();
+                .get_mut(&self.mvba.current_proposer()?)
+                .expect("mvba is not initialized");
 
             if completed_vote {
                 // The proposal is c-delivered and we have proof for that.
                 // Let's start binary agreement by voting 1
-                if let Some((proposal, sig)) = self.mvba.completed_vote_value() {
+                if let Some((proposal, sig)) = self.mvba.completed_vote_value()? {
                     let digest = Hash32::calculate(proposal);
                     abba.pre_vote_one(digest, sig.clone())?;
                 }
