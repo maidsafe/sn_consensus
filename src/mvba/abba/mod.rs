@@ -633,9 +633,9 @@ impl Abba {
         // rounds start from 1 based on spec
         match self.round_pre_votes.get_mut(round - 1) {
             Some(v) => Ok(v),
-            None => Err(Error::Generic(
-                format!("round_pre_votes is not initialized for round {round}"),
-            )),
+            None => Err(Error::Generic(format!(
+                "round_pre_votes is not initialized for round {round}"
+            ))),
         }
     }
 
@@ -653,9 +653,9 @@ impl Abba {
         // rounds start from 1 based on spec
         match self.round_main_votes.get_mut(round - 1) {
             Some(v) => Ok(v),
-            None => Err(Error::Generic(
-                format!("round_main_votes is not initialized for round {round}"),
-            )),
+            None => Err(Error::Generic(format!(
+                "round_main_votes is not initialized for round {round}"
+            ))),
         }
     }
 }

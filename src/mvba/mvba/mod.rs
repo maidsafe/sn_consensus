@@ -152,7 +152,7 @@ impl Mvba {
     }
 
     pub fn add_vote(&mut self, msg: &Message) -> Result<bool> {
-        let votes = self.must_get_proposer_votes(&msg.vote.tag.proposer)?;
+        let votes = self.proposer_votes_mut(&msg.vote.tag.proposer);
         if let Some(exist) = votes.get(&msg.voter) {
             if exist != &msg.vote {
                 return Err(Error::InvalidMessage(format!(
@@ -205,7 +205,7 @@ impl Mvba {
         if self.proposals.len() >= threshold && self.v.is_none() {
             // wait for n − t messages (ID, v-vote, a, uj , ρj ) from distinct Pj such
             // that VID|a (uj , ρj) holds
-            let votes = self.must_get_proposer_votes(&msg.vote.tag.proposer)?;
+            let votes = self.proposer_votes_mut(&msg.vote.tag.proposer);
             if votes.len() >= threshold {
                 if votes.values().any(|v| v.value) {
                     log::debug!(
@@ -227,16 +227,8 @@ impl Mvba {
         Ok(())
     }
 
-    fn proposer_votes_mut(&mut self, proposer: &NodeId) -> Result<&mut HashMap<NodeId, Vote>> {
-        if !self.votes_per_proposer.contains_key(proposer) {
-            self.votes_per_proposer.insert(*proposer, HashMap::new());
-        }
-        match self.votes_per_proposer.get_mut(proposer) {
-            Some(v) => Ok(v),
-            None => Err(Error::Generic(
-                "votes_per_proposer is not initialized".to_string(),
-            )),
-        }
+    fn proposer_votes_mut(&mut self, proposer: &NodeId) -> &mut HashMap<NodeId, Vote> {
+        self.votes_per_proposer.entry(*proposer).or_default()
     }
 
     fn vote(&mut self) -> Result<()> {
