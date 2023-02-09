@@ -19,7 +19,7 @@ version = "1"
 features = ["derive"]
 
 [dependencies.blsttc]
-version = "8.0.0"
+version = "8.0"
 
 [profile.test]
 opt-level = 3

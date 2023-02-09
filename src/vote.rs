@@ -10,7 +10,7 @@ use crate::{Candidate, Error, Fault, NodeId, Result, VoteCount};
 pub trait Proposition: Ord + Clone + Debug + Serialize {}
 impl<T: Ord + Clone + Debug + Serialize> Proposition for T {}
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Ballot<T: Proposition> {
     Propose(T),
     Merge(BTreeSet<SignedVote<T>>),
@@ -87,7 +87,7 @@ impl<T: Proposition> Ballot<T> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Vote<T: Proposition> {
     pub gen: Generation,
     pub ballot: Ballot<T>,
@@ -186,7 +186,7 @@ impl<T: Proposition> Vote<T> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct SignedVote<T: Proposition> {
     pub vote: Vote<T>,
     pub voter: NodeId,
