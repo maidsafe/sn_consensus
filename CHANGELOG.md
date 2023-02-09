@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.2.0](https://github.com/maidsafe/sn_consensus/compare/v3.1.4...v3.2.0) (2023-02-09)
+
+
+### Features
+
+* **abba:** simulated network test showing failure to terminate ([922cc86](https://github.com/maidsafe/sn_consensus/commit/922cc868b97aa058462f66c876d2d5134e9ef7d2))
+* **mvba:** implementing Protocol VBA for multi-valued validated Byzantine agreement. ([71d80af](https://github.com/maidsafe/sn_consensus/commit/71d80af90fadbc47f5448a68333a7fec139578e5))
+* **mvba:** introducing outgoing type ([d8d5216](https://github.com/maidsafe/sn_consensus/commit/d8d5216cfc3c7ed4ad3102b975bad0af285e70e3))
+* **tests:** rewrite the mvba::test_random() test to use quickcheck ([a684463](https://github.com/maidsafe/sn_consensus/commit/a684463e69ab4f28707dbf868191d5a83751eb15))
+* **vcbc:** defining proposal ([6a75d37](https://github.com/maidsafe/sn_consensus/commit/6a75d3763b4c73d781b04f2bc0681945b9b59fbe))
+* **vcbc:** implementing c-request and c-answer messages ([f3de8ad](https://github.com/maidsafe/sn_consensus/commit/f3de8ada663a2b5d196e94acb61c913f3d29ad4e))
+* agreement in two-round with weaker validity assumption ([a887138](https://github.com/maidsafe/sn_consensus/commit/a8871388f373e9ac40d2e5d8af1a496dc825513c))
+* implementing abba, implementing pre-vote phase (WIP) ([f7f57ac](https://github.com/maidsafe/sn_consensus/commit/f7f57ac548f8881f3be186bf7e80ffaac6f52fe9))
+* implementing abba, pre-procesing phase (WIP) ([ce2ba78](https://github.com/maidsafe/sn_consensus/commit/ce2ba78ff4b94cbe156b6a0eeaaf67214cd2accb))
+* implementing main-vote justification ([e30b04a](https://github.com/maidsafe/sn_consensus/commit/e30b04afb5123dfd5365edd783569721a5a04580))
+* implementing pre-vote justification (r==1) ([1b035e8](https://github.com/maidsafe/sn_consensus/commit/1b035e8d7779a7c0d451749301e8fb044b0367c0))
+* implementing pre-vote justification (r>1) ([48a20f4](https://github.com/maidsafe/sn_consensus/commit/48a20f490317e6cd0b629676ed45413d5608536c))
+
+
+### Bug Fixes
+
+* adding Ord attr to decision ([751b63e](https://github.com/maidsafe/sn_consensus/commit/751b63eb90d0c602a7b9c1959f7fb002bdf09c4c))
+* adding target to the bundle ([443d283](https://github.com/maidsafe/sn_consensus/commit/443d28314dded6368eceb58dbcf5eed31b1fde84))
+* an issue on getting round votes ([5632f2c](https://github.com/maidsafe/sn_consensus/commit/5632f2c8e1a35f655f123f3a794417a543e1ff4b))
+* check the zero value ([c02469c](https://github.com/maidsafe/sn_consensus/commit/c02469cccc509f5d421d7ec08acece8b8a04fd4f))
+* clippy and format issues ([9aa8605](https://github.com/maidsafe/sn_consensus/commit/9aa8605a277aadaae9297e48d1af19fc2b6c2f5e))
+* clippy issue ([cd80f1b](https://github.com/maidsafe/sn_consensus/commit/cd80f1b3fcb24228890667169526618b38a512ee))
+* don't move the proposer too quickly ([c1820ce](https://github.com/maidsafe/sn_consensus/commit/c1820ce00be88e558de5f15bc0427782783e8df0))
+* fixing a broken test (still one test is failing) ([95f4603](https://github.com/maidsafe/sn_consensus/commit/95f460305c2bb2c7d66c20e9df5fef14fe9a5e93))
+* fixing a broken tests and add new test for double vote ([bada652](https://github.com/maidsafe/sn_consensus/commit/bada652939b94a0bfd5d6da49c98ff6c5da91d7f))
+* fixing clippy issues ([ab2a49d](https://github.com/maidsafe/sn_consensus/commit/ab2a49d4d742a0b772fbfdf65711eb96e552e312))
+* fixing clippy issues ([54ab0b0](https://github.com/maidsafe/sn_consensus/commit/54ab0b095235f5b1b779ebdf56bc9516fd8107ef))
+* fixing conflict decisions by halting consensus on True agreement ([9d701d7](https://github.com/maidsafe/sn_consensus/commit/9d701d73c99e0aac587d67bd5bd45ce69ecf8da8))
+* fixing fmt issues ([f428610](https://github.com/maidsafe/sn_consensus/commit/f42861017836d62c9664c98486dd4d5a08d9d07a))
+* fixing linting issues ([9236913](https://github.com/maidsafe/sn_consensus/commit/92369135468737163320f21b89d441989a7094ea))
+* fixing tests, clippy and fmt issues ([3917a02](https://github.com/maidsafe/sn_consensus/commit/3917a0245ac13724a5eb5fddbd0598abc7b76160))
+* integrating consensus protocols ([452b7df](https://github.com/maidsafe/sn_consensus/commit/452b7df338474b6eccede106dbeb21a0844efab4))
+* make sure the absent value set correct and fixing 'CHECK FOR DECISION' stage ([e93d7d0](https://github.com/maidsafe/sn_consensus/commit/e93d7d000d6d3f98879acdd3595c98d3b8f1e0d2))
+* make sure the the honest parties won't double vote ([561c06c](https://github.com/maidsafe/sn_consensus/commit/561c06ca511bc0e59b15844391a289cb15e2b5fb))
+* no unwrap ([e2d29b5](https://github.com/maidsafe/sn_consensus/commit/e2d29b5a0360b5549df7da10afd0696473cd2f1d))
+* returning option for the decided value, rather than unwrap it ([557d4f5](https://github.com/maidsafe/sn_consensus/commit/557d4f5d96c85d3788c0963918d8f5697cbde1d0))
+* some coments for unsynced messages ([bfb2398](https://github.com/maidsafe/sn_consensus/commit/bfb2398512a8cc3e000fc35ec090c2792be13641))
+* using default to get proposer votes ([efad55d](https://github.com/maidsafe/sn_consensus/commit/efad55d6943d5971180eb89db404baca9a2cfbe8))
+* **abba:** add strong termination to resolve the termination failure ([9364ebb](https://github.com/maidsafe/sn_consensus/commit/9364ebbcd24bcf18e0d25cd36dcee05eda236919))
+* **abba:** adding proposer ID for messages ([d52f9a9](https://github.com/maidsafe/sn_consensus/commit/d52f9a942aa5b38c16bc645bebeb8974dabd950f))
+* **abba:** fix consensus failure by adding check for justification in pre-vote messages ([de476d3](https://github.com/maidsafe/sn_consensus/commit/de476d3581280e8f8181c605230de70cd2dfe094))
+* **abba:** ignore the incoming messages if we have decided ([09ec7bd](https://github.com/maidsafe/sn_consensus/commit/09ec7bdcf2bf34c6eb148b6fd1d01548633678cc))
+* **abba:** preventing double pre-vote ([44bc9ae](https://github.com/maidsafe/sn_consensus/commit/44bc9aee5611a2f01f0b133c7ad87f0c61cb017a))
+* **abba:** remove justification from decision action ([80d8f2a](https://github.com/maidsafe/sn_consensus/commit/80d8f2a85ab6e5a7b3fe4c2cb2f86dd0d89bf80c))
+* **consensus:** expose sequence number in Consensus API ([45d7714](https://github.com/maidsafe/sn_consensus/commit/45d771459c7d8f087e650f761f506fffd36d6346))
+* **mvba:** check signature against the message tag ([694b20d](https://github.com/maidsafe/sn_consensus/commit/694b20d4e37f750ea9a1525ce67e6ee0e1fd6474))
+* **mvba:** improving the protocol by replacing the proposal by its digest ([d1fe112](https://github.com/maidsafe/sn_consensus/commit/d1fe112af7ef1f2350b51cb00133771a68f89880))
+* **mvba:** only check that the domain matches ([d6fe321](https://github.com/maidsafe/sn_consensus/commit/d6fe3218a1a53a121507503c1bed10daa15a9ca1))
+* **mvba:** removing old code ([7339703](https://github.com/maidsafe/sn_consensus/commit/7339703e9ae82a406bfdc687c7ee33f2fa6edc1a))
+* **vcbc:** remove unwraps in reading delivered values ([578e88d](https://github.com/maidsafe/sn_consensus/commit/578e88d306d0c539cf2e5e581a721fecfa580be3))
+* using c-final message for the first round ([1b566f0](https://github.com/maidsafe/sn_consensus/commit/1b566f040cce7ced125dd0efeff8b24445810354))
+* weaker validity and justification for main votes ([bb0484d](https://github.com/maidsafe/sn_consensus/commit/bb0484d284f9d0daee74303c467de79c8ff55b17))
+
 ## [3.2.0](https://github.com/maidsafe/sn_consensus/compare/v3.1.4...v3.2.0) (2023-02-06)
 
 
