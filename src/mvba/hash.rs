@@ -4,7 +4,7 @@ use thiserror::Error;
 
 const HASH32_SIZE: usize = 32;
 
-#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Hash32([u8; HASH32_SIZE]);
 
 #[derive(Error, Debug, Eq, PartialEq)]

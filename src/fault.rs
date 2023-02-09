@@ -16,7 +16,7 @@ pub enum FaultError {
     AccusedVoteOfInvalidFaultButAllFaultsAreValid,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Fault<T: Proposition> {
     ChangedVote { a: SignedVote<T>, b: SignedVote<T> },
     InvalidFault { signed_vote: SignedVote<T> },
