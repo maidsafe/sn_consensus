@@ -32,19 +32,17 @@ impl Hash32 {
         })?;
         Ok(Self(*bytes))
     }
-
-    pub fn as_fixed_bytes(&self) -> &[u8; HASH32_SIZE] {
-        &self.0
-    }
-
-    pub fn to_bytes(self) -> Vec<u8> {
-        self.0.to_vec()
-    }
 }
 
 impl From<[u8; 32]> for Hash32 {
     fn from(val: [u8; 32]) -> Self {
         Self(val)
+    }
+}
+
+impl AsRef<[u8; 32]> for Hash32 {
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 
