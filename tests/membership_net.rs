@@ -33,7 +33,7 @@ pub struct Net {
 impl Net {
     pub fn with_procs(threshold: u8, n: u8, mut rng: &mut StdRng) -> Self {
         let elders_sk = SecretKeySet::random(threshold as usize, &mut rng);
-        let procs = Vec::from_iter((1u8..(n + 1)).into_iter().map(|i| {
+        let procs = Vec::from_iter((1u8..(n + 1)).map(|i| {
             Membership::from(
                 (i, elders_sk.secret_key_share(i as u64)),
                 elders_sk.public_keys(),

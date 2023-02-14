@@ -271,7 +271,7 @@ mod tests {
     fn test_have_we_seen_this_vote_before() {
         let mut rng = StdRng::from_seed([0u8; 32]);
         let elders_sk = SecretKeySet::random(10, &mut rng);
-        let mut states = Vec::from_iter((1..=10).into_iter().map(|id| {
+        let mut states = Vec::from_iter((1..=10).map(|id| {
             Consensus::from(
                 (id, elders_sk.secret_key_share(id as usize)),
                 elders_sk.public_keys(),

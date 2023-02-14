@@ -30,7 +30,7 @@ impl Net {
     pub fn with_procs(threshold: usize, n: usize, mut rng: &mut StdRng) -> Self {
         let elders_sk = SecretKeySet::random(threshold, &mut rng);
 
-        let procs = Vec::from_iter((1..=n).into_iter().map(|i| {
+        let procs = Vec::from_iter((1..=n).map(|i| {
             Handover::from(
                 (i as u8, elders_sk.secret_key_share(i)),
                 elders_sk.public_keys(),
