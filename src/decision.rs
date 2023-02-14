@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use blsttc::{PublicKeySet, Signature};
@@ -6,11 +7,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Fault, Generation, NodeId, Proposition, Result, SignedVote, VoteCount};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Decision<T: Proposition> {
     pub votes: BTreeSet<SignedVote<T>>,
     pub proposals: BTreeMap<T, Signature>,
     pub faults: BTreeSet<Fault<T>>,
+}
+
+impl<T: Proposition> Ord for Decision<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // TODO: consider compare across more entries
+        match (
+            self.proposals.first_key_value(),
+            other.proposals.first_key_value(),
+        ) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some((self_state, _)), Some((other_state, _))) => self_state.cmp(other_state),
+        }
+    }
+}
+
+impl<T: Proposition> PartialOrd for Decision<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl<T: Proposition> Decision<T> {
