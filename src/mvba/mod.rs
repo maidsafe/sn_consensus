@@ -11,6 +11,9 @@ mod bundle;
 mod mvba;
 mod vcbc;
 
+//#[cfg(feature = "mock")]
+pub mod mock;
+
 pub type NodeId = usize;
 
 /// A proposed data with the proof inside. It is the same as $(w, π)$ in the spec.

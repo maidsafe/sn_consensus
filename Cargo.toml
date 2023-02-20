@@ -7,6 +7,9 @@ license = "MIT OR BSD-3-Clause"
 repository = "https://github.com/maidsafe/sn_consensus"
 edition = "2021"
 
+[features]
+mock = []
+
 [dependencies]
 rand = "0.8"
 bincode = "1.2.1"
