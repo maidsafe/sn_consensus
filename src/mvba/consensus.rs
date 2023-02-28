@@ -10,7 +10,7 @@ use super::{
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 pub struct Consensus {
     domain: Domain,
@@ -20,7 +20,7 @@ pub struct Consensus {
     mvba: Mvba,
     decided_proposer: Option<NodeId>,
     decided_proposal: Option<Proposal>,
-    broadcaster: Rc<RefCell<Broadcaster>>,
+    broadcaster: Broadcaster,
 }
 
 impl Consensus {
@@ -33,7 +33,6 @@ impl Consensus {
         message_validity: MessageValidity,
     ) -> Consensus {
         let broadcaster = Broadcaster::new(self_id);
-        let broadcaster_rc = Rc::new(RefCell::new(broadcaster));
         let mut abba_map = HashMap::new();
         let mut vcbc_map = HashMap::new();
 
@@ -45,28 +44,14 @@ impl Consensus {
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 message_validity,
-                broadcaster_rc.clone(),
             );
             vcbc_map.insert(*party, vcbc);
 
-            let abba = Abba::new(
-                tag,
-                self_id,
-                pub_key_set.clone(),
-                sec_key_share.clone(),
-                broadcaster_rc.clone(),
-            );
+            let abba = Abba::new(tag, self_id, pub_key_set.clone(), sec_key_share.clone());
             abba_map.insert(*party, abba);
         }
 
-        let mvba = Mvba::new(
-            domain.clone(),
-            self_id,
-            sec_key_share,
-            pub_key_set,
-            parties,
-            broadcaster_rc.clone(),
-        );
+        let mvba = Mvba::new(domain.clone(), self_id, sec_key_share, pub_key_set, parties);
 
         Consensus {
             domain,
@@ -76,7 +61,7 @@ impl Consensus {
             mvba,
             decided_proposer: None,
             decided_proposal: None,
-            broadcaster: broadcaster_rc,
+            broadcaster,
         }
     }
 
@@ -85,13 +70,13 @@ impl Consensus {
         match self.vcbc_map.get_mut(&self.self_id) {
             Some(vcbc) => {
                 // verifiably authenticatedly c-broadcast message (v-echo, w, π) tagged with ID|vcbc.i.0
-                vcbc.c_broadcast(proposal)?;
+                vcbc.c_broadcast(proposal, &mut self.broadcaster)?;
             }
             None => {
                 log::warn!("this node is an observer node")
             }
         }
-        Ok(self.broadcaster.borrow_mut().take_outgoings())
+        Ok(self.broadcaster.take_outgoings())
     }
 
     pub fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
@@ -104,7 +89,7 @@ impl Consensus {
                 Some(target) => match self.vcbc_map.get_mut(&target) {
                     Some(vcbc) => {
                         let msg = bincode::deserialize(&bundle.payload)?;
-                        vcbc.receive_message(bundle.initiator, msg)?;
+                        vcbc.receive_message(bundle.initiator, msg, &mut self.broadcaster)?;
                         if let Some((proposal, sig)) = vcbc.read_delivered() {
                             // Check if we have agreed on this proposal before.
                             //    There might be a situation that we receive the agreement
@@ -115,7 +100,12 @@ impl Consensus {
                                 log::info!("halted. proposer: {target}");
                                 self.decided_proposal = Some(proposal);
                             } else {
-                                self.mvba.set_proposal(target, proposal, sig)?;
+                                self.mvba.set_proposal(
+                                    target,
+                                    proposal,
+                                    sig,
+                                    &mut self.broadcaster,
+                                )?;
                             }
                         }
                     }
@@ -130,7 +120,7 @@ impl Consensus {
                 Some(target) => match self.abba_map.get_mut(&target) {
                     Some(abba) => {
                         let msg = bincode::deserialize(&bundle.payload)?;
-                        abba.receive_message(bundle.initiator, msg)?;
+                        abba.receive_message(bundle.initiator, msg, &mut self.broadcaster)?;
                         if let Some(decided_value) = abba.decided_value() {
                             if decided_value {
                                 self.decided_proposer = Some(target);
@@ -149,14 +139,14 @@ impl Consensus {
                                     let tag = Tag::new(self.domain.clone(), target);
                                     let data = vcbc::make_c_request_message(tag)?;
 
-                                    self.broadcaster.borrow_mut().broadcast(
+                                    self.broadcaster.broadcast(
                                         vcbc::MODULE_NAME,
                                         Some(target),
                                         data,
                                     );
                                 }
                             } else if self.mvba.current_proposer()? == target
-                                && !self.mvba.move_to_next_proposal()?
+                                && !self.mvba.move_to_next_proposal(&mut self.broadcaster)?
                             {
                                 log::warn!("party {} has no more proposal", self.self_id);
                             }
@@ -170,7 +160,7 @@ impl Consensus {
             },
             mvba::MODULE_NAME => {
                 let msg = bincode::deserialize(&bundle.payload)?;
-                self.mvba.receive_message(msg)?;
+                self.mvba.receive_message(msg, &mut self.broadcaster)?;
             }
 
             _ => {
@@ -192,16 +182,16 @@ impl Consensus {
                 // Let's start binary agreement by voting 1
                 if let Some((proposal, sig)) = self.mvba.completed_vote_value()? {
                     let digest = Hash32::calculate(proposal);
-                    abba.pre_vote_one(digest, sig.clone())?;
+                    abba.pre_vote_one(digest, sig.clone(), &mut self.broadcaster)?;
                 }
             } else {
                 // The proposal is NOT c-delivered.
                 // Let's start binary agreement by voting 0,
-                abba.pre_vote_zero()?;
+                abba.pre_vote_zero(&mut self.broadcaster)?;
             }
         }
 
-        Ok(self.broadcaster.borrow_mut().take_outgoings())
+        Ok(self.broadcaster.take_outgoings())
     }
 }
 

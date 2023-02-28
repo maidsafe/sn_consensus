@@ -1,8 +1,7 @@
 use blsttc::{Signature, SignatureShare};
 use serde::{Deserialize, Serialize};
 
-use super::NodeId;
-use crate::mvba::{hash::Hash32, tag::Tag};
+use crate::mvba::{hash::Hash32, tag::Tag, NodeId};
 
 /// VoteAction definition.
 /// This is same as `v-vote` message in spec: (ID, v-vote, a, uj, ρj)

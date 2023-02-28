@@ -4,13 +4,14 @@ mod message;
 use self::message::{Message, Vote};
 
 use self::{error::Error, error::Result};
+use super::broadcaster::Broadcaster;
 use super::tag::Domain;
 use super::vcbc;
 use super::{hash::Hash32, Proposal};
 use crate::mvba::tag::Tag;
-use crate::mvba::{broadcaster::Broadcaster, NodeId};
+use crate::mvba::NodeId;
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 pub(crate) const MODULE_NAME: &str = "mvba";
 
@@ -25,7 +26,6 @@ pub struct Mvba {
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     parties: Vec<NodeId>,
-    broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
 impl Mvba {
@@ -35,7 +35,6 @@ impl Mvba {
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
-        broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
             domain,
@@ -48,7 +47,6 @@ impl Mvba {
             pub_key_set,
             sec_key_share,
             parties,
-            broadcaster,
         }
     }
 
@@ -57,6 +55,7 @@ impl Mvba {
         proposer: NodeId,
         proposal: Proposal,
         signature: Signature,
+        broadcaster: &mut Broadcaster,
     ) -> Result<()> {
         debug_assert!(self.parties.contains(&proposer));
         let tag = self.build_tag(proposer);
@@ -69,10 +68,10 @@ impl Mvba {
         }
 
         self.proposals.insert(proposer, (proposal, signature));
-        self.vote()
+        self.vote(broadcaster)
     }
 
-    pub fn move_to_next_proposal(&mut self) -> Result<bool> {
+    pub fn move_to_next_proposal(&mut self, broadcaster: &mut Broadcaster) -> Result<bool> {
         log::debug!(
             "party {} moves to the next proposer: {}",
             self.i,
@@ -86,7 +85,7 @@ impl Mvba {
         self.v = None;
         self.voted = false;
 
-        self.vote()?;
+        self.vote(broadcaster)?;
         Ok(true)
     }
 
@@ -151,7 +150,7 @@ impl Mvba {
         Ok(())
     }
 
-    pub fn add_vote(&mut self, msg: &Message) -> Result<bool> {
+    pub fn add_vote(&mut self, msg: &Message, broadcaster: &mut Broadcaster) -> Result<bool> {
         let votes = self.proposer_votes_mut(&msg.vote.tag.proposer);
         if let Some(exist) = votes.get(&msg.voter) {
             if exist != &msg.vote {
@@ -177,7 +176,7 @@ impl Mvba {
             );
             let data = vcbc::make_c_request_message(self.current_tag()?)?;
 
-            self.broadcaster.borrow_mut().send_to(
+            broadcaster.send_to(
                 vcbc::MODULE_NAME,
                 Some(msg.vote.tag.proposer),
                 data,
@@ -191,11 +190,11 @@ impl Mvba {
     }
 
     /// receive_message process the received message 'msg`
-    pub fn receive_message(&mut self, msg: Message) -> Result<()> {
+    pub fn receive_message(&mut self, msg: Message, broadcaster: &mut Broadcaster) -> Result<()> {
         log::trace!("party {} received message: {:?}", self.i, msg);
 
         self.check_message(&msg)?;
-        if !self.add_vote(&msg)? {
+        if !self.add_vote(&msg, broadcaster)? {
             return Ok(());
         }
 
@@ -231,7 +230,7 @@ impl Mvba {
         self.votes_per_proposer.entry(*proposer).or_default()
     }
 
-    fn vote(&mut self) -> Result<()> {
+    fn vote(&mut self, broadcaster: &mut Broadcaster) -> Result<()> {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         if self.proposals.len() >= self.threshold() && !self.voted {
@@ -259,7 +258,7 @@ impl Mvba {
                 }
             };
 
-            self.broadcast(vote)?;
+            self.broadcast(vote, broadcaster)?;
             self.voted = true;
         }
 
@@ -268,7 +267,7 @@ impl Mvba {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, vote: Vote) -> Result<()> {
+    fn broadcast(&mut self, vote: Vote, broadcaster: &mut Broadcaster) -> Result<()> {
         log::debug!("party {} broadcasts {vote:?}", self.i);
 
         let sign_bytes = bincode::serialize(&vote)?;
@@ -279,10 +278,8 @@ impl Mvba {
             signature: sig,
         };
         let data = bincode::serialize(&msg)?;
-        self.broadcaster
-            .borrow_mut()
-            .broadcast(MODULE_NAME, None, data);
-        self.receive_message(msg)?;
+        broadcaster.broadcast(MODULE_NAME, None, data);
+        self.receive_message(msg, broadcaster)?;
         Ok(())
     }
 

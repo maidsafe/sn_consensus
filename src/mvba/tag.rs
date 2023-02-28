@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use super::NodeId;
+use crate::mvba::NodeId;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Domain {

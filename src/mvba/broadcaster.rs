@@ -18,10 +18,6 @@ impl Broadcaster {
         }
     }
 
-    pub fn self_id(&self) -> NodeId {
-        self.self_id
-    }
-
     pub fn send_to(
         &mut self,
         module: &str,

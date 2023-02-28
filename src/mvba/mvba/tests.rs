@@ -7,14 +7,13 @@ use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::{vcbc, Proposal};
 use blsttc::{SecretKey, SecretKeySet, Signature, SignatureShare};
 use rand::{thread_rng, Rng};
-use std::cell::RefCell;
+
 use std::collections::HashMap;
-use std::rc::Rc;
 
 struct TestNet {
     sec_key_set: SecretKeySet,
     mvba: Mvba,
-    broadcaster: Rc<RefCell<Broadcaster>>,
+    broadcaster: Broadcaster,
     proposals: HashMap<NodeId, (Proposal, Signature)>,
 }
 
@@ -32,7 +31,7 @@ impl TestNet {
         let mut rng = thread_rng();
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
-        let broadcaster = Rc::new(RefCell::new(Broadcaster::new(i)));
+        let broadcaster = Broadcaster::new(i);
         let parties = vec![Self::PARTY_X, Self::PARTY_Y, Self::PARTY_B, Self::PARTY_S];
         let mut proposals = HashMap::new();
 
@@ -46,14 +45,7 @@ impl TestNet {
             proposals.insert(*p, (proposal, sig));
         }
 
-        let mvba = Mvba::new(
-            domain,
-            i,
-            sec_key_share,
-            sec_key_set.public_keys(),
-            parties,
-            broadcaster.clone(),
-        );
+        let mvba = Mvba::new(domain, i, sec_key_share, sec_key_set.public_keys(), parties);
         Self {
             sec_key_set,
             mvba,
@@ -84,7 +76,6 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .borrow()
             .has_gossip_message(&bincode::serialize(msg).unwrap())
     }
 
@@ -105,7 +96,7 @@ fn test_ignore_messages_with_wrong_id() {
     let mut msg = t.make_vote_msg(voter, proposer, true);
     msg.vote.tag.domain = Domain::new("another-domain", 0);
 
-    let result = t.mvba.receive_message(msg);
+    let result = t.mvba.receive_message(msg, &mut t.broadcaster);
     match result {
         Err(Error::InvalidMessage(msg)) => {
             assert_eq!(
@@ -130,7 +121,7 @@ fn test_ignore_messages_with_invalid_signature() {
         .secret_key_share(voter)
         .sign("invalid_message_to_sign");
 
-    let result = t.mvba.receive_message(msg);
+    let result = t.mvba.receive_message(msg, &mut t.broadcaster);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
         if msg == *"invalid signature"));
 }
@@ -146,7 +137,7 @@ fn test_ignore_messages_no_vote_with_proof() {
     msg.vote.value = false;
     msg.signature = t.sign_vote(&msg.vote, &voter);
 
-    let result = t.mvba.receive_message(msg);
+    let result = t.mvba.receive_message(msg, &mut t.broadcaster);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
         if msg == *"no vote with proof"));
 }
@@ -162,7 +153,7 @@ fn test_ignore_messages_yes_vote_without_proof() {
     msg.vote.value = true;
     msg.signature = t.sign_vote(&msg.vote, &voter);
 
-    let result = t.mvba.receive_message(msg);
+    let result = t.mvba.receive_message(msg, &mut t.broadcaster);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
         if msg == *"yes vote without proof"));
 }
@@ -180,7 +171,7 @@ fn test_ignore_proposal_with_an_invalid_proof() {
     msg.vote.proof = Some((Hash32::calculate(inv_proposal), inv_sig));
     msg.signature = t.sign_vote(&msg.vote, &voter);
 
-    let result = t.mvba.receive_message(msg);
+    let result = t.mvba.receive_message(msg, &mut t.broadcaster);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
         if msg == *"proposal with an invalid proof"));
 }
@@ -195,8 +186,8 @@ fn test_double_vote() {
     let msg_1 = t.make_vote_msg(voter, proposer, true);
     let msg_2 = t.make_vote_msg(voter, proposer, false);
 
-    t.mvba.receive_message(msg_1).unwrap();
-    let result = t.mvba.receive_message(msg_2);
+    t.mvba.receive_message(msg_1, &mut t.broadcaster).unwrap();
+    let result = t.mvba.receive_message(msg_2, &mut t.broadcaster);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
         if msg == format!("double vote detected from {voter:?}")));
 }
@@ -217,20 +208,35 @@ fn test_normal_case() {
     let msg_s = t.make_vote_msg(TestNet::PARTY_S, TestNet::PARTY_X, true);
 
     t.mvba
-        .set_proposal(TestNet::PARTY_X, proposal_x.0, proposal_x.1)
+        .set_proposal(
+            TestNet::PARTY_X,
+            proposal_x.0,
+            proposal_x.1,
+            &mut t.broadcaster,
+        )
         .unwrap();
     t.mvba
-        .set_proposal(TestNet::PARTY_Y, proposal_y.0, proposal_y.1)
+        .set_proposal(
+            TestNet::PARTY_Y,
+            proposal_y.0,
+            proposal_y.1,
+            &mut t.broadcaster,
+        )
         .unwrap();
 
     assert!(!t.is_broadcasted(&msg_y));
     t.mvba
-        .set_proposal(TestNet::PARTY_S, proposal_s.0, proposal_s.1)
+        .set_proposal(
+            TestNet::PARTY_S,
+            proposal_s.0,
+            proposal_s.1,
+            &mut t.broadcaster,
+        )
         .unwrap();
     assert!(t.is_broadcasted(&msg_y));
 
-    t.mvba.receive_message(msg_x).unwrap();
-    t.mvba.receive_message(msg_s).unwrap();
+    t.mvba.receive_message(msg_x, &mut t.broadcaster).unwrap();
+    t.mvba.receive_message(msg_s, &mut t.broadcaster).unwrap();
 
     assert!(t.mvba.completed_vote().unwrap());
 }
@@ -254,27 +260,50 @@ fn test_normal_case_no_vote() {
     let msg_s_proposal_y = t.make_vote_msg(TestNet::PARTY_S, TestNet::PARTY_Y, true);
 
     t.mvba
-        .set_proposal(TestNet::PARTY_Y, proposal_y.0, proposal_y.1)
+        .set_proposal(
+            TestNet::PARTY_Y,
+            proposal_y.0,
+            proposal_y.1,
+            &mut t.broadcaster,
+        )
         .unwrap();
     t.mvba
-        .set_proposal(TestNet::PARTY_B, proposal_b.0, proposal_b.1)
+        .set_proposal(
+            TestNet::PARTY_B,
+            proposal_b.0,
+            proposal_b.1,
+            &mut t.broadcaster,
+        )
         .unwrap();
     t.mvba
-        .set_proposal(TestNet::PARTY_S, proposal_s.0, proposal_s.1)
+        .set_proposal(
+            TestNet::PARTY_S,
+            proposal_s.0,
+            proposal_s.1,
+            &mut t.broadcaster,
+        )
         .unwrap();
     assert!(t.is_broadcasted(&msg_y_proposal_x));
 
-    t.mvba.receive_message(msg_b_proposal_x).unwrap();
-    t.mvba.receive_message(msg_s_proposal_x).unwrap();
+    t.mvba
+        .receive_message(msg_b_proposal_x, &mut t.broadcaster)
+        .unwrap();
+    t.mvba
+        .receive_message(msg_s_proposal_x, &mut t.broadcaster)
+        .unwrap();
 
     assert!(!t.mvba.completed_vote().unwrap());
 
     // Let move to the next proposal
-    t.mvba.move_to_next_proposal().unwrap();
+    t.mvba.move_to_next_proposal(&mut t.broadcaster).unwrap();
     assert!(t.is_broadcasted(&msg_y_proposal_y));
 
-    t.mvba.receive_message(msg_b_proposal_y).unwrap();
-    t.mvba.receive_message(msg_s_proposal_y).unwrap();
+    t.mvba
+        .receive_message(msg_b_proposal_y, &mut t.broadcaster)
+        .unwrap();
+    t.mvba
+        .receive_message(msg_s_proposal_y, &mut t.broadcaster)
+        .unwrap();
 
     assert!(t.mvba.completed_vote().unwrap());
 }
@@ -286,13 +315,10 @@ fn test_request_proposal() {
 
     let msg_x = t.make_vote_msg(TestNet::PARTY_X, TestNet::PARTY_X, true);
 
-    t.mvba.receive_message(msg_x).unwrap();
+    t.mvba.receive_message(msg_x, &mut t.broadcaster).unwrap();
 
     let tag = Tag::new(t.mvba.domain.clone(), TestNet::PARTY_X);
     let data = vcbc::make_c_request_message(tag).unwrap();
 
-    assert!(t
-        .broadcaster
-        .borrow()
-        .has_direct_message(&TestNet::PARTY_X, &data));
+    assert!(t.broadcaster.has_direct_message(&TestNet::PARTY_X, &data));
 }
