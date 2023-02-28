@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.2.2](https://github.com/maidsafe/sn_consensus/compare/v3.2.1...v3.2.2) (2023-02-28)
+
+
+### Bug Fixes
+
+* removing refcell from broadcaster ([beecd59](https://github.com/maidsafe/sn_consensus/commit/beecd5961da07deffda3cc4f59a2428814460b9d))
+
 ### [3.2.1](https://github.com/maidsafe/sn_consensus/compare/v3.2.0...v3.2.1) (2023-02-14)
 
 ## [3.2.0](https://github.com/maidsafe/sn_consensus/compare/v3.1.4...v3.2.0) (2023-02-14)
