@@ -1,10 +1,8 @@
 pub(crate) mod error;
 pub mod message;
 
-use std::cell::RefCell;
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 
@@ -50,7 +48,6 @@ pub(crate) struct Vcbc {
     sec_key_share: SecretKeyShare,
     final_messages: HashMap<NodeId, Message>,
     message_validity: MessageValidity,
-    broadcaster: Rc<RefCell<Broadcaster>>,
 }
 
 /// Tries to insert a key-value pair into the map.
@@ -74,10 +71,7 @@ impl Vcbc {
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
         message_validity: MessageValidity,
-        broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
-        debug_assert_eq!(self_id, broadcaster.borrow().self_id());
-
         Self {
             tag,
             i: self_id,
@@ -90,13 +84,12 @@ impl Vcbc {
             pub_key_set,
             sec_key_share,
             message_validity,
-            broadcaster,
         }
     }
 
     /// c_broadcast sends the messages `m` to all other parties.
     /// It also adds the message to message_log and process it.
-    pub fn c_broadcast(&mut self, m: Proposal) -> Result<()> {
+    pub fn c_broadcast(&mut self, m: Proposal, broadcaster: &mut Broadcaster) -> Result<()> {
         debug_assert_eq!(self.i, self.tag.proposer);
 
         // Upon receiving message (ID.j.s, in, c-broadcast, m):
@@ -105,11 +98,16 @@ impl Vcbc {
             tag: self.tag.clone(),
             action: Action::Send(m),
         };
-        self.broadcast(send_msg)
+        self.broadcast(send_msg, broadcaster)
     }
 
     /// receive_message process the received message 'msg` from `initiator`
-    pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
+    pub fn receive_message(
+        &mut self,
+        initiator: NodeId,
+        msg: Message,
+        broadcaster: &mut Broadcaster,
+    ) -> Result<()> {
         log::trace!(
             "party {} received {} message: {:?} from {}",
             self.i,
@@ -149,7 +147,7 @@ impl Vcbc {
                     };
 
                     // send (ID.j.s, c-ready, H(m), ν) to Pj
-                    self.send_to(ready_msg, self.tag.proposer)?;
+                    self.send_to(ready_msg, self.tag.proposer, broadcaster)?;
                 }
             }
             Action::Ready(msg_d, sig_share) => {
@@ -198,7 +196,7 @@ impl Vcbc {
                             };
 
                             // send (ID.j.s, c-final, d, µ) to all parties
-                            self.broadcast(final_msg)?;
+                            self.broadcast(final_msg, broadcaster)?;
                         }
                     }
                 }
@@ -218,7 +216,7 @@ impl Vcbc {
                             tag: self.tag.clone(),
                             action: Action::Request,
                         };
-                        self.send_to(request_msg, initiator)?;
+                        self.send_to(request_msg, initiator, broadcaster)?;
 
                         return Ok(());
                     }
@@ -253,7 +251,7 @@ impl Vcbc {
                         };
 
                         // send (ID.j.s, c-answer, m̄, µ̄) to Pl
-                        self.send_to(answer_msg, initiator)?;
+                        self.send_to(answer_msg, initiator, broadcaster)?;
                     }
                 }
             }
@@ -275,7 +273,7 @@ impl Vcbc {
         }
 
         for (initiator, final_msg) in std::mem::take(&mut self.final_messages) {
-            self.receive_message(initiator, final_msg)?;
+            self.receive_message(initiator, final_msg, broadcaster)?;
         }
 
         Ok(())
@@ -291,30 +289,31 @@ impl Vcbc {
 
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
-    fn send_to(&mut self, msg: self::Message, to: NodeId) -> Result<()> {
+    fn send_to(
+        &mut self,
+        msg: self::Message,
+        to: NodeId,
+        broadcaster: &mut Broadcaster,
+    ) -> Result<()> {
         log::debug!("party {} sends {msg:?} to {}", self.i, to);
 
         let data = bincode::serialize(&msg)?;
         if to == self.i {
-            self.receive_message(self.i, msg)?;
+            self.receive_message(self.i, msg, broadcaster)?;
         } else {
-            self.broadcaster
-                .borrow_mut()
-                .send_to(MODULE_NAME, Some(self.tag.proposer), data, to);
+            broadcaster.send_to(MODULE_NAME, Some(self.tag.proposer), data, to);
         }
         Ok(())
     }
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, msg: self::Message) -> Result<()> {
+    fn broadcast(&mut self, msg: self::Message, broadcaster: &mut Broadcaster) -> Result<()> {
         log::debug!("party {} broadcasts {msg:?}", self.i);
 
         let data = bincode::serialize(&msg)?;
-        self.broadcaster
-            .borrow_mut()
-            .broadcast(MODULE_NAME, Some(self.i), data);
-        self.receive_message(self.i, msg)?;
+        broadcaster.broadcast(MODULE_NAME, Some(self.i), data);
+        self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }
 
@@ -325,5 +324,9 @@ impl Vcbc {
 }
 
 #[cfg(test)]
-#[path = "./tests.rs"]
-mod tests;
+#[path = "./test.rs"]
+mod test;
+
+#[cfg(test)]
+#[path = "./proptest.rs"]
+mod proptest;

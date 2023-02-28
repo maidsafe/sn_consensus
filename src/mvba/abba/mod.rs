@@ -2,10 +2,7 @@
 pub(crate) mod error;
 pub mod message;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-
-use std::rc::Rc;
 
 use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
 
@@ -32,7 +29,6 @@ pub(crate) struct Abba {
     decided_value: Option<DecisionAction>,
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
-    broadcaster: Rc<RefCell<Broadcaster>>,
     round_pre_votes: Vec<HashMap<NodeId, PreVoteAction>>,
     round_main_votes: Vec<HashMap<NodeId, MainVoteAction>>,
 }
@@ -43,7 +39,6 @@ impl Abba {
         self_id: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
-        broadcaster: Rc<RefCell<Broadcaster>>,
     ) -> Self {
         Self {
             tag,
@@ -54,25 +49,34 @@ impl Abba {
             decided_value: None,
             pub_key_set,
             sec_key_share,
-            broadcaster,
             round_pre_votes: Vec::new(),
             round_main_votes: Vec::new(),
         }
     }
 
     /// pre_vote_zero starts the abba by broadcasting a pre-vote message with value 0.
-    pub fn pre_vote_zero(&mut self) -> Result<()> {
+    pub fn pre_vote_zero(&mut self, broadcaster: &mut Broadcaster) -> Result<()> {
         let justification = PreVoteJustification::FirstRoundZero;
-        self.pre_vote(Value::Zero, justification)
+        self.pre_vote(Value::Zero, justification, broadcaster)
     }
 
     /// pre_vote_one starts the abba by broadcasting a pre-vote message with value 1.
-    pub fn pre_vote_one(&mut self, digest: Hash32, sig: Signature) -> Result<()> {
+    pub fn pre_vote_one(
+        &mut self,
+        digest: Hash32,
+        sig: Signature,
+        broadcaster: &mut Broadcaster,
+    ) -> Result<()> {
         let justification = PreVoteJustification::WithValidity(digest, sig);
-        self.pre_vote(Value::One, justification)
+        self.pre_vote(Value::One, justification, broadcaster)
     }
 
-    fn pre_vote(&mut self, value: Value, justification: PreVoteJustification) -> Result<()> {
+    fn pre_vote(
+        &mut self,
+        value: Value,
+        justification: PreVoteJustification,
+        broadcaster: &mut Broadcaster,
+    ) -> Result<()> {
         if self.voted {
             log::trace!("party {} voted before", self.i);
             return Ok(());
@@ -90,11 +94,16 @@ impl Abba {
             sig_share,
         });
         self.voted = true;
-        self.broadcast(action)
+        self.broadcast(action, broadcaster)
     }
 
     // receive_message process the received message 'msg` from `initiator`
-    pub fn receive_message(&mut self, initiator: NodeId, msg: Message) -> Result<()> {
+    pub fn receive_message(
+        &mut self,
+        initiator: NodeId,
+        msg: Message,
+        broadcaster: &mut Broadcaster,
+    ) -> Result<()> {
         if self.decided_value.is_some() {
             // ignore the incoming messages if we have decided
             return Ok(());
@@ -129,7 +138,7 @@ impl Abba {
                 }
 
                 self.decided_value = Some(agg_main_vote.clone());
-                self.broadcast(msg.action.clone())?; // re-broadcast the msg in case we were the only one who received it.
+                self.broadcast(msg.action.clone(), broadcaster)?; // re-broadcast the msg in case we were the only one who received it.
             }
             Action::MainVote(action) => {
                 if action.round + 1 != self.r {
@@ -181,7 +190,7 @@ impl Abba {
                                 sig,
                             };
                             self.decided_value = Some(decision.clone());
-                            self.broadcast(Action::Decision(decision))?;
+                            self.broadcast(Action::Decision(decision), broadcaster)?;
                             return Ok(());
                         }
 
@@ -201,7 +210,7 @@ impl Abba {
                                 sig,
                             };
                             self.decided_value = Some(decision.clone());
-                            self.broadcast(Action::Decision(decision))?;
+                            self.broadcast(Action::Decision(decision), broadcaster)?;
                             return Ok(());
                         }
 
@@ -274,7 +283,7 @@ impl Abba {
                             justification,
                             sig_share,
                         });
-                        self.broadcast(action)?;
+                        self.broadcast(action, broadcaster)?;
                     }
                 }
             }
@@ -353,7 +362,7 @@ impl Abba {
                         justification: just,
                         sig_share,
                     });
-                    self.broadcast(action)?;
+                    self.broadcast(action, broadcaster)?;
                     self.r += 1;
                 }
             }
@@ -574,7 +583,7 @@ impl Abba {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, action: Action) -> Result<()> {
+    fn broadcast(&mut self, action: Action, broadcaster: &mut Broadcaster) -> Result<()> {
         log::debug!("party {} broadcasts {action:?}", self.i);
 
         let msg = Message {
@@ -582,10 +591,8 @@ impl Abba {
             action,
         };
         let data = bincode::serialize(&msg)?;
-        self.broadcaster
-            .borrow_mut()
-            .broadcast(MODULE_NAME, Some(self.tag.proposer), data);
-        self.receive_message(self.i, msg)?;
+        broadcaster.broadcast(MODULE_NAME, Some(self.tag.proposer), data);
+        self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }
 
@@ -661,5 +668,9 @@ impl Abba {
 }
 
 #[cfg(test)]
-#[path = "./tests.rs"]
-mod tests;
+#[path = "./test.rs"]
+mod test;
+
+#[cfg(test)]
+#[path = "./proptest.rs"]
+mod proptest;
