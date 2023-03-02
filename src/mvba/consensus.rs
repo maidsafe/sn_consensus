@@ -198,12 +198,19 @@ impl Consensus {
         if let Some(proposal) = &self.decided_proposal {
             if let Some(proposer) = &self.decided_proposer {
                 if let Some(abba) = self.abba_map.get(proposer) {
-                    if let Some((value, sig, round)) = abba.decided_value() {
-                        if value {
-                            return Some((
-                                proposal.clone(),
-                                (proposer.clone(), sig.clone(), round),
-                            ));
+                    if let Some(vcbc) = self.vcbc_map.get(proposer) {
+                        if let Some((proposal, vcbc_sig)) = vcbc.read_delivered() {
+                            if let Some((value, abba_sig, round)) = abba.decided_value() {
+                                if value {
+                                    let proof = Proof {
+                                        proposer: proposer.clone(),
+                                        abba_round: round,
+                                        abba_signature: vcbc_sig.clone(),
+                                        vcbc_signature: abba_sig.clone(),
+                                    };
+                                    return Some((proposal.clone(), proof));
+                                }
+                            }
                         }
                     }
                 }
@@ -214,8 +221,14 @@ impl Consensus {
     }
 
     pub fn verify_proof(&self, proposal: &Proposal, proof: Proof) -> Result<bool> {
-        if let Some(abba) = self.abba_map.get(&proof.0) {
-            return Ok(abba.verify_decided_proof(&proof.1, proof.2)?);
+        if let Some(vcbc) = self.vcbc_map.get(&proof.proposer) {
+            if vcbc.verify_delivered_proposal(&proposal)? {
+                if let Some(abba) = self.abba_map.get(&proof.proposer) {
+                    return Ok(
+                        abba.verify_decided_proposal(&proof.abba_signature, proof.abba_round)?
+                    );
+                }
+            }
         }
 
         Ok(false)

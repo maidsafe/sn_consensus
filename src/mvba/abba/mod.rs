@@ -676,7 +676,7 @@ impl Abba {
         }
     }
 
-   pub fn qverify_decided_proof(&self, sig: &Signature, round: usize) -> Result<bool> {
+   pub fn verify_decided_proposal(&self, sig: &Signature, round: usize) -> Result<bool> {
         let sign_bytes = self.pre_vote_bytes_to_sign(round, &Value::One)?;
         if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
             return Err(Error::InvalidMessage(

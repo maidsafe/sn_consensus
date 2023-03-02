@@ -287,6 +287,12 @@ impl Vcbc {
         }
     }
 
+    pub fn verify_delivered_proposal(&self, proposal: &Proposal) -> Result<bool> {
+        let d = Hash32::calculate(proposal);
+        let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
+        Ok(self.pub_key_set.public_key().verify(&u, sign_bytes))
+    }
+
     // send_to sends the message `msg` to the corresponding peer `to`.
     // If the `to` is us, it adds the  message to our messages log.
     fn send_to(

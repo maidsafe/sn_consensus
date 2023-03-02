@@ -19,7 +19,12 @@ pub type NodeId = usize;
 pub type Proposal = Vec<u8>;
 
 /// A prof if decided proposed data. It is the same as $π$ in the spec.
-pub type Proof = (NodeId, Signature, usize);
+pub struct Proof {
+    pub proposer: NodeId,
+    pub abba_signature: Signature,
+    pub abba_round: usize,
+    pub vcbc_signature: Signature,
+}
 
 /// MessageValidity is same as &Q_{ID}$ ins spec: a global polynomial-time computable
 /// predicate QID known to all parties, which is determined by an external application.
