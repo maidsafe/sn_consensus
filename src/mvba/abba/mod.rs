@@ -1,6 +1,6 @@
 // TODO: apply section 5.3.3. Further Optimizations
 pub(crate) mod error;
-pub mod message;
+mod message;
 
 use std::collections::HashMap;
 
@@ -371,11 +371,21 @@ impl Abba {
         Ok(())
     }
 
-    pub fn decided_value(&self) -> Option<bool> {
+    pub fn is_decided(&self) -> Option<bool> {
         match &self.decided_value {
-            Some(v) => match v.value {
+            Some(v) => match &v.value {
                 Value::One => Some(true),
                 Value::Zero => Some(false),
+            },
+            None => None,
+        }
+    }
+
+    pub fn decided_value(&self) -> Option<(bool, &Signature, usize)> {
+        match &self.decided_value {
+            Some(v) => match &v.value {
+                Value::One => Some((true, &v.sig, v.round)),
+                Value::Zero => Some((false, &v.sig, v.round)),
             },
             None => None,
         }
@@ -664,6 +674,18 @@ impl Abba {
                 "round_main_votes is not initialized for round {round}"
             ))),
         }
+    }
+
+   pub fn qverify_decided_proof(&self, sig: &Signature, round: usize) -> Result<bool> {
+        let sign_bytes = self.pre_vote_bytes_to_sign(round, &Value::One)?;
+        if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
+            return Err(Error::InvalidMessage(
+                "invalid abstain signature".to_string(),
+            ));
+        }
+
+        return Ok(true)
+
     }
 }
 

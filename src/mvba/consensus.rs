@@ -6,10 +6,10 @@ use super::{
     hash::Hash32,
     mvba::{self, Mvba},
     tag::{Domain, Tag},
-    vcbc, Proposal,
+    vcbc, Proof, Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
-use blsttc::{PublicKeySet, SecretKeyShare};
+use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::collections::HashMap;
 
 pub struct Consensus {
@@ -121,7 +121,7 @@ impl Consensus {
                     Some(abba) => {
                         let msg = bincode::deserialize(&bundle.payload)?;
                         abba.receive_message(bundle.initiator, msg, &mut self.broadcaster)?;
-                        if let Some(decided_value) = abba.decided_value() {
+                        if let Some(decided_value) = abba.is_decided() {
                             if decided_value {
                                 self.decided_proposer = Some(target);
 
@@ -192,6 +192,33 @@ impl Consensus {
         }
 
         Ok(self.broadcaster.take_outgoings())
+    }
+
+    pub fn decided_proposal(&self) -> Option<(Proposal, Proof)> {
+        if let Some(proposal) = &self.decided_proposal {
+            if let Some(proposer) = &self.decided_proposer {
+                if let Some(abba) = self.abba_map.get(proposer) {
+                    if let Some((value, sig, round)) = abba.decided_value() {
+                        if value {
+                            return Some((
+                                proposal.clone(),
+                                (proposer.clone(), sig.clone(), round),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn verify_proof(&self, proposal: &Proposal, proof: Proof) -> Result<bool> {
+        if let Some(abba) = self.abba_map.get(&proof.0) {
+            return Ok(abba.verify_decided_proof(&proof.1, proof.2)?);
+        }
+
+        Ok(false)
     }
 }
 
@@ -293,7 +320,7 @@ mod tests {
                     .abba_map
                     .get(&c.decided_proposer.unwrap())
                     .unwrap()
-                    .decided_value()
+                    .is_decided()
                     .unwrap();
 
                 log::debug!(
@@ -361,7 +388,7 @@ mod tests {
                     .abba_map
                     .get(&c.decided_proposer.unwrap())
                     .unwrap()
-                    .decided_value()
+                    .is_decided()
                     .unwrap();
 
                 log::debug!(
@@ -428,7 +455,7 @@ mod tests {
                     .abba_map
                     .get(&c.decided_proposer.unwrap())
                     .unwrap()
-                    .decided_value()
+                    .is_decided()
                     .unwrap();
 
                 log::debug!(

@@ -1,3 +1,5 @@
+use blsttc::Signature;
+
 pub mod consensus;
 pub mod error;
 pub mod hash;
@@ -13,8 +15,11 @@ mod vcbc;
 
 pub type NodeId = usize;
 
-/// A proposed data with the proof inside. It is the same as $(w, π)$ in the spec.
+/// A proposed data. It is the same as $w$ in the spec.
 pub type Proposal = Vec<u8>;
+
+/// A prof if decided proposed data. It is the same as $π$ in the spec.
+pub type Proof = (NodeId, Signature, usize);
 
 /// MessageValidity is same as &Q_{ID}$ ins spec: a global polynomial-time computable
 /// predicate QID known to all parties, which is determined by an external application.

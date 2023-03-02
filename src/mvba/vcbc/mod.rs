@@ -1,5 +1,5 @@
 pub(crate) mod error;
-pub mod message;
+mod message;
 
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
