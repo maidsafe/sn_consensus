@@ -199,8 +199,6 @@ impl Consensus {
             if let Some(abba) = self.abba_map.get(proposer) {
                 if let Some(vcbc) = self.vcbc_map.get(proposer) {
                     if let Some((proposal, vcbc_sig)) = vcbc.read_delivered() {
-                        dbg!(&proposal);
-                        dbg!(&vcbc_sig);
                         if let Some((value, abba_sig, round)) = abba.decided_value() {
                             if value {
                                 let proof = Proof {
