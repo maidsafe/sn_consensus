@@ -9,7 +9,7 @@ use super::{
     vcbc, Proof, Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
-use blsttc::{PublicKeySet, SecretKeyShare, Signature};
+use blsttc::{PublicKeySet, SecretKeyShare};
 use std::collections::HashMap;
 
 pub struct Consensus {
@@ -195,21 +195,22 @@ impl Consensus {
     }
 
     pub fn decided_proposal(&self) -> Option<(Proposal, Proof)> {
-        if let Some(proposal) = &self.decided_proposal {
-            if let Some(proposer) = &self.decided_proposer {
-                if let Some(abba) = self.abba_map.get(proposer) {
-                    if let Some(vcbc) = self.vcbc_map.get(proposer) {
-                        if let Some((proposal, vcbc_sig)) = vcbc.read_delivered() {
-                            if let Some((value, abba_sig, round)) = abba.decided_value() {
-                                if value {
-                                    let proof = Proof {
-                                        proposer: proposer.clone(),
-                                        abba_round: round,
-                                        abba_signature: vcbc_sig.clone(),
-                                        vcbc_signature: abba_sig.clone(),
-                                    };
-                                    return Some((proposal.clone(), proof));
-                                }
+        if let Some(proposer) = &self.decided_proposer {
+            if let Some(abba) = self.abba_map.get(proposer) {
+                if let Some(vcbc) = self.vcbc_map.get(proposer) {
+                    if let Some((proposal, vcbc_sig)) = vcbc.read_delivered() {
+                        dbg!(&proposal);
+                        dbg!(&vcbc_sig);
+                        if let Some((value, abba_sig, round)) = abba.decided_value() {
+                            if value {
+                                let proof = Proof {
+                                    domain: self.domain.clone(),
+                                    proposer: *proposer,
+                                    abba_round: round,
+                                    abba_signature: abba_sig.clone(),
+                                    vcbc_signature: vcbc_sig,
+                                };
+                                return Some((proposal, proof));
                             }
                         }
                     }
@@ -220,9 +221,9 @@ impl Consensus {
         None
     }
 
-    pub fn verify_proof(&self, proposal: &Proposal, proof: Proof) -> Result<bool> {
+    pub fn verify_proof(&self, proposal: &Proposal, proof: &Proof) -> Result<bool> {
         if let Some(vcbc) = self.vcbc_map.get(&proof.proposer) {
-            if vcbc.verify_delivered_proposal(&proposal)? {
+            if vcbc.verify_delivered_proposal(proposal, &proof.vcbc_signature)? {
                 if let Some(abba) = self.abba_map.get(&proof.proposer) {
                     return Ok(
                         abba.verify_decided_proposal(&proof.abba_signature, proof.abba_round)?
@@ -308,7 +309,6 @@ mod tests {
             let rand_index = rng.gen_range(0..net.buffer.len());
             let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -374,9 +374,8 @@ mod tests {
 
         while !net.buffer.is_empty() {
             let rand_index = rng.gen_range(0..net.buffer.len());
-            let rand_msg = &net.buffer.remove(dbg!(rand_index));
+            let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -420,6 +419,45 @@ mod tests {
         assert!(decisions.iter().all(|(_, item)| item == first));
     }
 
+    #[test]
+    fn test_proof() {
+        let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+        let mut net = TestNet::new();
+
+        for c in &mut net.cons {
+            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let mut msgs = c.propose(proposal).unwrap();
+            net.buffer.append(&mut msgs);
+        }
+
+        while !net.buffer.is_empty() {
+            let rand_index = rng.gen_range(0..net.buffer.len());
+            let rand_msg = &net.buffer.remove(rand_index);
+            let mut msgs = Vec::new();
+
+            for c in &mut net.cons {
+                msgs.append(&mut match rand_msg {
+                    Outgoing::Direct(id, bundle) => {
+                        if id == &c.self_id {
+                            c.process_bundle(bundle).unwrap()
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    Outgoing::Gossip(bundle) => c.process_bundle(bundle).unwrap(),
+                });
+            }
+
+            net.buffer.append(&mut msgs);
+        }
+
+        for c in &mut net.cons {
+            if let Some((proposal, proof)) = c.decided_proposal() {
+                assert!(c.verify_proof(&proposal, &proof).unwrap());
+            }
+        }
+    }
+
     #[quickcheck]
     fn prop_random_msg_delivery(seed: u128) {
         let _ = env_logger::builder()
@@ -443,7 +481,6 @@ mod tests {
             let rand_index = rng.gen_range(0..net.buffer.len());
             let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -480,7 +517,7 @@ mod tests {
             }
         }
 
-        // check if all consensus results are equal:
+        // all decisions should be the same.
         assert_eq!(decisions.len(), net.cons.len());
         // https://sts10.github.io/2019/06/06/is-all-equal-function.html
         let first = decisions.iter().next().unwrap().1;

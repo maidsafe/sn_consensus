@@ -575,7 +575,7 @@ impl Abba {
                 }
             }
             Action::Decision(action) => {
-                // check the validity of the S-signature share
+                // check the validity of the signature
                 let sign_bytes = self
                     .main_vote_bytes_to_sign(action.round, &MainVoteValue::Value(action.value))?;
                 if !self
@@ -676,16 +676,13 @@ impl Abba {
         }
     }
 
-   pub fn verify_decided_proposal(&self, sig: &Signature, round: usize) -> Result<bool> {
-        let sign_bytes = self.pre_vote_bytes_to_sign(round, &Value::One)?;
+    pub fn verify_decided_proposal(&self, sig: &Signature, round: usize) -> Result<bool> {
+        let sign_bytes = self.main_vote_bytes_to_sign(round, &MainVoteValue::Value(Value::One))?;
         if !self.pub_key_set.public_key().verify(sig, sign_bytes) {
-            return Err(Error::InvalidMessage(
-                "invalid abstain signature".to_string(),
-            ));
+            return Err(Error::InvalidMessage("invalid signature".to_string()));
         }
 
-        return Ok(true)
-
+        Ok(true)
     }
 }
 

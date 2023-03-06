@@ -1,5 +1,7 @@
 use blsttc::Signature;
 
+use self::tag::Domain;
+
 pub mod consensus;
 pub mod error;
 pub mod hash;
@@ -19,7 +21,9 @@ pub type NodeId = usize;
 pub type Proposal = Vec<u8>;
 
 /// A prof if decided proposed data. It is the same as $π$ in the spec.
+#[derive(Debug)]
 pub struct Proof {
+    pub domain: Domain,
     pub proposer: NodeId,
     pub abba_signature: Signature,
     pub abba_round: usize,

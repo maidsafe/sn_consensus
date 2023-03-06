@@ -224,6 +224,7 @@ impl Vcbc {
 
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
+
                 if !valid_sig {
                     log::warn!(
                         "party {} received c-ready with invalid signature share",
@@ -287,10 +288,11 @@ impl Vcbc {
         }
     }
 
-    pub fn verify_delivered_proposal(&self, proposal: &Proposal) -> Result<bool> {
+    // checks if the delivered proposal comes with a valid signature
+    pub fn verify_delivered_proposal(&self, proposal: &Proposal, sig: &Signature) -> Result<bool> {
         let d = Hash32::calculate(proposal);
         let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
-        Ok(self.pub_key_set.public_key().verify(&u, sign_bytes))
+        Ok(self.pub_key_set.public_key().verify(sig, sign_bytes))
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.
