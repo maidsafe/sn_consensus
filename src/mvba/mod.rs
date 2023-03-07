@@ -20,7 +20,7 @@ pub type NodeId = usize;
 /// A proposed data. It is the same as $w$ in the spec.
 pub type Proposal = Vec<u8>;
 
-/// A prof if decided proposed data. It is the same as $π$ in the spec.
+/// A proof if decided proposed data. It is the same as $π$ in the spec.
 #[derive(Debug)]
 pub struct Proof {
     pub domain: Domain,
