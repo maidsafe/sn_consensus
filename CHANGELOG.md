@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.3.0](https://github.com/maidsafe/sn_consensus/compare/v3.2.2...v3.3.0) (2023-03-07)
+
+
+### Features
+
+* returning proof for the decided proposal ([ad41912](https://github.com/maidsafe/sn_consensus/commit/ad41912b563e4772c4b38d4ffabca92c4b0c8645))
+
+
+### Bug Fixes
+
+* adding vcbc signature to the proof ([bf0c7ef](https://github.com/maidsafe/sn_consensus/commit/bf0c7ef81da0902f5ac747e211a46a2e793d90c8))
+* removing dbg macros ([b03bbba](https://github.com/maidsafe/sn_consensus/commit/b03bbba123c2d4485da3a984442c68f269fbc5cc))
+* verify proof without constructing consensus ([1ce8c43](https://github.com/maidsafe/sn_consensus/commit/1ce8c43f2e43127702a4ab120bf431e761f306c5))
+
 ### [3.2.2](https://github.com/maidsafe/sn_consensus/compare/v3.2.1...v3.2.2) (2023-02-28)
 
 
