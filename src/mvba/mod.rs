@@ -1,6 +1,6 @@
-use blsttc::Signature;
+use blsttc::{PublicKeySet, Signature};
 
-use self::tag::Domain;
+use self::tag::{Domain, Tag};
 
 pub mod consensus;
 pub mod error;
@@ -28,6 +28,27 @@ pub struct Proof {
     pub abba_signature: Signature,
     pub abba_round: usize,
     pub vcbc_signature: Signature,
+}
+
+impl Proof {
+    pub fn verify(
+        &self,
+        proposal: &Proposal,
+        pks: &PublicKeySet,
+    ) -> Result<bool, crate::mvba::error::Error> {
+        let tag = Tag::new(self.domain.clone(), self.proposer);
+
+        if vcbc::verify_delivered_proposal(&tag, proposal, &self.vcbc_signature, pks)? {
+            Ok(abba::verify_decided_proposal(
+                &tag,
+                &self.abba_signature,
+                self.abba_round,
+                pks,
+            )?)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 /// MessageValidity is same as &Q_{ID}$ ins spec: a global polynomial-time computable

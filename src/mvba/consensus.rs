@@ -213,20 +213,6 @@ impl Consensus {
             None
         }
     }
-
-    pub fn verify_proof(&self, proposal: &Proposal, proof: &Proof) -> Result<bool> {
-        if let Some(vcbc) = self.vcbc_map.get(&proof.proposer) {
-            if vcbc.verify_delivered_proposal(proposal, &proof.vcbc_signature)? {
-                if let Some(abba) = self.abba_map.get(&proof.proposer) {
-                    return Ok(
-                        abba.verify_decided_proposal(&proof.abba_signature, proof.abba_round)?
-                    );
-                }
-            }
-        }
-
-        Ok(false)
-    }
 }
 
 #[cfg(test)]
@@ -247,6 +233,7 @@ mod tests {
     struct TestNet {
         cons: Vec<Consensus>,
         buffer: Vec<Outgoing>,
+        sks: SecretKeySet,
     }
 
     impl TestNet {
@@ -255,7 +242,7 @@ mod tests {
             let mut rng = thread_rng();
             //let (t, n) = (5, 7);
             let (t, n) = (2, 4);
-            let sec_key_set = SecretKeySet::random(t, &mut rng);
+            let sks = SecretKeySet::random(t, &mut rng);
             let mut parties = Vec::new();
             let mut cons = Vec::new();
 
@@ -267,8 +254,8 @@ mod tests {
                 let consensus = Consensus::init(
                     domain.clone(),
                     *p,
-                    sec_key_set.secret_key_share(p),
-                    sec_key_set.public_keys(),
+                    sks.secret_key_share(p),
+                    sks.public_keys(),
                     parties.clone(),
                     valid_proposal,
                 );
@@ -278,6 +265,7 @@ mod tests {
 
             Self {
                 cons,
+                sks,
                 buffer: Vec::new(),
             }
         }
@@ -446,7 +434,7 @@ mod tests {
 
         for c in &mut net.cons {
             if let Some((proposal, proof)) = c.decided_proposal() {
-                assert!(c.verify_proof(&proposal, &proof).unwrap());
+                assert!(proof.verify(&proposal, &net.sks.public_keys()).unwrap());
             }
         }
     }

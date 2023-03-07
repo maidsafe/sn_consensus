@@ -25,6 +25,18 @@ pub fn make_c_request_message(tag: Tag) -> std::result::Result<Vec<u8>, bincode:
     bincode::serialize(&msg)
 }
 
+// checks if the delivered proposal comes with a valid signature
+pub fn verify_delivered_proposal(
+    tag: &Tag,
+    proposal: &Proposal,
+    sig: &Signature,
+    pks: &PublicKeySet,
+) -> Result<bool> {
+    let d = Hash32::calculate(proposal);
+    let sign_bytes = c_ready_bytes_to_sign(tag, &d)?;
+    Ok(pks.public_key().verify(sig, sign_bytes))
+}
+
 // c_ready_bytes_to_sign generates bytes that should be signed by each party
 // as a witness of receiving the message.
 // c_ready_bytes_to_sign is same as serialized of $(ID.j.s, c-ready, H(m))$ in spec
@@ -286,13 +298,6 @@ impl Vcbc {
         } else {
             None
         }
-    }
-
-    // checks if the delivered proposal comes with a valid signature
-    pub fn verify_delivered_proposal(&self, proposal: &Proposal, sig: &Signature) -> Result<bool> {
-        let d = Hash32::calculate(proposal);
-        let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
-        Ok(self.pub_key_set.public_key().verify(sig, sign_bytes))
     }
 
     // send_to sends the message `msg` to the corresponding peer `to`.
