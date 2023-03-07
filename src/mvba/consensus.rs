@@ -195,28 +195,23 @@ impl Consensus {
     }
 
     pub fn decided_proposal(&self) -> Option<(Proposal, Proof)> {
-        if let Some(proposer) = &self.decided_proposer {
-            if let Some(abba) = self.abba_map.get(proposer) {
-                if let Some(vcbc) = self.vcbc_map.get(proposer) {
-                    if let Some((proposal, vcbc_sig)) = vcbc.read_delivered() {
-                        if let Some((value, abba_sig, round)) = abba.decided_value() {
-                            if value {
-                                let proof = Proof {
-                                    domain: self.domain.clone(),
-                                    proposer: *proposer,
-                                    abba_round: round,
-                                    abba_signature: abba_sig.clone(),
-                                    vcbc_signature: vcbc_sig,
-                                };
-                                return Some((proposal, proof));
-                            }
-                        }
-                    }
-                }
-            }
+        let proposer = self.decided_proposer.as_ref()?;
+        let abba = self.abba_map.get(proposer)?;
+        let vcbc = self.vcbc_map.get(proposer)?;
+        let (proposal, vcbc_sig) = vcbc.read_delivered()?;
+        let (value, abba_sig, round) = abba.decided_value()?;
+        if value {
+            let proof = Proof {
+                domain: self.domain.clone(),
+                proposer: *proposer,
+                abba_round: round,
+                abba_signature: abba_sig.clone(),
+                vcbc_signature: vcbc_sig,
+            };
+            Some((proposal, proof))
+        } else {
+            None
         }
-
-        None
     }
 
     pub fn verify_proof(&self, proposal: &Proposal, proof: &Proof) -> Result<bool> {
