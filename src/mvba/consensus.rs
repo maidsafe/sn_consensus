@@ -6,7 +6,7 @@ use super::{
     hash::Hash32,
     mvba::{self, Mvba},
     tag::{Domain, Tag},
-    vcbc, Proposal,
+    vcbc, Proof, Proposal,
 };
 use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};
@@ -121,7 +121,7 @@ impl Consensus {
                     Some(abba) => {
                         let msg = bincode::deserialize(&bundle.payload)?;
                         abba.receive_message(bundle.initiator, msg, &mut self.broadcaster)?;
-                        if let Some(decided_value) = abba.decided_value() {
+                        if let Some(decided_value) = abba.is_decided() {
                             if decided_value {
                                 self.decided_proposer = Some(target);
 
@@ -193,6 +193,26 @@ impl Consensus {
 
         Ok(self.broadcaster.take_outgoings())
     }
+
+    pub fn decided_proposal(&self) -> Option<(Proposal, Proof)> {
+        let proposer = self.decided_proposer.as_ref()?;
+        let abba = self.abba_map.get(proposer)?;
+        let vcbc = self.vcbc_map.get(proposer)?;
+        let (proposal, vcbc_sig) = vcbc.read_delivered()?;
+        let (value, abba_sig, round) = abba.decided_value()?;
+        if value {
+            let proof = Proof {
+                domain: self.domain.clone(),
+                proposer: *proposer,
+                abba_round: round,
+                abba_signature: abba_sig.clone(),
+                vcbc_signature: vcbc_sig,
+            };
+            Some((proposal, proof))
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -213,6 +233,7 @@ mod tests {
     struct TestNet {
         cons: Vec<Consensus>,
         buffer: Vec<Outgoing>,
+        sks: SecretKeySet,
     }
 
     impl TestNet {
@@ -221,7 +242,7 @@ mod tests {
             let mut rng = thread_rng();
             //let (t, n) = (5, 7);
             let (t, n) = (2, 4);
-            let sec_key_set = SecretKeySet::random(t, &mut rng);
+            let sks = SecretKeySet::random(t, &mut rng);
             let mut parties = Vec::new();
             let mut cons = Vec::new();
 
@@ -233,8 +254,8 @@ mod tests {
                 let consensus = Consensus::init(
                     domain.clone(),
                     *p,
-                    sec_key_set.secret_key_share(p),
-                    sec_key_set.public_keys(),
+                    sks.secret_key_share(p),
+                    sks.public_keys(),
                     parties.clone(),
                     valid_proposal,
                 );
@@ -244,6 +265,7 @@ mod tests {
 
             Self {
                 cons,
+                sks,
                 buffer: Vec::new(),
             }
         }
@@ -268,7 +290,6 @@ mod tests {
             let rand_index = rng.gen_range(0..net.buffer.len());
             let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -293,7 +314,7 @@ mod tests {
                     .abba_map
                     .get(&c.decided_proposer.unwrap())
                     .unwrap()
-                    .decided_value()
+                    .is_decided()
                     .unwrap();
 
                 log::debug!(
@@ -334,9 +355,8 @@ mod tests {
 
         while !net.buffer.is_empty() {
             let rand_index = rng.gen_range(0..net.buffer.len());
-            let rand_msg = &net.buffer.remove(dbg!(rand_index));
+            let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -361,7 +381,7 @@ mod tests {
                     .abba_map
                     .get(&c.decided_proposer.unwrap())
                     .unwrap()
-                    .decided_value()
+                    .is_decided()
                     .unwrap();
 
                 log::debug!(
@@ -378,6 +398,45 @@ mod tests {
         // https://sts10.github.io/2019/06/06/is-all-equal-function.html
         let first = decisions.iter().next().unwrap().1;
         assert!(decisions.iter().all(|(_, item)| item == first));
+    }
+
+    #[test]
+    fn test_proof() {
+        let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+        let mut net = TestNet::new();
+
+        for c in &mut net.cons {
+            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let mut msgs = c.propose(proposal).unwrap();
+            net.buffer.append(&mut msgs);
+        }
+
+        while !net.buffer.is_empty() {
+            let rand_index = rng.gen_range(0..net.buffer.len());
+            let rand_msg = &net.buffer.remove(rand_index);
+            let mut msgs = Vec::new();
+
+            for c in &mut net.cons {
+                msgs.append(&mut match rand_msg {
+                    Outgoing::Direct(id, bundle) => {
+                        if id == &c.self_id {
+                            c.process_bundle(bundle).unwrap()
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    Outgoing::Gossip(bundle) => c.process_bundle(bundle).unwrap(),
+                });
+            }
+
+            net.buffer.append(&mut msgs);
+        }
+
+        for c in &mut net.cons {
+            if let Some((proposal, proof)) = c.decided_proposal() {
+                assert!(proof.verify(&proposal, &net.sks.public_keys()).unwrap());
+            }
+        }
     }
 
     #[quickcheck]
@@ -403,7 +462,6 @@ mod tests {
             let rand_index = rng.gen_range(0..net.buffer.len());
             let rand_msg = &net.buffer.remove(rand_index);
             let mut msgs = Vec::new();
-            log::trace!("random message: {:?}", rand_msg);
 
             for c in &mut net.cons {
                 msgs.append(&mut match rand_msg {
@@ -428,7 +486,7 @@ mod tests {
                     .abba_map
                     .get(&c.decided_proposer.unwrap())
                     .unwrap()
-                    .decided_value()
+                    .is_decided()
                     .unwrap();
 
                 log::debug!(
@@ -440,7 +498,7 @@ mod tests {
             }
         }
 
-        // check if all consensus results are equal:
+        // all decisions should be the same.
         assert_eq!(decisions.len(), net.cons.len());
         // https://sts10.github.io/2019/06/06/is-all-equal-function.html
         let first = decisions.iter().next().unwrap().1;

@@ -4,8 +4,8 @@ use rand::thread_rng;
 use super::{
     error::Error,
     message::{
-        Action, MainVoteAction, MainVoteJustification, MainVoteValue, Message, PreVoteAction,
-        PreVoteJustification, Value,
+        Action, DecisionAction, MainVoteAction, MainVoteJustification, MainVoteValue, Message,
+        PreVoteAction, PreVoteJustification, Value,
     },
     Abba,
 };
@@ -70,6 +70,13 @@ impl TestNet {
                 justification: justification.clone(),
                 sig_share,
             }),
+        }
+    }
+
+    pub fn make_decision_msg(&self, round: usize, value: Value, sig: Signature) -> Message {
+        Message {
+            tag: self.abba.tag.clone(),
+            action: Action::Decision(DecisionAction { round, value, sig }),
         }
     }
 
@@ -342,6 +349,22 @@ fn test_pre_vote_round_1_invalid_value_zero() {
         .receive_message(TestNet::PARTY_B, msg, &mut t.broadcaster);
     assert!(matches!(result, Err(Error::InvalidMessage(msg))
     if msg == "initial value should be zero"));
+}
+
+#[test]
+fn test_invalid_decision() {
+    let i = TestNet::PARTY_X;
+    let j = TestNet::PARTY_X;
+    let mut t = TestNet::new(i, j);
+
+    let invalid_sig = SecretKey::random().sign([0]);
+    let msg = t.make_decision_msg(1, Value::One, invalid_sig);
+
+    let result = t
+        .abba
+        .receive_message(TestNet::PARTY_B, msg, &mut t.broadcaster);
+    assert!(matches!(result, Err(Error::InvalidMessage(msg))
+    if msg == "invalid signature"));
 }
 
 #[test]

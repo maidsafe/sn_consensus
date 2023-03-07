@@ -715,7 +715,7 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
                 })
                 .unwrap(),
         };
-        net.enqueue_packets(vec![dbg!(packet)]);
+        net.enqueue_packets(vec![packet]);
     }
 
     {
@@ -772,7 +772,7 @@ fn test_membership_votes_from_faulty_nodes_dont_contribute_to_vote_counts() -> R
         // node takes honest action
         let proc = net.proc_mut(honest).unwrap();
         let vote = proc.propose(Reconfig::Join(11)).unwrap();
-        net.broadcast(honest, dbg!(vote));
+        net.broadcast(honest, vote);
     }
 
     {
@@ -1048,7 +1048,7 @@ fn test_membership_scenario_requiring_us_to_filter_to_most_recent_votes_when_cou
                 faults: Default::default(),
             })?,
         };
-        net.enqueue_packets(vec![dbg!(packet)]);
+        net.enqueue_packets(vec![packet]);
     }
 
     {

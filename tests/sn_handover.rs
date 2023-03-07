@@ -120,7 +120,7 @@ fn test_handover_reject_vote_from_non_member() -> Result<()> {
 
     let vote = p1.propose(111)?;
     let resp = p0.handle_signed_vote(vote);
-    assert!(matches!(dbg!(resp), Err(Error::InvalidElderSignature)));
+    assert!(matches!(resp, Err(Error::InvalidElderSignature)));
     Ok(())
 }
 

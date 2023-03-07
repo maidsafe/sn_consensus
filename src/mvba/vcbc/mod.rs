@@ -1,5 +1,5 @@
 pub(crate) mod error;
-pub mod message;
+mod message;
 
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
@@ -23,6 +23,18 @@ pub fn make_c_request_message(tag: Tag) -> std::result::Result<Vec<u8>, bincode:
         action: Action::Request,
     };
     bincode::serialize(&msg)
+}
+
+// checks if the delivered proposal comes with a valid signature
+pub fn verify_delivered_proposal(
+    tag: &Tag,
+    proposal: &Proposal,
+    sig: &Signature,
+    pks: &PublicKeySet,
+) -> Result<bool> {
+    let d = Hash32::calculate(proposal);
+    let sign_bytes = c_ready_bytes_to_sign(tag, &d)?;
+    Ok(pks.public_key().verify(sig, sign_bytes))
 }
 
 // c_ready_bytes_to_sign generates bytes that should be signed by each party
@@ -224,6 +236,7 @@ impl Vcbc {
 
                 let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
                 let valid_sig = self.pub_key_set.public_key().verify(&sig, sign_bytes);
+
                 if !valid_sig {
                     log::warn!(
                         "party {} received c-ready with invalid signature share",

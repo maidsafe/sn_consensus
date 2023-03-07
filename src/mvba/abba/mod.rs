@@ -1,6 +1,6 @@
 // TODO: apply section 5.3.3. Further Optimizations
 pub(crate) mod error;
-pub mod message;
+mod message;
 
 use std::collections::HashMap;
 
@@ -18,6 +18,24 @@ use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
 
 pub(crate) const MODULE_NAME: &str = "abba";
+
+fn main_vote_bytes_to_sign(tag: &Tag, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
+    Ok(bincode::serialize(&(&tag, "main-vote", round, v))?)
+}
+
+pub fn verify_decided_proposal(
+    tag: &Tag,
+    sig: &Signature,
+    round: usize,
+    pks: &PublicKeySet,
+) -> Result<bool> {
+    let sign_bytes = main_vote_bytes_to_sign(tag, round, &MainVoteValue::Value(Value::One))?;
+    if !pks.public_key().verify(sig, sign_bytes) {
+        return Err(Error::InvalidMessage("invalid signature".to_string()));
+    }
+
+    Ok(true)
+}
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
@@ -371,11 +389,21 @@ impl Abba {
         Ok(())
     }
 
-    pub fn decided_value(&self) -> Option<bool> {
+    pub fn is_decided(&self) -> Option<bool> {
         match &self.decided_value {
-            Some(v) => match v.value {
+            Some(v) => match &v.value {
                 Value::One => Some(true),
                 Value::Zero => Some(false),
+            },
+            None => None,
+        }
+    }
+
+    pub fn decided_value(&self) -> Option<(bool, &Signature, usize)> {
+        match &self.decided_value {
+            Some(v) => match &v.value {
+                Value::One => Some((true, &v.sig, v.round)),
+                Value::Zero => Some((false, &v.sig, v.round)),
             },
             None => None,
         }
@@ -565,7 +593,7 @@ impl Abba {
                 }
             }
             Action::Decision(action) => {
-                // check the validity of the S-signature share
+                // check the validity of the signature
                 let sign_bytes = self
                     .main_vote_bytes_to_sign(action.round, &MainVoteValue::Value(action.value))?;
                 if !self
@@ -605,7 +633,7 @@ impl Abba {
     // main_vote_bytes_to_sign generates bytes for Main-Vote signature share.
     // main_vote_bytes_to_sign is same as serialized of $(ID, main-vote, r, v)$ in spec.
     fn main_vote_bytes_to_sign(&self, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(&(&self.tag, "main-vote", round, v))?)
+        main_vote_bytes_to_sign(&self.tag, round, v)
     }
 
     // threshold return the threshold of the public key set.
