@@ -2,10 +2,7 @@ use std::collections::BTreeMap;
 
 use blsttc::SecretKeySet;
 
-use super::{
-    message::{Value},
-    Abba,
-};
+use super::{message::Value, Abba};
 
 use crate::mvba::bundle::Message::AbbaMsg;
 use crate::mvba::hash::Hash32;
