@@ -4,24 +4,18 @@ use serde::{Deserialize, Serialize};
 use crate::mvba::{hash::Hash32, tag::Tag};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
-pub enum Value {
-    One,
-    Zero,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MainVoteValue {
-    Value(Value),
+    Value(bool),
     Abstain,
 }
 
 impl MainVoteValue {
     pub fn one() -> Self {
-        Self::Value(Value::One)
+        Self::Value(true)
     }
 
     pub fn zero() -> Self {
-        Self::Value(Value::Zero)
+        Self::Value(false)
     }
 }
 
@@ -50,7 +44,7 @@ pub enum MainVoteJustification {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PreVoteAction {
     pub round: usize,
-    pub value: Value,
+    pub value: bool,
     pub justification: PreVoteJustification,
     pub sig_share: SignatureShare,
 }
@@ -66,7 +60,7 @@ pub struct MainVoteAction {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct DecisionAction {
     pub round: usize,
-    pub value: Value,
+    pub value: bool,
     pub sig: Signature,
 }
 

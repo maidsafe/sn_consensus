@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use blsttc::SecretKeySet;
 
-use super::{message::Value, Abba};
+use super::{Abba};
 
 use crate::mvba::bundle::Message::Abba as AbbaMsg;
 use crate::mvba::hash::Hash32;
@@ -140,6 +140,6 @@ fn test_net_happy_path() {
 
     for (id, (node, _)) in net.nodes {
         println!("Checking {id}");
-        assert_eq!(node.decided_value.unwrap().value, Value::One);
+        assert!(node.decided_value.unwrap().value);
     }
 }
