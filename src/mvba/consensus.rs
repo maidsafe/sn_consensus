@@ -1,5 +1,6 @@
 use super::{
     abba::{self, Abba},
+    bundle::Message::*,
     bundle::{Bundle, Outgoing},
     error::Error,
     error::Result,
@@ -88,8 +89,13 @@ impl Consensus {
             vcbc::MODULE_NAME => match bundle.target {
                 Some(target) => match self.vcbc_map.get_mut(&target) {
                     Some(vcbc) => {
-                        let msg = bincode::deserialize(&bundle.payload)?;
-                        vcbc.receive_message(bundle.initiator, msg, &mut self.broadcaster)?;
+                        let msg = match &bundle.message {
+                            VcbcMsg(msg) => msg,
+                            _ => {
+                                return Err(Error::InvalidMessage("unexpected message".to_string()))
+                            }
+                        };
+                        vcbc.receive_message(bundle.initiator, msg.clone(), &mut self.broadcaster)?;
                         if let Some((proposal, sig)) = vcbc.read_delivered() {
                             // Check if we have agreed on this proposal before.
                             //    There might be a situation that we receive the agreement
@@ -119,8 +125,13 @@ impl Consensus {
             abba::MODULE_NAME => match bundle.target {
                 Some(target) => match self.abba_map.get_mut(&target) {
                     Some(abba) => {
-                        let msg = bincode::deserialize(&bundle.payload)?;
-                        abba.receive_message(bundle.initiator, msg, &mut self.broadcaster)?;
+                        let msg = match &bundle.message {
+                            AbbaMsg(msg) => msg,
+                            _ => {
+                                return Err(Error::InvalidMessage("unexpected message".to_string()))
+                            }
+                        };
+                        abba.receive_message(bundle.initiator, msg.clone(), &mut self.broadcaster)?;
                         if let Some(decided_value) = abba.is_decided() {
                             if decided_value {
                                 self.decided_proposer = Some(target);
@@ -137,12 +148,12 @@ impl Consensus {
                                     // abba is finished but still we don't have the proposal
                                     // request it from the initiator
                                     let tag = Tag::new(self.domain.clone(), target);
-                                    let data = vcbc::make_c_request_message(tag)?;
+                                    let bundle_message = vcbc::make_c_request_message(tag);
 
                                     self.broadcaster.broadcast(
                                         vcbc::MODULE_NAME,
                                         Some(target),
-                                        data,
+                                        bundle_message,
                                     );
                                 }
                             } else if self.mvba.current_proposer()? == target
@@ -159,8 +170,12 @@ impl Consensus {
                 None => return Err(Error::InvalidMessage("no target is defined".to_string())),
             },
             mvba::MODULE_NAME => {
-                let msg = bincode::deserialize(&bundle.payload)?;
-                self.mvba.receive_message(msg, &mut self.broadcaster)?;
+                let msg = match &bundle.message {
+                    MvbaMsg(msg) => msg,
+                    _ => return Err(Error::InvalidMessage("unexpected message".to_string())),
+                };
+                self.mvba
+                    .receive_message(msg.clone(), &mut self.broadcaster)?;
             }
 
             _ => {

@@ -10,9 +10,9 @@ use super::{
     Abba,
 };
 
-use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::{broadcaster::Broadcaster, NodeId};
+use crate::mvba::{bundle, hash::Hash32};
 
 struct TestNet {
     sec_key_set: SecretKeySet,
@@ -102,7 +102,7 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .has_gossip_message(&bincode::serialize(msg).unwrap())
+            .has_gossip_message(&bundle::Message::AbbaMsg(msg.clone()))
     }
 }
 

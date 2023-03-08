@@ -1,6 +1,6 @@
 // TODO: apply section 5.3.3. Further Optimizations
 pub(crate) mod error;
-mod message;
+pub(crate) mod message;
 
 use std::collections::HashMap;
 
@@ -16,6 +16,7 @@ use super::tag::Tag;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
+use crate::mvba::bundle;
 
 pub(crate) const MODULE_NAME: &str = "abba";
 
@@ -618,8 +619,11 @@ impl Abba {
             tag: self.tag.clone(),
             action,
         };
-        let data = bincode::serialize(&msg)?;
-        broadcaster.broadcast(MODULE_NAME, Some(self.tag.proposer), data);
+        broadcaster.broadcast(
+            MODULE_NAME,
+            Some(self.tag.proposer),
+            bundle::Message::AbbaMsg(msg.clone()),
+        );
         self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }

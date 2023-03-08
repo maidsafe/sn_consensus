@@ -3,10 +3,11 @@ use std::collections::BTreeMap;
 use blsttc::SecretKeySet;
 
 use super::{
-    message::{Message, Value},
+    message::{Value},
     Abba,
 };
 
+use crate::mvba::bundle::Message::AbbaMsg;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
@@ -79,8 +80,10 @@ impl Net {
                 let (recipient_node, recepient_broadcaster) = self.node_mut(recipient);
 
                 for bundle in queue {
-                    let msg: Message = bincode::deserialize(&bundle.payload)
-                        .expect("Failed to deserialize message");
+                    let msg = match bundle.message {
+                        AbbaMsg(msg) => msg,
+                        _ => panic!("unexpected message"),
+                    };
 
                     println!("Handling message: {msg:?}");
                     recipient_node
@@ -102,8 +105,10 @@ impl Net {
             let index = index % msgs.len();
 
             let bundle = msgs.swap_remove(index);
-            let msg: Message =
-                bincode::deserialize(&bundle.payload).expect("Failed to deserialize message");
+            let msg = match bundle.message {
+                AbbaMsg(msg) => msg,
+                _ => panic!("unexpected message"),
+            };
 
             let (recipient_node, recipient_broadcaster) = self.node_mut(recipient);
             recipient_node

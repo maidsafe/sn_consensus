@@ -1,4 +1,4 @@
-use super::NodeId;
+use super::{abba, mvba, vcbc, NodeId};
 use serde::{Deserialize, Serialize};
 
 /// Bundle is a wrapper around the actual message
@@ -11,7 +11,14 @@ pub struct Bundle {
     /// This is the destination  module, it can be ABBA, VCBC or MVBA.
     pub module: String,
     /// This is the actual message
-    pub payload: Vec<u8>,
+    pub(crate) message: Message,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum Message {
+    VcbcMsg(vcbc::message::Message),
+    AbbaMsg(abba::message::Message),
+    MvbaMsg(mvba::message::Message),
 }
 
 /// Ongoing messages definition

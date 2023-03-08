@@ -2,6 +2,7 @@ use blsttc::{PublicKeySet, Signature};
 
 use self::tag::{Domain, Tag};
 
+pub mod bundle;
 pub mod consensus;
 pub mod error;
 pub mod hash;
@@ -9,7 +10,6 @@ pub mod tag;
 
 mod abba;
 mod broadcaster;
-mod bundle;
 // TODO: remove me
 #[allow(clippy::module_inception)]
 mod mvba;

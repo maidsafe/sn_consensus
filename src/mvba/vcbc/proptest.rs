@@ -1,8 +1,9 @@
-use super::message::Message;
+
 
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
+use crate::mvba::bundle::Message::VcbcMsg;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
@@ -90,8 +91,10 @@ impl Net {
                 let (recipient_node, recipient_broadcaster) = self.node_mut(recipient);
 
                 for bundle in queue {
-                    let msg: Message = bincode::deserialize(&bundle.payload)
-                        .expect("Failed to deserialize message");
+                    let msg = match bundle.message {
+                        VcbcMsg(msg) => msg,
+                        _ => panic!("unexpected message"),
+                    };
 
                     recipient_node
                         .receive_message(bundle.initiator, msg, recipient_broadcaster)
@@ -111,8 +114,10 @@ impl Net {
             let index = index % msgs.len();
 
             let bundle = msgs.swap_remove(index);
-            let msg: Message =
-                bincode::deserialize(&bundle.payload).expect("Failed to deserialize message");
+            let msg = match bundle.message {
+                VcbcMsg(msg) => msg,
+                _ => panic!("unexpected message"),
+            };
 
             let (recipient_node, recipient_broadcaster) = self.node_mut(recipient);
             recipient_node
