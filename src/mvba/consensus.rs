@@ -12,6 +12,11 @@ use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId}
 use blsttc::{PublicKeySet, SecretKeyShare};
 use std::collections::HashMap;
 
+pub trait ConsensusTrait {
+    fn propose(&mut self, proposal: Proposal) -> Result<Vec<Outgoing>>;
+    fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>>;
+}
+
 pub struct Consensus {
     domain: Domain,
     self_id: NodeId,
@@ -64,9 +69,11 @@ impl Consensus {
             broadcaster,
         }
     }
+}
 
+impl ConsensusTrait for Consensus {
     /// starts the consensus by proposing the `proposal`.
-    pub fn propose(&mut self, proposal: Proposal) -> Result<Vec<Outgoing>> {
+    fn propose(&mut self, proposal: Proposal) -> Result<Vec<Outgoing>> {
         match self.vcbc_map.get_mut(&self.self_id) {
             Some(vcbc) => {
                 // verifiably authenticatedly c-broadcast message (v-echo, w, π) tagged with ID|vcbc.i.0
@@ -79,7 +86,7 @@ impl Consensus {
         Ok(self.broadcaster.take_outgoings())
     }
 
-    pub fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
+    fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
         if self.decided_proposal.is_some() {
             return Ok(vec![]);
         }
@@ -220,7 +227,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::Consensus;
-    use crate::mvba::{bundle::Outgoing, tag::Domain, *};
+    use crate::mvba::{bundle::Outgoing, consensus::ConsensusTrait, tag::Domain, *};
 
     use blsttc::SecretKeySet;
     use quickcheck_macros::quickcheck;

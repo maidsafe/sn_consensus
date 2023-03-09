@@ -15,6 +15,9 @@ mod bundle;
 mod mvba;
 mod vcbc;
 
+//#[cfg(feature = "mock")]
+pub mod mock;
+
 pub type NodeId = usize;
 
 /// A proposed data. It is the same as $w$ in the spec.
