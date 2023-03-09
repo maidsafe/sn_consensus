@@ -14,10 +14,10 @@ use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::collections::HashMap;
 
 pub struct Mvba {
-    domain: Domain,  // this is same as $ID.s$ in spec
-    i: NodeId,       // this is same as $i$ in spec
-    l: usize,        // this is same as $a$ in spec
-    v: Option<bool>, // this is same as $v$ in spec
+    domain: Domain, // Tag is a combination of Domain and proposer ID. It is unique in each MVBA instances.
+    i: NodeId,      // represents our unique identifier
+    l: usize,       // represents the index of current proposal
+    v: Option<bool>, // represents the decision value of the current proposal. If no decision made yet, it is None.
     proposals: HashMap<NodeId, (Proposal, Signature)>,
     votes_per_proposer: HashMap<NodeId, HashMap<NodeId, Vote>>,
     voted: bool,

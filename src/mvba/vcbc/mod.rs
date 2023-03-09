@@ -46,13 +46,13 @@ pub fn c_ready_bytes_to_sign(
 
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
 pub(crate) struct Vcbc {
-    tag: Tag,                            // this is same as $Tag$ in spec
-    i: NodeId,                           // this is same as $i$ in spec
-    m_bar: Option<Proposal>,             // this is same as $\bar{m}$ in spec
-    u_bar: Option<Signature>,            // this is same as $\bar{\mu}$ in spec
-    wd: HashMap<NodeId, SignatureShare>, // this is same as $W_d$ in spec
-    rd: usize,                           // this is same as $r_d$ in spec
-    d: Option<Hash32>,                   // Memorizing the message digest
+    tag: Tag, // Tag is a combination of Domain and proposer ID. It is unique in each VCBC instances.
+    i: NodeId, // represents our unique identifier
+    m_bar: Option<Proposal>, // represents the proposal data. If a proposal is not delivered yet, it is None.
+    u_bar: Option<Signature>, // represents the signature of the delivered proposal. If the proposal is not delivered yet, it is None
+    wd: HashMap<NodeId, SignatureShare>, // represents witness data. The witness data includes the signature shares of all the nodes that have participated in the protocol instance.
+    rd: usize, // represents the number of signature shares received yet. Once this number reaches a threshold, the node can merge signatures.
+    d: Option<Hash32>, // Memorizing the message digest
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     final_messages: HashMap<NodeId, Message>,

@@ -38,9 +38,9 @@ pub fn verify_decided_proposal(
 
 /// The ABBA holds the information for Asynchronous Binary Byzantine Agreement protocol.
 pub(crate) struct Abba {
-    tag: Tag,  // this is same as ID.j.s in the spec
-    i: NodeId, // this is same as $i$ in spec
-    r: usize,  // this is same as $r$ in spec
+    tag: Tag, // Tag is a combination of Domain and proposer ID. It is unique in each ABBA instances.
+    i: NodeId, // represents our unique identifier
+    r: usize, // represents the round number and it can be between 1 to 3
     voted: bool,
     weak_validity: Option<(Hash32, Signature)>,
     decided_value: Option<DecisionAction>,
