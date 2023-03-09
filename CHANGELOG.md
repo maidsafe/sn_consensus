@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.3.1](https://github.com/maidsafe/sn_consensus/compare/v3.3.0...v3.3.1) (2023-03-09)
+
+
+### Bug Fixes
+
+* fixing format issue ([54d552a](https://github.com/maidsafe/sn_consensus/commit/54d552a3d03a6949185a73bae3247e2fabc2ca58))
+* removing Module names ([5feee0b](https://github.com/maidsafe/sn_consensus/commit/5feee0b8fa08c2aef35fa508712896200069c6ae))
+
 ## [3.3.0](https://github.com/maidsafe/sn_consensus/compare/v3.2.2...v3.3.0) (2023-03-07)
 
 
