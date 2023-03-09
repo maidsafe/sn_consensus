@@ -1,5 +1,5 @@
 use super::{
-    bundle::{Bundle, Outgoing},
+    bundle::{self, Bundle, Outgoing},
     NodeId,
 };
 
@@ -18,28 +18,21 @@ impl Broadcaster {
         }
     }
 
-    pub fn send_to(
-        &mut self,
-        module: &str,
-        target: Option<NodeId>,
-        payload: Vec<u8>,
-        recipient: NodeId,
-    ) {
-        let bdl = self.make_bundle(module, target, payload);
+    pub fn send_to(&mut self, target: Option<NodeId>, message: bundle::Message, recipient: NodeId) {
+        let bdl = self.make_bundle(target, message);
         self.outgoings.push(Outgoing::Direct(recipient, bdl));
     }
 
-    pub fn broadcast(&mut self, module: &str, target: Option<NodeId>, payload: Vec<u8>) {
-        let bdl = self.make_bundle(module, target, payload);
+    pub fn broadcast(&mut self, target: Option<NodeId>, message: bundle::Message) {
+        let bdl = self.make_bundle(target, message);
         self.outgoings.push(Outgoing::Gossip(bdl));
     }
 
-    fn make_bundle(&self, module: &str, target: Option<NodeId>, payload: Vec<u8>) -> Bundle {
+    fn make_bundle(&self, target: Option<NodeId>, message: bundle::Message) -> Bundle {
         Bundle {
             initiator: self.self_id,
             target,
-            module: module.to_string(),
-            payload,
+            message,
         }
     }
 
@@ -65,10 +58,10 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_gossip_message(&self, pld: &[u8]) -> bool {
+    pub fn has_gossip_message(&self, msg: &bundle::Message) -> bool {
         for out in &self.outgoings {
             if let Outgoing::Gossip(bdl) = out {
-                if bdl.payload.eq(&pld) {
+                if &bdl.message == msg {
                     return true;
                 }
             }
@@ -77,10 +70,10 @@ impl Broadcaster {
     }
 
     #[cfg(test)]
-    pub fn has_direct_message(&self, to: &NodeId, pld: &[u8]) -> bool {
+    pub fn has_direct_message(&self, to: &NodeId, msg: &bundle::Message) -> bool {
         for out in &self.outgoings {
             if let Outgoing::Direct(recipient, bdl) = out {
-                if bdl.payload == pld && recipient == to {
+                if &bdl.message == msg && recipient == to {
                     return true;
                 }
             }

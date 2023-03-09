@@ -77,7 +77,7 @@ pub enum Action {
     Decision(DecisionAction),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     pub tag: Tag, // this is same as $id.j.s$ in spec
     pub action: Action,

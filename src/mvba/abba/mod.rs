@@ -1,6 +1,6 @@
 // TODO: apply section 5.3.3. Further Optimizations
 pub(crate) mod error;
-mod message;
+pub(crate) mod message;
 
 use std::collections::HashMap;
 
@@ -16,8 +16,7 @@ use super::tag::Tag;
 use super::NodeId;
 use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
-
-pub(crate) const MODULE_NAME: &str = "abba";
+use crate::mvba::bundle;
 
 fn main_vote_bytes_to_sign(tag: &Tag, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
     Ok(bincode::serialize(&(&tag, "main-vote", round, v))?)
@@ -618,8 +617,7 @@ impl Abba {
             tag: self.tag.clone(),
             action,
         };
-        let data = bincode::serialize(&msg)?;
-        broadcaster.broadcast(MODULE_NAME, Some(self.tag.proposer), data);
+        broadcaster.broadcast(Some(self.tag.proposer), bundle::Message::Abba(msg.clone()));
         self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }

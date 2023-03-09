@@ -1,5 +1,5 @@
 pub(crate) mod error;
-mod message;
+pub(crate) mod message;
 
 use self::message::{Message, Vote};
 
@@ -9,11 +9,9 @@ use super::tag::Domain;
 use super::vcbc;
 use super::{hash::Hash32, Proposal};
 use crate::mvba::tag::Tag;
-use crate::mvba::NodeId;
+use crate::mvba::{bundle, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::collections::HashMap;
-
-pub(crate) const MODULE_NAME: &str = "mvba";
 
 pub struct Mvba {
     domain: Domain,  // this is same as $ID.s$ in spec
@@ -174,14 +172,9 @@ impl Mvba {
                 self.i,
                 msg.vote.tag.proposer,
             );
-            let data = vcbc::make_c_request_message(self.current_tag()?)?;
+            let bundle_msg = vcbc::make_c_request_message(self.current_tag()?);
 
-            broadcaster.send_to(
-                vcbc::MODULE_NAME,
-                Some(msg.vote.tag.proposer),
-                data,
-                msg.voter,
-            );
+            broadcaster.send_to(Some(msg.vote.tag.proposer), bundle_msg, msg.voter);
 
             Ok(false)
         } else {
@@ -277,8 +270,7 @@ impl Mvba {
             voter: self.i,
             signature: sig,
         };
-        let data = bincode::serialize(&msg)?;
-        broadcaster.broadcast(MODULE_NAME, None, data);
+        broadcaster.broadcast(None, bundle::Message::Mvba(msg.clone()));
         self.receive_message(msg, broadcaster)?;
         Ok(())
     }

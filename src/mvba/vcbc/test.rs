@@ -6,7 +6,7 @@ use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
-use crate::mvba::Proposal;
+use crate::mvba::{bundle, Proposal};
 use blsttc::{SecretKeySet, Signature, SignatureShare};
 
 use rand::{thread_rng, Rng};
@@ -84,12 +84,12 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .has_gossip_message(&bincode::serialize(msg).unwrap())
+            .has_gossip_message(&bundle::Message::Vcbc(msg.clone()))
     }
 
     pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
         self.broadcaster
-            .has_direct_message(to, &bincode::serialize(msg).unwrap())
+            .has_direct_message(to, &bundle::Message::Vcbc(msg.clone()))
     }
 
     // m is same as proposal

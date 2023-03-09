@@ -1,5 +1,5 @@
 pub(crate) mod error;
-mod message;
+pub(crate) mod message;
 
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
@@ -10,19 +10,16 @@ use self::error::{Error, Result};
 use self::message::{Action, Message};
 use super::hash::Hash32;
 use super::tag::Tag;
-use super::{MessageValidity, NodeId, Proposal};
+use super::{bundle, MessageValidity, NodeId, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
-
-pub(crate) const MODULE_NAME: &str = "vcbc";
 
 // make_c_request_message creates the payload message to request a proposal
 // from the the proposer
-pub fn make_c_request_message(tag: Tag) -> std::result::Result<Vec<u8>, bincode::Error> {
-    let msg = Message {
+pub fn make_c_request_message(tag: Tag) -> bundle::Message {
+    bundle::Message::Vcbc(Message {
         tag,
         action: Action::Request,
-    };
-    bincode::serialize(&msg)
+    })
 }
 
 // checks if the delivered proposal comes with a valid signature
@@ -310,11 +307,10 @@ impl Vcbc {
     ) -> Result<()> {
         log::debug!("party {} sends {msg:?} to {}", self.i, to);
 
-        let data = bincode::serialize(&msg)?;
         if to == self.i {
             self.receive_message(self.i, msg, broadcaster)?;
         } else {
-            broadcaster.send_to(MODULE_NAME, Some(self.tag.proposer), data, to);
+            broadcaster.send_to(Some(self.tag.proposer), bundle::Message::Vcbc(msg), to);
         }
         Ok(())
     }
@@ -324,8 +320,7 @@ impl Vcbc {
     fn broadcast(&mut self, msg: self::Message, broadcaster: &mut Broadcaster) -> Result<()> {
         log::debug!("party {} broadcasts {msg:?}", self.i);
 
-        let data = bincode::serialize(&msg)?;
-        broadcaster.broadcast(MODULE_NAME, Some(self.i), data);
+        broadcaster.broadcast(Some(self.i), bundle::Message::Vcbc(msg.clone()));
         self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }

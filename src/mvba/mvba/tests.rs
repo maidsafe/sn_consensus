@@ -4,7 +4,7 @@ use super::{Error, Mvba};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
-use crate::mvba::{vcbc, Proposal};
+use crate::mvba::{bundle, vcbc, Proposal};
 use blsttc::{SecretKey, SecretKeySet, Signature, SignatureShare};
 use rand::{thread_rng, Rng};
 
@@ -76,7 +76,7 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .has_gossip_message(&bincode::serialize(msg).unwrap())
+            .has_gossip_message(&bundle::Message::Mvba(msg.clone()))
     }
 
     fn sign_vote(&self, vote: &Vote, id: &NodeId) -> SignatureShare {
@@ -318,7 +318,8 @@ fn test_request_proposal() {
     t.mvba.receive_message(msg_x, &mut t.broadcaster).unwrap();
 
     let tag = Tag::new(t.mvba.domain.clone(), TestNet::PARTY_X);
-    let data = vcbc::make_c_request_message(tag).unwrap();
-
-    assert!(t.broadcaster.has_direct_message(&TestNet::PARTY_X, &data));
+    let bundle_msg = vcbc::make_c_request_message(tag);
+    assert!(t
+        .broadcaster
+        .has_direct_message(&TestNet::PARTY_X, &bundle_msg));
 }
