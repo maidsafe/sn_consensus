@@ -13,12 +13,10 @@ use super::tag::Tag;
 use super::{bundle, MessageValidity, NodeId, Proposal};
 use crate::mvba::broadcaster::Broadcaster;
 
-pub(crate) const MODULE_NAME: &str = "vcbc";
-
 // make_c_request_message creates the payload message to request a proposal
 // from the the proposer
 pub fn make_c_request_message(tag: Tag) -> bundle::Message {
-    bundle::Message::VcbcMsg(Message {
+    bundle::Message::Vcbc(Message {
         tag,
         action: Action::Request,
     })
@@ -312,12 +310,7 @@ impl Vcbc {
         if to == self.i {
             self.receive_message(self.i, msg, broadcaster)?;
         } else {
-            broadcaster.send_to(
-                MODULE_NAME,
-                Some(self.tag.proposer),
-                bundle::Message::VcbcMsg(msg),
-                to,
-            );
+            broadcaster.send_to(Some(self.tag.proposer), bundle::Message::Vcbc(msg), to);
         }
         Ok(())
     }
@@ -327,11 +320,7 @@ impl Vcbc {
     fn broadcast(&mut self, msg: self::Message, broadcaster: &mut Broadcaster) -> Result<()> {
         log::debug!("party {} broadcasts {msg:?}", self.i);
 
-        broadcaster.broadcast(
-            MODULE_NAME,
-            Some(self.i),
-            bundle::Message::VcbcMsg(msg.clone()),
-        );
+        broadcaster.broadcast(Some(self.i), bundle::Message::Vcbc(msg.clone()));
         self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }

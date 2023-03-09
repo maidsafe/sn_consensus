@@ -8,17 +8,15 @@ pub struct Bundle {
     pub initiator: NodeId,
     /// This is the target node and in the most cases is same as `j` in specs.
     pub target: Option<NodeId>,
-    /// This is the destination  module, it can be ABBA, VCBC or MVBA.
-    pub module: String,
     /// This is the actual message
     pub(crate) message: Message,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Message {
-    VcbcMsg(vcbc::message::Message),
-    AbbaMsg(abba::message::Message),
-    MvbaMsg(mvba::message::Message),
+    Vcbc(vcbc::message::Message),
+    Abba(abba::message::Message),
+    Mvba(mvba::message::Message),
 }
 
 /// Ongoing messages definition

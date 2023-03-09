@@ -76,7 +76,7 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .has_gossip_message(&bundle::Message::MvbaMsg(msg.clone()))
+            .has_gossip_message(&bundle::Message::Mvba(msg.clone()))
     }
 
     fn sign_vote(&self, vote: &Vote, id: &NodeId) -> SignatureShare {

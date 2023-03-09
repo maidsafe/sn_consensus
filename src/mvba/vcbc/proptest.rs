@@ -1,7 +1,7 @@
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle::Bundle;
-use crate::mvba::bundle::Message::VcbcMsg;
+use crate::mvba::bundle::Message::Vcbc as VcbcMsg;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;

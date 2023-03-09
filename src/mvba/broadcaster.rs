@@ -18,32 +18,20 @@ impl Broadcaster {
         }
     }
 
-    pub fn send_to(
-        &mut self,
-        module: &str,
-        target: Option<NodeId>,
-        message: bundle::Message,
-        recipient: NodeId,
-    ) {
-        let bdl = self.make_bundle(module, target, message);
+    pub fn send_to(&mut self, target: Option<NodeId>, message: bundle::Message, recipient: NodeId) {
+        let bdl = self.make_bundle(target, message);
         self.outgoings.push(Outgoing::Direct(recipient, bdl));
     }
 
-    pub fn broadcast(&mut self, module: &str, target: Option<NodeId>, message: bundle::Message) {
-        let bdl = self.make_bundle(module, target, message);
+    pub fn broadcast(&mut self, target: Option<NodeId>, message: bundle::Message) {
+        let bdl = self.make_bundle(target, message);
         self.outgoings.push(Outgoing::Gossip(bdl));
     }
 
-    fn make_bundle(
-        &self,
-        module: &str,
-        target: Option<NodeId>,
-        message: bundle::Message,
-    ) -> Bundle {
+    fn make_bundle(&self, target: Option<NodeId>, message: bundle::Message) -> Bundle {
         Bundle {
             initiator: self.self_id,
             target,
-            module: module.to_string(),
             message,
         }
     }

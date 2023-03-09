@@ -13,8 +13,6 @@ use crate::mvba::{bundle, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
 use std::collections::HashMap;
 
-pub(crate) const MODULE_NAME: &str = "mvba";
-
 pub struct Mvba {
     domain: Domain,  // this is same as $ID.s$ in spec
     i: NodeId,       // this is same as $i$ in spec
@@ -176,12 +174,7 @@ impl Mvba {
             );
             let bundle_msg = vcbc::make_c_request_message(self.current_tag()?);
 
-            broadcaster.send_to(
-                vcbc::MODULE_NAME,
-                Some(msg.vote.tag.proposer),
-                bundle_msg,
-                msg.voter,
-            );
+            broadcaster.send_to(Some(msg.vote.tag.proposer), bundle_msg, msg.voter);
 
             Ok(false)
         } else {
@@ -277,7 +270,7 @@ impl Mvba {
             voter: self.i,
             signature: sig,
         };
-        broadcaster.broadcast(MODULE_NAME, None, bundle::Message::MvbaMsg(msg.clone()));
+        broadcaster.broadcast(None, bundle::Message::Mvba(msg.clone()));
         self.receive_message(msg, broadcaster)?;
         Ok(())
     }

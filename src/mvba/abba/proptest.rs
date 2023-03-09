@@ -4,7 +4,7 @@ use blsttc::SecretKeySet;
 
 use super::{message::Value, Abba};
 
-use crate::mvba::bundle::Message::AbbaMsg;
+use crate::mvba::bundle::Message::Abba as AbbaMsg;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};

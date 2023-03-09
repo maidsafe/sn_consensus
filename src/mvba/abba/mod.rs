@@ -18,8 +18,6 @@ use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle;
 
-pub(crate) const MODULE_NAME: &str = "abba";
-
 fn main_vote_bytes_to_sign(tag: &Tag, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
     Ok(bincode::serialize(&(&tag, "main-vote", round, v))?)
 }
@@ -619,11 +617,7 @@ impl Abba {
             tag: self.tag.clone(),
             action,
         };
-        broadcaster.broadcast(
-            MODULE_NAME,
-            Some(self.tag.proposer),
-            bundle::Message::AbbaMsg(msg.clone()),
-        );
+        broadcaster.broadcast(Some(self.tag.proposer), bundle::Message::Abba(msg.clone()));
         self.receive_message(self.i, msg, broadcaster)?;
         Ok(())
     }

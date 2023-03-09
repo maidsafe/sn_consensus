@@ -84,12 +84,12 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .has_gossip_message(&bundle::Message::VcbcMsg(msg.clone()))
+            .has_gossip_message(&bundle::Message::Vcbc(msg.clone()))
     }
 
     pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
         self.broadcaster
-            .has_direct_message(to, &bundle::Message::VcbcMsg(msg.clone()))
+            .has_direct_message(to, &bundle::Message::Vcbc(msg.clone()))
     }
 
     // m is same as proposal

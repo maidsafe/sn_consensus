@@ -102,7 +102,7 @@ impl TestNet {
 
     pub fn is_broadcasted(&self, msg: &Message) -> bool {
         self.broadcaster
-            .has_gossip_message(&bundle::Message::AbbaMsg(msg.clone()))
+            .has_gossip_message(&bundle::Message::Abba(msg.clone()))
     }
 }
 
