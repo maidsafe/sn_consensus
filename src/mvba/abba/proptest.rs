@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use blsttc::SecretKeySet;
 
-use super::{Abba};
+use super::Abba;
 
 use crate::mvba::bundle::Message::Abba as AbbaMsg;
 use crate::mvba::hash::Hash32;
