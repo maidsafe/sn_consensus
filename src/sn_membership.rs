@@ -202,8 +202,8 @@ impl<T: Proposition> Membership<T> {
             );
 
             let decided_consensus = std::mem::replace(&mut self.consensus, next_consensus);
-            self.history.insert(vote_gen, decided_consensus);
-            self.gen = vote_gen
+            self.gen += 1;
+            self.history.insert(self.gen, decided_consensus);
         }
 
         Ok(vote_response)

@@ -46,12 +46,12 @@ impl Net {
         }
     }
 
-    pub fn proc(&self, id: NodeId) -> Option<&Membership<u8>> {
-        self.procs.iter().find(|p| p.id() == id)
+    pub fn proc(&self, id: NodeId) -> &Membership<u8> {
+        self.procs.iter().find(|p| p.id() == id).unwrap()
     }
 
-    pub fn proc_mut(&mut self, id: NodeId) -> Option<&mut Membership<u8>> {
-        self.procs.iter_mut().find(|p| p.id() == id)
+    pub fn proc_mut(&mut self, id: NodeId) -> &mut Membership<u8> {
+        self.procs.iter_mut().find(|p| p.id() == id).unwrap()
     }
 
     /// Pick a random public key from the set of procs
@@ -116,7 +116,7 @@ impl Net {
         let faulty_node = faulty_nodes
             .iter()
             .choose(rng)
-            .and_then(|pk| self.proc(*pk))
+            .map(|pk| self.proc(*pk))
             .unwrap();
 
         let vote = Vote {
@@ -156,7 +156,7 @@ impl Net {
 
         self.delivered_packets.push(packet.clone());
 
-        let source_elders = self.proc(source).unwrap().consensus.elders.clone();
+        let source_elders = self.proc(source).consensus.elders.clone();
         let dest_proc = match self.procs.iter_mut().find(|p| p.id() == packet.dest) {
             Some(proc) => proc,
             None => {
@@ -183,30 +183,26 @@ impl Net {
             Err(err) => return Err(err),
         }
 
-        match self.proc(packet.dest) {
-            Some(proc) => {
-                let network_decision = self.decisions.get(&packet_gen);
+        let proc = self.proc(packet.dest);
+        let network_decision = self.decisions.get(&packet_gen);
 
-                let proc_decision = proc
-                    .consensus_at_gen(packet_gen)
-                    .ok()
-                    .and_then(|c| c.decision.clone());
+        let proc_decision = proc
+            .consensus_at_gen(packet_gen)
+            .ok()
+            .and_then(|c| c.decision.clone());
 
-                match (network_decision, proc_decision) {
-                    (Some(net_d), Some(proc_d)) => {
-                        assert_eq!(net_d.proposals, proc_d.proposals);
-                    }
-                    (None, Some(proc_d)) => {
-                        assert!(proc_d.validate(&proc.consensus.elders).is_ok());
-                        self.decisions.insert(packet_gen, proc_d);
-                    }
-                    (None | Some(_), None) => (),
-                }
-
-                Ok(())
+        match (network_decision, proc_decision) {
+            (Some(net_d), Some(proc_d)) => {
+                assert_eq!(net_d.proposals, proc_d.proposals);
             }
-            _ => Ok(()),
+            (None, Some(proc_d)) => {
+                assert!(proc_d.validate(&proc.consensus.elders).is_ok());
+                self.decisions.insert(packet_gen, proc_d);
+            }
+            (None | Some(_), None) => (),
         }
+
+        Ok(())
     }
 
     pub fn enqueue_packets(&mut self, packets: impl IntoIterator<Item = Packet>) {
@@ -233,6 +229,10 @@ impl Net {
     pub fn broadcast(&mut self, source: NodeId, vote: SignedVote<Reconfig<u8>>) {
         let packets = self.broadcast_packets(source, &vote);
         self.enqueue_packets(packets);
+    }
+
+    pub fn send(&mut self, source: NodeId, dest: NodeId, vote: SignedVote<Reconfig<u8>>) {
+        self.enqueue_packets([Packet { source, dest, vote }]);
     }
 
     pub fn drain_queued_packets(&mut self) -> Result<()> {
@@ -284,7 +284,7 @@ msc {\n
         msc.push_str(&procs);
         msc.push_str(";\n");
         for packet in self.delivered_packets.iter() {
-            write!(
+            writeln!(
                 &mut msc,
                 "{:?} -> {:?} [ label=\"{:?}\"];",
                 packet.source, packet.dest, packet.vote

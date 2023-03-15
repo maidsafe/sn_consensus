@@ -584,7 +584,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
     let packet = Packet {
         source: 2,
         dest: 1,
-        vote: net.proc(2).unwrap().sign_vote(Vote {
+        vote: net.proc(2).sign_vote(Vote {
             gen: 1,
             ballot: Ballot::Propose(Reconfig::Join(240)),
             faults: Default::default(),
@@ -596,7 +596,7 @@ fn test_membership_bft_consensus_qc1() -> Result<()> {
         dest: 1,
         vote: SignedVote {
             voter: 2,
-            ..net.proc(6).unwrap().sign_vote(Vote {
+            ..net.proc(6).sign_vote(Vote {
                 gen: 0,
                 ballot: Ballot::Propose(Reconfig::Join(115)),
                 faults: Default::default(),
@@ -639,10 +639,10 @@ fn test_membership_bft_consensus_qc2() -> Result<()> {
     let faulty = 1;
     let honest = 2;
     // node takes honest action
-    let vote = net.proc_mut(honest).unwrap().propose(Reconfig::Join(0))?;
+    let vote = net.proc_mut(honest).propose(Reconfig::Join(0))?;
     net.broadcast(honest, vote);
 
-    let faulty_proc = net.proc(faulty).unwrap();
+    let faulty_proc = net.proc(faulty);
     let packet = Packet {
         source: faulty,
         dest: honest,
@@ -693,7 +693,6 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
     {
         let vote = net
             .proc_mut(proposer_a)
-            .unwrap()
             .propose(Reconfig::Join(11))
             .unwrap();
         net.broadcast(proposer_a, vote);
@@ -705,7 +704,6 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
             dest: proposer_b,
             vote: net
                 .proc(faulty)
-                .unwrap()
                 .sign_vote(Vote {
                     gen: 1,
                     ballot: Ballot::Propose(Reconfig::Join(22)),
@@ -719,7 +717,6 @@ fn test_membership_bft_consensus_qc3() -> Result<()> {
     {
         let vote = net
             .proc_mut(proposer_b)
-            .unwrap()
             .propose(Reconfig::Join(33))
             .unwrap();
         net.broadcast(proposer_b, vote);
@@ -768,13 +765,13 @@ fn test_membership_votes_from_faulty_nodes_dont_contribute_to_vote_counts() -> R
 
     {
         // node takes honest action
-        let proc = net.proc_mut(honest).unwrap();
+        let proc = net.proc_mut(honest);
         let vote = proc.propose(Reconfig::Join(11)).unwrap();
         net.broadcast(honest, vote);
     }
 
     {
-        let faulty_proc = net.proc(faulty).unwrap();
+        let faulty_proc = net.proc(faulty);
         let packet = Packet {
             source: faulty,
             dest: honest,
@@ -828,7 +825,7 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
     let honest = 1;
     {
         // send a randomized packet
-        let faulty_proc = net.proc(faulty).unwrap();
+        let faulty_proc = net.proc(faulty);
         let packet = Packet {
             source: faulty,
             dest: honest,
@@ -844,11 +841,7 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
     }
 
     {
-        let vote = net
-            .proc_mut(faulty)
-            .unwrap()
-            .propose(Reconfig::Join(33))
-            .unwrap();
+        let vote = net.proc_mut(faulty).propose(Reconfig::Join(33)).unwrap();
         net.broadcast(faulty, vote);
     }
 
@@ -883,7 +876,7 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
     let honest = 2;
     {
         // send a randomized packet
-        let faulty_proc = net.proc(faulty).unwrap();
+        let faulty_proc = net.proc(faulty);
         let packet = Packet {
             source: faulty,
             dest: honest,
@@ -899,11 +892,7 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
     }
 
     {
-        let vote = net
-            .proc_mut(faulty)
-            .unwrap()
-            .propose(Reconfig::Join(33))
-            .unwrap();
+        let vote = net.proc_mut(faulty).propose(Reconfig::Join(33)).unwrap();
         net.broadcast(faulty, vote);
     }
 
@@ -957,15 +946,12 @@ fn test_membership_final_broadcast_on_decision_catches_up_stragglers() -> Result
 
     {
         // node takes honest action
-        let vote = net
-            .proc_mut(honest_a)
-            .unwrap()
-            .propose(Reconfig::Join(66))?;
+        let vote = net.proc_mut(honest_a).propose(Reconfig::Join(66))?;
         net.broadcast(honest_a, vote);
     }
     {
         // send a randomized packet
-        let faulty_proc = net.proc(faulty).unwrap();
+        let faulty_proc = net.proc(faulty);
         let packet = Packet {
             source: faulty,
             dest: honest_b,
@@ -1027,7 +1013,7 @@ fn test_membership_scenario_requiring_us_to_filter_to_most_recent_votes_when_cou
         let packet = Packet {
             source: faulty,
             dest: honest_a,
-            vote: net.proc(faulty).unwrap().sign_vote(Vote {
+            vote: net.proc(faulty).sign_vote(Vote {
                 gen: 1,
                 ballot: Ballot::Propose(Reconfig::Join(11)),
                 faults: Default::default(),
@@ -1037,17 +1023,11 @@ fn test_membership_scenario_requiring_us_to_filter_to_most_recent_votes_when_cou
     }
 
     {
-        let vote = net
-            .proc_mut(honest_b)
-            .unwrap()
-            .propose(Reconfig::Join(22))?;
+        let vote = net.proc_mut(honest_b).propose(Reconfig::Join(22))?;
         net.broadcast(honest_b, vote);
     }
     {
-        let vote = net
-            .proc_mut(honest_c)
-            .unwrap()
-            .propose(Reconfig::Join(33))?;
+        let vote = net.proc_mut(honest_c).propose(Reconfig::Join(33))?;
         net.broadcast(honest_c, vote);
     }
 
@@ -1080,11 +1060,7 @@ fn test_membership_ensure_that_candidates_are_being_chosen_based_on_vote_count()
     let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
 
     {
-        let vote = net
-            .proc_mut(5)
-            .unwrap()
-            .propose(Reconfig::Join(255))
-            .unwrap();
+        let vote = net.proc_mut(5).propose(Reconfig::Join(255)).unwrap();
         net.broadcast(5, vote);
     }
 
@@ -1093,11 +1069,7 @@ fn test_membership_ensure_that_candidates_are_being_chosen_based_on_vote_count()
     }
 
     {
-        let vote = net
-            .proc_mut(4)
-            .unwrap()
-            .propose(Reconfig::Join(144))
-            .unwrap();
+        let vote = net.proc_mut(4).propose(Reconfig::Join(144)).unwrap();
         net.broadcast(4, vote);
     }
 
@@ -1143,7 +1115,7 @@ fn test_membership_ensure_we_are_validating_super_majority_proposals() -> Result
     let id_b = 4;
     {
         let reconfig = Reconfig::Join(1);
-        let vote = net.proc_mut(id_a).unwrap().propose(reconfig).unwrap();
+        let vote = net.proc_mut(id_a).propose(reconfig).unwrap();
         net.reconfigs_by_gen
             .entry(vote.vote.gen)
             .or_default()
@@ -1158,7 +1130,7 @@ fn test_membership_ensure_we_are_validating_super_majority_proposals() -> Result
 
     {
         let reconfig = Reconfig::Join(0);
-        let vote = net.proc_mut(id_b).unwrap().propose(reconfig).unwrap();
+        let vote = net.proc_mut(id_b).propose(reconfig).unwrap();
         net.reconfigs_by_gen
             .entry(vote.vote.gen)
             .or_default()
@@ -1411,6 +1383,74 @@ fn prop_validate_reconfig(
     };
 
     Ok(TestResult::passed())
+}
+
+#[test]
+fn test_honest_nodes_broadcast_decisions() -> Result<()> {
+    init();
+
+    let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+
+    let mut net = Net::with_procs(2, 4, &mut rng);
+
+    let faulty = 2;
+    let faulty_target = 3;
+
+    {
+        // node takes honest action
+        let source = 1;
+        let vote = net.proc_mut(source).propose(Reconfig::Join(11)).unwrap();
+        net.broadcast(source, vote);
+    }
+
+    {
+        let vote = net
+            .proc(faulty)
+            .sign_vote(Vote {
+                gen: 1,
+                ballot: Ballot::Propose(Reconfig::Join(22)),
+                faults: Default::default(),
+            })
+            .unwrap();
+
+        net.send(faulty, faulty_target, vote);
+    }
+
+    {
+        // node takes honest action
+        let source = 4;
+        let vote = net.proc_mut(source).propose(Reconfig::Join(33)).unwrap();
+        net.broadcast(source, vote);
+    }
+
+    while let Err(e) = net.drain_queued_packets() {
+        println!("Error while draining: {e:?}");
+    }
+
+    let _ = net.generate_msc("test_honest_nodes_broadcast_decisions.msc");
+
+    let honest_procs = Vec::from_iter(net.procs.iter().filter(|p| p.id() != faulty));
+
+    // BFT TERMINATION PROPERTY: all honest procs have decided ==>
+    for p in honest_procs.iter() {
+        dbg!(&p);
+        for g in 1..=p.gen {
+            assert!(p.consensus_at_gen(g).unwrap().decision.is_some())
+        }
+        assert_eq!(p.consensus.decision, None); // because it should have moved on to the next generation
+        assert_eq!(p.consensus.votes, BTreeMap::default());
+    }
+
+    // BFT AGREEMENT PROPERTY: all honest procs have decided on the same values
+    let reference_proc = &honest_procs[0];
+    for p in honest_procs.iter() {
+        assert_eq!(reference_proc.gen, p.gen);
+        for g in 0..=reference_proc.gen {
+            assert_eq!(reference_proc.members(g).unwrap(), p.members(g).unwrap())
+        }
+    }
+
+    Ok(())
 }
 
 #[quickcheck]
