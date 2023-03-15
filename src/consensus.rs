@@ -21,7 +21,7 @@ pub struct Consensus<T: Proposition> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoteResponse<T: Proposition> {
-    WaitingForMoreVotes,
+    WaitingForMoreVotes(SignedVote<T>),
     Broadcast(SignedVote<T>),
 }
 
@@ -96,12 +96,12 @@ impl<T: Proposition> Consensus<T> {
 
         if self.decision.is_some() {
             info!("[{}] we've decided already, dropping vote", self.id());
-            return Ok(VoteResponse::WaitingForMoreVotes);
+            return Ok(VoteResponse::WaitingForMoreVotes(signed_vote));
         }
 
         if self.have_we_processed_vote(&signed_vote) {
             info!("[{}] dropping already processed vote", self.id());
-            return Ok(VoteResponse::WaitingForMoreVotes);
+            return Ok(VoteResponse::WaitingForMoreVotes(signed_vote));
         }
 
         signed_vote.validate(&self.elders, &self.processed_votes_cache)?;
@@ -117,7 +117,7 @@ impl<T: Proposition> Consensus<T> {
 
         if self.faults.contains_key(&signed_vote.voter) {
             info!("[{}] dropping vote from faulty voter", self.id());
-            return Ok(VoteResponse::WaitingForMoreVotes);
+            return Ok(VoteResponse::WaitingForMoreVotes(signed_vote));
         }
 
         self.process_signed_vote(signed_vote)
@@ -141,7 +141,7 @@ impl<T: Proposition> Consensus<T> {
                 faults: signed_vote.vote.faults.clone(),
             };
             self.decision = Some(decision);
-            return Ok(VoteResponse::WaitingForMoreVotes);
+            return Ok(VoteResponse::WaitingForMoreVotes(signed_vote));
         }
 
         let vote_count = VoteCount::count(self.votes.values(), &self.faulty_ids());
@@ -180,7 +180,7 @@ impl<T: Proposition> Consensus<T> {
                 VoteResponse::Broadcast(self.cast_vote(signed_merge_vote)?)
             } else {
                 info!("[{}] merge does not change counts, waiting.", self.id());
-                VoteResponse::WaitingForMoreVotes
+                VoteResponse::WaitingForMoreVotes(signed_vote)
             };
 
             return Ok(resp);
@@ -194,7 +194,7 @@ impl<T: Proposition> Consensus<T> {
 
                 if our_vote.vote.is_super_majority_ballot() {
                     info!("[{}] We've already sent a super majority, waiting till we either have a split vote or SM / SM", self.id());
-                    return Ok(VoteResponse::WaitingForMoreVotes);
+                    return Ok(VoteResponse::WaitingForMoreVotes(signed_vote));
                 }
             }
 
@@ -225,7 +225,7 @@ impl<T: Proposition> Consensus<T> {
             Ok(VoteResponse::Broadcast(self.cast_vote(signed_vote)?))
         } else {
             info!("[{}] waiting for more votes", self.id());
-            Ok(VoteResponse::WaitingForMoreVotes)
+            Ok(VoteResponse::WaitingForMoreVotes(signed_vote))
         }
     }
 
@@ -239,8 +239,8 @@ impl<T: Proposition> Consensus<T> {
 
     pub fn cast_vote(&mut self, signed_vote: SignedVote<T>) -> Result<SignedVote<T>> {
         info!("[{}] casting vote {:?}", self.id(), signed_vote);
-        match self.handle_signed_vote(signed_vote.clone())? {
-            VoteResponse::WaitingForMoreVotes => Ok(signed_vote),
+        match self.handle_signed_vote(signed_vote)? {
+            VoteResponse::WaitingForMoreVotes(signed_vote) => Ok(signed_vote),
             VoteResponse::Broadcast(vote) => Ok(vote),
         }
     }
