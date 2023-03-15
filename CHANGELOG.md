@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.3.2](https://github.com/maidsafe/sn_consensus/compare/v3.3.1...v3.3.2) (2023-03-15)
+
+
+### Bug Fixes
+
+* adding some comeents for the main fields ([cfc0407](https://github.com/maidsafe/sn_consensus/commit/cfc04077d3978ef033b2677fa1d91a85a05740d0))
+* fixing clippy issue ([cd77a61](https://github.com/maidsafe/sn_consensus/commit/cd77a61cdcdbe573a24cc64f51ea94a5ffae9c4e))
+* fixing formatting issue ([9a1308f](https://github.com/maidsafe/sn_consensus/commit/9a1308f50e7fe8dbc7d69626b889f784abd9912e))
+* **abba:** replacing Value with bool ([a5a0feb](https://github.com/maidsafe/sn_consensus/commit/a5a0feb9daa58acc1493ece90384642c31bc4d54))
+
 ### [3.3.1](https://github.com/maidsafe/sn_consensus/compare/v3.3.0...v3.3.1) (2023-03-09)
 
 
