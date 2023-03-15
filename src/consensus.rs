@@ -155,12 +155,12 @@ impl<T: Proposition> Consensus<T> {
             };
             self.decision = Some(decision);
 
-            let signed_vote = self.build_super_majority_vote(
+            let vote = self.build_super_majority_vote(
                 self.votes.values().cloned().collect(),
-                BTreeSet::from_iter(self.faults.values().cloned()),
+                self.faults.values().cloned().collect(),
                 signed_vote.vote.gen,
             )?;
-            return Ok(VoteResponse::Broadcast(signed_vote));
+            return Ok(VoteResponse::Broadcast(vote));
         }
 
         if vote_count.is_split_vote(&self.elders, self.n_elders) {
