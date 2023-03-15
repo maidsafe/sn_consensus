@@ -134,9 +134,8 @@ impl<T: Proposition> Consensus<T> {
                 "[{}] They terminated but we haven't yet, accepting decision",
                 self.id()
             );
-            let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
             let decision = Decision {
-                votes,
+                generation: signed_vote.vote.gen,
                 proposals,
                 faults: signed_vote.vote.faults.clone(),
             };
@@ -151,19 +150,13 @@ impl<T: Proposition> Consensus<T> {
                 "[{}] Detected super majority over super majorities: {proposals:?}",
                 self.id()
             );
-            let votes = crate::vote::simplify_votes(&self.votes.values().cloned().collect());
             let decision = Decision {
-                votes,
+                generation: signed_vote.vote.gen,
                 proposals,
                 faults: self.faults(),
             };
-            let vote = self.build_super_majority_vote(
-                decision.votes.clone(),
-                decision.faults.clone(),
-                signed_vote.vote.gen,
-            )?;
             self.decision = Some(decision);
-            return Ok(VoteResponse::Broadcast(vote));
+            return Ok(VoteResponse::WaitingForMoreVotes);
         }
 
         if vote_count.is_split_vote(&self.elders, self.n_elders) {
