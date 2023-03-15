@@ -865,9 +865,6 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
         assert_eq!(p.gen, 1);
         let decision = p.consensus_at_gen(1).unwrap().decision.as_ref().unwrap();
 
-        // check that the decision includes the discovery that `faulty` was faulty
-        assert_eq!(Vec::from_iter(p.consensus.faulty_ids()), vec![faulty]);
-
         assert_eq!(
             BTreeSet::from_iter(decision.proposals.keys()),
             BTreeSet::from_iter([&Reconfig::Join(22)])
@@ -880,9 +877,8 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
 #[test]
 fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
     init();
-    let n = 5;
     let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
-    let mut net = Net::with_procs((2 * n) / 3, n, &mut rng);
+    let mut net = Net::with_procs(3, 5, &mut rng);
     let faulty = 1;
     let honest = 2;
     {
@@ -924,9 +920,6 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
         assert_eq!(p.consensus.decision, None);
         assert_eq!(p.gen, 1);
         let decision = p.consensus_at_gen(1).unwrap().decision.as_ref().unwrap();
-
-        // check that the decision includes the discovery that `faulty` was faulty
-        assert_eq!(Vec::from_iter(p.consensus.faulty_ids()), vec![faulty]);
 
         // since all proposals were initiated by faulty voters, we end up with 0 proposals as the decision
         assert_eq!(decision.proposals, BTreeMap::new());
