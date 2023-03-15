@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use blsttc::SecretKeySet;
 
-use super::{message::Value, Abba};
+use super::Abba;
 
 use crate::mvba::bundle::Message::Abba as AbbaMsg;
 use crate::mvba::hash::Hash32;
@@ -29,7 +29,7 @@ impl Net {
         let public_key_set = secret_key_set.public_keys();
         let tag = Tag::new(Domain::new("test-domain", 0), proposer);
 
-        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|node_id| {
+        let nodes = BTreeMap::from_iter((1..=n).map(|node_id| {
             let key_share = secret_key_set.secret_key_share(node_id);
             let broadcaster = Broadcaster::new(node_id);
 
@@ -140,6 +140,6 @@ fn test_net_happy_path() {
 
     for (id, (node, _)) in net.nodes {
         println!("Checking {id}");
-        assert_eq!(node.decided_value.unwrap().value, Value::One);
+        assert!(node.decided_value.unwrap().value);
     }
 }

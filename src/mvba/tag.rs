@@ -4,8 +4,8 @@ use crate::mvba::NodeId;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Domain {
-    pub id: String, // this is same as $ID$ in spec
-    pub seq: usize, // this is same as $s$ in spec
+    pub id: String, // the unique identifier of the domain, The domain used to differentiate the domains in the network.
+    pub seq: usize, // represents the sequence number of the domain.
 }
 
 impl Domain {
@@ -22,8 +22,8 @@ impl Display for Domain {
 
 #[derive(Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Tag {
-    pub domain: Domain,   // this is same as $ID.s$ in spec
-    pub proposer: NodeId, // this is same as $j$ in spec
+    pub domain: Domain,   // The domain that is unique per consensus round
+    pub proposer: NodeId, // the proposer unique identifier
 }
 
 impl Display for Tag {
