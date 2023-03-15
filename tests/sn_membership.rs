@@ -16,7 +16,7 @@ mod membership_net;
 use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
 use sn_consensus::{
-    Ballot, Error, Fault, Generation, Membership, Reconfig, Result, SignedVote, Vote,
+    Ballot, Error, Generation, Membership, Reconfig, Result, SignedVote, Vote,
 };
 
 static INIT: std::sync::Once = std::sync::Once::new();
@@ -869,7 +869,7 @@ fn test_membership_faulty_node_attempts_to_trick_honest_node() -> Result<()> {
 
         // check that the decision includes the discovery that `faulty` was faulty
         assert_eq!(
-            Vec::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
+            Vec::from_iter(p.consensus.faulty_ids()),
             vec![faulty]
         );
 
@@ -932,7 +932,7 @@ fn test_membership_we_can_agree_to_an_empty_set() -> Result<()> {
 
         // check that the decision includes the discovery that `faulty` was faulty
         assert_eq!(
-            Vec::from_iter(decision.faults.iter().map(Fault::voter_at_fault)),
+            Vec::from_iter(p.consensus.faulty_ids()),
             vec![faulty]
         );
 
@@ -1013,7 +1013,7 @@ fn test_membership_final_broadcast_on_decision_catches_up_stragglers() -> Result
         let consensus = p.consensus_at_gen(1).unwrap();
         let decision = consensus.decision.as_ref().unwrap();
 
-        assert_eq!(decision.faulty_ids(), BTreeSet::from_iter([1]));
+        assert_eq!(consensus.faulty_ids(), BTreeSet::from_iter([1]));
         assert_eq!(
             BTreeSet::from_iter(decision.proposals.keys()),
             BTreeSet::from_iter([&Reconfig::Join(66)])

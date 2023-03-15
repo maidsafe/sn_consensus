@@ -137,7 +137,6 @@ impl<T: Proposition> Consensus<T> {
             let decision = Decision {
                 generation: signed_vote.vote.gen,
                 proposals,
-                faults: signed_vote.vote.faults.clone(),
             };
             self.decision = Some(decision);
             return Ok(VoteResponse::WaitingForMoreVotes);
@@ -153,7 +152,6 @@ impl<T: Proposition> Consensus<T> {
             let decision = Decision {
                 generation: signed_vote.vote.gen,
                 proposals,
-                faults: self.faults(),
             };
             self.decision = Some(decision);
             return Ok(VoteResponse::WaitingForMoreVotes);
