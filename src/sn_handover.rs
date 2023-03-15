@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use log::info;
 
 use crate::consensus::{Consensus, VoteResponse};
-use crate::vote::{Ballot, Proposition, SignedVote, Vote, simplify_votes};
+use crate::vote::{simplify_votes, Ballot, Proposition, SignedVote, Vote};
 use crate::{Error, NodeId, Result};
 
 pub type UniqueSectionId = u64;
@@ -59,7 +59,9 @@ impl<T: Proposition> Handover<T> {
             )?;
             Ok(vec![vote])
         } else {
-            Ok(Vec::from_iter(simplify_votes(&self.consensus.votes.values().cloned().collect())))
+            Ok(Vec::from_iter(simplify_votes(
+                &self.consensus.votes.values().cloned().collect(),
+            )))
         }
     }
 
