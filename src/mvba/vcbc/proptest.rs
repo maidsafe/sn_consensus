@@ -34,7 +34,7 @@ impl Net {
         let public_key_set = secret_key_set.public_keys();
         let domain = Domain::new("testing-vcbc", 0);
 
-        let nodes = BTreeMap::from_iter((1..=n).into_iter().map(|self_id| {
+        let nodes = BTreeMap::from_iter((1..=n).map(|self_id| {
             let key_share = secret_key_set.secret_key_share(self_id);
             let broadcaster = Broadcaster::new(self_id);
 
