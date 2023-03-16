@@ -19,7 +19,7 @@ struct TestNet {
     abba: Abba,
     proposal_digest: Hash32,
     proposal_sig: Signature,
-    broadcaster: Broadcaster,
+    broadcaster: Broadcaster<Vec<u8>>,
 }
 
 impl TestNet {
@@ -37,7 +37,7 @@ impl TestNet {
         let sec_key_set = SecretKeySet::random(2, &mut rng);
         let sec_key_share = sec_key_set.secret_key_share(i);
 
-        let proposal_digest = Hash32::calculate("test-data".as_bytes());
+        let proposal_digest = Hash32::calculate("test-data".as_bytes()).unwrap();
         let sign_bytes = crate::mvba::vcbc::c_ready_bytes_to_sign(&tag, &proposal_digest).unwrap();
         let proposal_sig = sec_key_set.secret_key().sign(sign_bytes);
 

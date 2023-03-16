@@ -7,32 +7,33 @@ use super::{
     hash::Hash32,
     mvba::Mvba,
     tag::{Domain, Tag},
-    vcbc, Proof, Proposal,
+    vcbc, Proof,
 };
-use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, MessageValidity, NodeId};
+use crate::mvba::{broadcaster::Broadcaster, vcbc::Vcbc, Decision, MessageValidity, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare};
-use std::collections::HashMap;
+use serde::Serialize;
+use std::{collections::HashMap, fmt::Debug};
 
-pub struct Consensus {
+pub struct Consensus<P: Debug + Clone + Serialize + Eq + PartialEq> {
     domain: Domain,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
-    vcbc_map: HashMap<NodeId, Vcbc>,
-    mvba: Mvba,
+    vcbc_map: HashMap<NodeId, Vcbc<P>>,
+    mvba: Mvba<P>,
     decided_proposer: Option<NodeId>,
-    decided_proposal: Option<Proposal>,
-    broadcaster: Broadcaster,
+    decided_proposal: Option<P>,
+    broadcaster: Broadcaster<P>,
 }
 
-impl Consensus {
+impl<P: Debug + Clone + Serialize + Eq + PartialEq> Consensus<P> {
     pub fn init(
         domain: Domain,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
-        message_validity: MessageValidity,
-    ) -> Consensus {
+        message_validity: MessageValidity<P>,
+    ) -> Self {
         let broadcaster = Broadcaster::new(self_id);
         let mut abba_map = HashMap::new();
         let mut vcbc_map = HashMap::new();
@@ -66,8 +67,16 @@ impl Consensus {
         }
     }
 
+    pub fn pub_key_set(&self) -> PublicKeySet {
+        self.mvba.pub_key_set()
+    }
+
+    pub fn self_id(&self) -> NodeId {
+        self.self_id
+    }
+
     /// starts the consensus by proposing the `proposal`.
-    pub fn propose(&mut self, proposal: Proposal) -> Result<Vec<Outgoing>> {
+    pub fn propose(&mut self, proposal: P) -> Result<Vec<Outgoing<P>>> {
         match self.vcbc_map.get_mut(&self.self_id) {
             Some(vcbc) => {
                 // verifiably authenticatedly c-broadcast message (v-echo, w, π) tagged with ID|vcbc.i.0
@@ -80,7 +89,7 @@ impl Consensus {
         Ok(self.broadcaster.take_outgoings())
     }
 
-    pub fn process_bundle(&mut self, bundle: &Bundle) -> Result<Vec<Outgoing>> {
+    pub fn process_bundle(&mut self, bundle: &Bundle<P>) -> Result<Vec<Outgoing<P>>> {
         if self.decided_proposal.is_some() {
             return Ok(vec![]);
         }
@@ -169,7 +178,7 @@ impl Consensus {
                 // The proposal is c-delivered and we have proof for that.
                 // Let's start binary agreement by voting 1
                 if let Some((proposal, sig)) = self.mvba.completed_vote_value()? {
-                    let digest = Hash32::calculate(proposal);
+                    let digest = Hash32::calculate(proposal)?;
                     abba.pre_vote_one(digest, sig.clone(), &mut self.broadcaster)?;
                 }
             } else {
@@ -182,7 +191,7 @@ impl Consensus {
         Ok(self.broadcaster.take_outgoings())
     }
 
-    pub fn decided_proposal(&self) -> Option<(Proposal, Proof)> {
+    pub fn decided_proposal(&self) -> Option<Decision<P>> {
         let proposer = self.decided_proposer.as_ref()?;
         let abba = self.abba_map.get(proposer)?;
         let vcbc = self.vcbc_map.get(proposer)?;
@@ -196,7 +205,7 @@ impl Consensus {
                 abba_signature: abba_sig.clone(),
                 vcbc_signature: vcbc_sig,
             };
-            Some((proposal, proof))
+            Some(Decision { proposal, proof })
         } else {
             None
         }
@@ -214,13 +223,13 @@ mod tests {
     use quickcheck_macros::quickcheck;
     use rand::{thread_rng, Rng, SeedableRng};
 
-    fn valid_proposal(_id: NodeId, _: &Proposal) -> bool {
+    fn valid_proposal(_id: NodeId, _: &Vec<u8>) -> bool {
         true
     }
 
     struct TestNet {
-        cons: Vec<Consensus>,
-        buffer: Vec<Outgoing>,
+        cons: Vec<Consensus<Vec<u8>>>,
+        buffer: Vec<Outgoing<Vec<u8>>>,
         sks: SecretKeySet,
     }
 
@@ -421,8 +430,10 @@ mod tests {
         }
 
         for c in &mut net.cons {
-            if let Some((proposal, proof)) = c.decided_proposal() {
-                assert!(proof.verify(&proposal, &net.sks.public_keys()).unwrap());
+            if let Some(Decision { proposal, proof }) = c.decided_proposal() {
+                assert!(proof
+                    .validate(&proposal, &net.sks.public_keys().public_key())
+                    .unwrap());
             }
         }
     }

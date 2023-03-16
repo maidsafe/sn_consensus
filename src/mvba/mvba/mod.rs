@@ -5,20 +5,21 @@ use self::message::{Message, Vote};
 
 use self::{error::Error, error::Result};
 use super::broadcaster::Broadcaster;
+use super::hash::Hash32;
 use super::tag::Domain;
 use super::vcbc;
-use super::{hash::Hash32, Proposal};
 use crate::mvba::tag::Tag;
 use crate::mvba::{bundle, NodeId};
 use blsttc::{PublicKeySet, SecretKeyShare, Signature};
+use serde::Serialize;
 use std::collections::HashMap;
 
-pub struct Mvba {
+pub struct Mvba<P> {
     domain: Domain, // Tag is a combination of Domain and proposer ID. It is unique in each MVBA instances.
     i: NodeId,      // represents our unique identifier
     l: usize,       // represents the index of current proposal
     v: Option<bool>, // represents the decision value of the current proposal. If no decision made yet, it is None.
-    proposals: HashMap<NodeId, (Proposal, Signature)>,
+    proposals: HashMap<NodeId, (P, Signature)>,
     votes_per_proposer: HashMap<NodeId, HashMap<NodeId, Vote>>,
     voted: bool,
     pub_key_set: PublicKeySet,
@@ -26,7 +27,7 @@ pub struct Mvba {
     parties: Vec<NodeId>,
 }
 
-impl Mvba {
+impl<P: Serialize + Eq + PartialEq> Mvba<P> {
     pub fn new(
         domain: Domain,
         self_id: NodeId,
@@ -48,16 +49,20 @@ impl Mvba {
         }
     }
 
+    pub fn pub_key_set(&self) -> PublicKeySet {
+        self.pub_key_set.clone()
+    }
+
     pub fn set_proposal(
         &mut self,
         proposer: NodeId,
-        proposal: Proposal,
+        proposal: P,
         signature: Signature,
-        broadcaster: &mut Broadcaster,
+        broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
         debug_assert!(self.parties.contains(&proposer));
         let tag = self.build_tag(proposer);
-        let digest = Hash32::calculate(&proposal);
+        let digest = Hash32::calculate(&proposal)?;
         let sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest)?;
         if !self.pub_key_set.public_key().verify(&signature, sign_bytes) {
             return Err(Error::InvalidMessage(
@@ -69,7 +74,7 @@ impl Mvba {
         self.vote(broadcaster)
     }
 
-    pub fn move_to_next_proposal(&mut self, broadcaster: &mut Broadcaster) -> Result<bool> {
+    pub fn move_to_next_proposal(&mut self, broadcaster: &mut Broadcaster<P>) -> Result<bool> {
         log::debug!(
             "party {} moves to the next proposer: {}",
             self.i,
@@ -106,7 +111,7 @@ impl Mvba {
         self.v
     }
 
-    pub fn completed_vote_value(&self) -> Result<Option<&(Proposal, Signature)>> {
+    pub fn completed_vote_value(&self) -> Result<Option<&(P, Signature)>> {
         Ok(self.proposals.get(&self.current_proposer()?))
     }
 
@@ -148,7 +153,7 @@ impl Mvba {
         Ok(())
     }
 
-    pub fn add_vote(&mut self, msg: &Message, broadcaster: &mut Broadcaster) -> Result<bool> {
+    pub fn add_vote(&mut self, msg: &Message, broadcaster: &mut Broadcaster<P>) -> Result<bool> {
         let votes = self.proposer_votes_mut(&msg.vote.tag.proposer);
         if let Some(exist) = votes.get(&msg.voter) {
             if exist != &msg.vote {
@@ -183,7 +188,11 @@ impl Mvba {
     }
 
     /// receive_message process the received message 'msg`
-    pub fn receive_message(&mut self, msg: Message, broadcaster: &mut Broadcaster) -> Result<()> {
+    pub fn receive_message(
+        &mut self,
+        msg: Message,
+        broadcaster: &mut Broadcaster<P>,
+    ) -> Result<()> {
         log::trace!("party {} received message: {:?}", self.i, msg);
 
         self.check_message(&msg)?;
@@ -223,7 +232,7 @@ impl Mvba {
         self.votes_per_proposer.entry(*proposer).or_default()
     }
 
-    fn vote(&mut self, broadcaster: &mut Broadcaster) -> Result<()> {
+    fn vote(&mut self, broadcaster: &mut Broadcaster<P>) -> Result<()> {
         // wait for n − t messages (v-echo, wj , πj ) to be c-delivered with tag ID|vcbc.j.0
         //from distinct Pj such that QID (wj , πj ) holds
         if self.proposals.len() >= self.threshold() && !self.voted {
@@ -242,7 +251,7 @@ impl Mvba {
                     // else
                     // let ρ be the message that completes the c-broadcast with tag ID|vcbc.a.0
                     // send the message (ID, v-vote, a, 1, ρ) to all parties
-                    let digest = Hash32::calculate(proposal);
+                    let digest = Hash32::calculate(proposal)?;
                     Vote {
                         tag,
                         value: true,
@@ -260,7 +269,7 @@ impl Mvba {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, vote: Vote, broadcaster: &mut Broadcaster) -> Result<()> {
+    fn broadcast(&mut self, vote: Vote, broadcaster: &mut Broadcaster<P>) -> Result<()> {
         log::debug!("party {} broadcasts {vote:?}", self.i);
 
         let sign_bytes = bincode::serialize(&vote)?;

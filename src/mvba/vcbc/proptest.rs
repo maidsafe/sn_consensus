@@ -5,20 +5,20 @@ use crate::mvba::bundle::Message::Vcbc as VcbcMsg;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
-use crate::mvba::Proposal;
 use blsttc::SecretKeySet;
 use quickcheck_macros::quickcheck;
 use std::collections::BTreeMap;
 
-fn valid_proposal(_: NodeId, _: &Proposal) -> bool {
+fn valid_proposal(_: NodeId, _: &Vec<u8>) -> bool {
     true
 }
 
+#[allow(clippy::type_complexity)]
 struct Net {
     domain: Domain,
     secret_key_set: SecretKeySet,
-    nodes: BTreeMap<NodeId, (Vcbc, Broadcaster)>,
-    queue: BTreeMap<NodeId, Vec<Bundle>>,
+    nodes: BTreeMap<NodeId, (Vcbc<Vec<u8>>, Broadcaster<Vec<u8>>)>,
+    queue: BTreeMap<NodeId, Vec<Bundle<Vec<u8>>>>,
 }
 
 impl Net {
@@ -57,7 +57,7 @@ impl Net {
         }
     }
 
-    fn node_mut(&mut self, id: NodeId) -> &mut (Vcbc, Broadcaster) {
+    fn node_mut(&mut self, id: NodeId) -> &mut (Vcbc<Vec<u8>>, Broadcaster<Vec<u8>>) {
         self.nodes.get_mut(&id).unwrap()
     }
 
@@ -69,14 +69,14 @@ impl Net {
         };
 
         for (recipient, bundle) in send_bundles {
-            let bundle: Bundle =
+            let bundle: Bundle<Vec<u8>> =
                 bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
             self.queue.entry(recipient).or_default().push(bundle);
         }
 
         for bundle in bcast_bundles {
             for recipient in self.nodes.keys() {
-                let bundle: Bundle =
+                let bundle: Bundle<Vec<u8>> =
                     bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
                 self.queue.entry(*recipient).or_default().push(bundle);
             }
@@ -149,7 +149,7 @@ fn test_vcbc_happy_path() {
     // And check that all nodes have delivered the expected value and signature
 
     let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&tag, &Hash32::calculate("HAPPY-PATH-VALUE"))
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate("HAPPY-PATH-VALUE").unwrap())
             .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
@@ -193,7 +193,8 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
 
     let tag = Tag::new(net.domain.clone(), proposer);
     let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&tag, &Hash32::calculate(&proposal)).expect("Failed to serialize");
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate(&proposal).unwrap())
+            .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 

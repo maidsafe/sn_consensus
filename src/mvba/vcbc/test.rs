@@ -3,27 +3,27 @@ use super::Error;
 use super::{NodeId, Vcbc};
 use crate::mvba::broadcaster::Broadcaster;
 
+use crate::mvba::bundle;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
-use crate::mvba::{bundle, Proposal};
 use blsttc::{SecretKeySet, Signature, SignatureShare};
 
 use rand::{thread_rng, Rng};
 
-fn valid_proposal(_: NodeId, _: &Proposal) -> bool {
+fn valid_proposal(_: NodeId, _: &Vec<u8>) -> bool {
     true
 }
 
-fn invalid_proposal(_: NodeId, _: &Proposal) -> bool {
+fn invalid_proposal(_: NodeId, _: &Vec<u8>) -> bool {
     false
 }
 
 struct TestNet {
     sec_key_set: SecretKeySet,
-    vcbc: Vcbc,
+    vcbc: Vcbc<Vec<u8>>,
     m: Vec<u8>,
-    broadcaster: Broadcaster,
+    broadcaster: Broadcaster<Vec<u8>>,
 }
 
 impl TestNet {
@@ -60,14 +60,14 @@ impl TestNet {
         }
     }
 
-    pub fn make_send_msg(&self, m: &[u8]) -> Message {
+    pub fn make_send_msg(&self, m: &[u8]) -> Message<Vec<u8>> {
         Message {
             tag: self.vcbc.tag.clone(),
             action: Action::Send(m.to_vec()),
         }
     }
 
-    pub fn make_ready_msg(&self, d: &Hash32, peer_id: &NodeId) -> Message {
+    pub fn make_ready_msg(&self, d: &Hash32, peer_id: &NodeId) -> Message<Vec<u8>> {
         let sig_share = self.sig_share(d, peer_id);
         Message {
             tag: self.vcbc.tag.clone(),
@@ -75,19 +75,19 @@ impl TestNet {
         }
     }
 
-    pub fn make_final_msg(&self, d: &Hash32) -> Message {
+    pub fn make_final_msg(&self, d: &Hash32) -> Message<Vec<u8>> {
         Message {
             tag: self.vcbc.tag.clone(),
             action: Action::Final(*d, self.u()),
         }
     }
 
-    pub fn is_broadcasted(&self, msg: &Message) -> bool {
+    pub fn is_broadcasted(&self, msg: &Message<Vec<u8>>) -> bool {
         self.broadcaster
             .has_gossip_message(&bundle::Message::Vcbc(msg.clone()))
     }
 
-    pub fn is_send_to(&self, to: &NodeId, msg: &Message) -> bool {
+    pub fn is_send_to(&self, to: &NodeId, msg: &Message<Vec<u8>>) -> bool {
         self.broadcaster
             .has_direct_message(to, &bundle::Message::Vcbc(msg.clone()))
     }
@@ -99,7 +99,7 @@ impl TestNet {
 
     // d is same as proposal's digest
     pub fn d(&self) -> Hash32 {
-        Hash32::calculate(&self.m)
+        Hash32::calculate(&self.m).unwrap()
     }
 
     // u is same as final signature
@@ -246,7 +246,7 @@ fn test_invalid_digest() {
 
     t.vcbc.c_broadcast(t.m.clone(), &mut t.broadcaster).unwrap();
 
-    let invalid_digest = Hash32::calculate("invalid-data");
+    let invalid_digest = Hash32::calculate("invalid-data").unwrap();
     let ready_msg_x = t.make_ready_msg(&invalid_digest, &i);
     assert!(t
         .vcbc

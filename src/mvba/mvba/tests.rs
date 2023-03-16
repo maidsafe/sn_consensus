@@ -4,7 +4,7 @@ use super::{Error, Mvba};
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
-use crate::mvba::{bundle, vcbc, Proposal};
+use crate::mvba::{bundle, vcbc};
 use blsttc::{SecretKey, SecretKeySet, Signature, SignatureShare};
 use rand::{thread_rng, Rng};
 
@@ -12,9 +12,9 @@ use std::collections::HashMap;
 
 struct TestNet {
     sec_key_set: SecretKeySet,
-    mvba: Mvba,
-    broadcaster: Broadcaster,
-    proposals: HashMap<NodeId, (Proposal, Signature)>,
+    mvba: Mvba<Vec<u8>>,
+    broadcaster: Broadcaster<Vec<u8>>,
+    proposals: HashMap<NodeId, (Vec<u8>, Signature)>,
 }
 
 impl TestNet {
@@ -37,7 +37,7 @@ impl TestNet {
 
         for p in &parties {
             let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
-            let digest = Hash32::calculate(&proposal);
+            let digest = Hash32::calculate(&proposal).unwrap();
             let tag = Tag::new(domain.clone(), *p);
             let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest).unwrap();
             let sig = sec_key_set.secret_key().sign(proposal_sign_bytes);
@@ -61,7 +61,7 @@ impl TestNet {
             None
         } else {
             let (proposal, signature) = self.proposals.get(&proposer).unwrap();
-            let digest = Hash32::calculate(proposal);
+            let digest = Hash32::calculate(proposal).unwrap();
             Some((digest, signature.clone()))
         };
 
@@ -168,7 +168,7 @@ fn test_ignore_proposal_with_an_invalid_proof() {
     let mut msg = t.make_vote_msg(voter, proposer, true);
     let inv_proposal = "invalid_proposal".as_bytes();
     let inv_sig = SecretKey::random().sign(inv_proposal);
-    msg.vote.proof = Some((Hash32::calculate(inv_proposal), inv_sig));
+    msg.vote.proof = Some((Hash32::calculate(inv_proposal).unwrap(), inv_sig));
     msg.signature = t.sign_vote(&msg.vote, &voter);
 
     let result = t.mvba.receive_message(msg, &mut t.broadcaster);
