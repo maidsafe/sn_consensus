@@ -28,6 +28,10 @@ pub struct Net {
 
 impl Net {
     pub fn with_procs(threshold: usize, n: usize, mut rng: &mut StdRng) -> Self {
+        assert!(
+            3 * (threshold + 1) > 2 * n,
+            "ASSERT: 3 * ({threshold} + 1) > 2 * {n}"
+        );
         let elders_sk = SecretKeySet::random(threshold, &mut rng);
 
         let procs = Vec::from_iter((1..=n).map(|i| {

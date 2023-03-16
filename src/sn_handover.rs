@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use log::info;
 
 use crate::consensus::{Consensus, VoteResponse};
-use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+use crate::vote::{simplify_votes, Ballot, Proposition, SignedVote, Vote};
 use crate::{Error, NodeId, Result};
 
 pub type UniqueSectionId = u64;
@@ -51,15 +51,17 @@ impl<T: Proposition> Handover<T> {
     pub fn anti_entropy(&self) -> Result<Vec<SignedVote<T>>> {
         info!("[HDVR] anti-entropy from {:?}", self.id());
 
-        if let Some(decision) = self.consensus.decision.as_ref() {
+        if let Some(_decision) = self.consensus.decision.as_ref() {
             let vote = self.consensus.build_super_majority_vote(
-                decision.votes.clone(),
-                decision.faults.clone(),
+                self.consensus.votes.values().cloned().collect(),
+                self.consensus.faults.values().cloned().collect(),
                 self.gen,
             )?;
             Ok(vec![vote])
         } else {
-            Ok(self.consensus.votes.values().cloned().collect())
+            Ok(Vec::from_iter(simplify_votes(
+                &self.consensus.votes.values().cloned().collect(),
+            )))
         }
     }
 

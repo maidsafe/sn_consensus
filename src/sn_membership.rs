@@ -6,7 +6,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 
 use crate::consensus::{Consensus, VoteResponse};
-use crate::vote::{Ballot, Proposition, SignedVote, Vote};
+use crate::vote::{simplify_votes, Ballot, Proposition, SignedVote, Vote};
 use crate::{Error, NodeId, Result};
 
 const SOFT_MAX_MEMBERS: usize = 7;
@@ -162,14 +162,19 @@ impl<T: Proposition> Membership<T> {
             .history
             .iter() // history is a BTreeSet, .iter() is ordered by generation
             .filter(|(gen, _)| **gen > from_gen)
-            .filter_map(|(gen, c)| c.decision.clone().map(|d| (gen, c, d)))
-            .map(|(gen, c, decision)| {
-                c.build_super_majority_vote(decision.votes, decision.faults, *gen)
+            .map(|(gen, c)| {
+                c.build_super_majority_vote(
+                    c.votes.values().cloned().collect(),
+                    c.faults.values().cloned().collect(),
+                    *gen,
+                )
             })
             .collect::<Result<Vec<_>>>()?;
 
         // include the current in-progres votes as well.
-        msgs.extend(self.consensus.votes.values().cloned());
+        msgs.extend(simplify_votes(
+            &self.consensus.votes.values().cloned().collect(),
+        ));
 
         Ok(msgs)
     }
@@ -197,8 +202,8 @@ impl<T: Proposition> Membership<T> {
             );
 
             let decided_consensus = std::mem::replace(&mut self.consensus, next_consensus);
-            self.history.insert(vote_gen, decided_consensus);
-            self.gen = vote_gen
+            self.gen += 1;
+            self.history.insert(self.gen, decided_consensus);
         }
 
         Ok(vote_response)
