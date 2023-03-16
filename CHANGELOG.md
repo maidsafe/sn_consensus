@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.3.3](https://github.com/maidsafe/sn_consensus/compare/v3.3.2...v3.3.3) (2023-03-16)
+
+
+### Bug Fixes
+
+* **decision:** remove faults from decision ([e2e38bc](https://github.com/maidsafe/sn_consensus/commit/e2e38bc64ea87ecb00acde293647f68a5b9ae0e0))
+* **decision:** remove vote history from decision ([55fd281](https://github.com/maidsafe/sn_consensus/commit/55fd281394b3648d2110272efabf94e286177b14))
+* **decision:** validate takes a public key instead of a key set ([87c434a](https://github.com/maidsafe/sn_consensus/commit/87c434a6eac609d7deece324517281d5c1895f71))
+* **tests:** Add test discovered by quickcheck ([229d1ac](https://github.com/maidsafe/sn_consensus/commit/229d1ac01531d01513f32e2d81241d402db5c95e))
+* **tests:** we no longer keep faults in decisions ([1625874](https://github.com/maidsafe/sn_consensus/commit/1625874877baf66301dd8e41db7032c4c561937b))
+
 ### [3.3.2](https://github.com/maidsafe/sn_consensus/compare/v3.3.1...v3.3.2) (2023-03-15)
 
 
