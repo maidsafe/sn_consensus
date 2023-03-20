@@ -14,7 +14,7 @@ use blsttc::{PublicKeySet, SecretKeyShare};
 use serde::Serialize;
 use std::{collections::HashMap, fmt::Debug};
 
-pub struct Consensus<P: Debug + Clone + Serialize + Eq + PartialEq> {
+pub struct Consensus<P: Debug + Clone + Serialize + Eq> {
     domain: Domain,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
@@ -25,7 +25,7 @@ pub struct Consensus<P: Debug + Clone + Serialize + Eq + PartialEq> {
     broadcaster: Broadcaster<P>,
 }
 
-impl<P: Debug + Clone + Serialize + Eq + PartialEq> Consensus<P> {
+impl<P: Debug + Clone + Serialize + Eq> Consensus<P> {
     pub fn init(
         domain: Domain,
         self_id: NodeId,

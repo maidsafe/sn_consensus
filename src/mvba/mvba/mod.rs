@@ -27,7 +27,7 @@ pub struct Mvba<P> {
     parties: Vec<NodeId>,
 }
 
-impl<P: Serialize + Eq + PartialEq> Mvba<P> {
+impl<P: Serialize + Eq> Mvba<P> {
     pub fn new(
         domain: Domain,
         self_id: NodeId,

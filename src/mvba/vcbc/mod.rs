@@ -75,7 +75,7 @@ fn try_insert<P>(map: &mut HashMap<NodeId, Message<P>>, k: NodeId, v: Message<P>
     }
 }
 
-impl<P: Debug + Clone + Serialize + Eq + PartialEq> Vcbc<P> {
+impl<P: Debug + Clone + Serialize + Eq> Vcbc<P> {
     pub fn new(
         tag: Tag,
         self_id: NodeId,

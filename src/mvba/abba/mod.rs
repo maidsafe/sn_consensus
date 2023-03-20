@@ -92,7 +92,7 @@ impl Abba {
         self.pre_vote(true, justification, broadcaster)
     }
 
-    fn pre_vote<P: Serialize + Eq + PartialEq>(
+    fn pre_vote<P: Serialize + Eq>(
         &mut self,
         value: bool,
         justification: PreVoteJustification,
@@ -119,7 +119,7 @@ impl Abba {
     }
 
     // receive_message process the received message 'msg` from `initiator`
-    pub fn receive_message<P: Serialize + Eq + PartialEq>(
+    pub fn receive_message<P: Serialize + Eq>(
         &mut self,
         initiator: NodeId,
         msg: Message,
@@ -614,7 +614,7 @@ impl Abba {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast<P: Serialize + Eq + PartialEq>(
+    fn broadcast<P: Serialize + Eq>(
         &mut self,
         action: Action,
         broadcaster: &mut Broadcaster<P>,
