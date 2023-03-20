@@ -430,10 +430,8 @@ mod tests {
         }
 
         for c in &mut net.cons {
-            if let Some(Decision { proposal, proof }) = c.decided_proposal() {
-                assert!(proof
-                    .validate(&proposal, &net.sks.public_keys().public_key())
-                    .unwrap());
+            if let Some(decision) = c.decided_proposal() {
+                assert!(decision.validate(&net.sks.public_keys().public_key()).unwrap());
             }
         }
     }
