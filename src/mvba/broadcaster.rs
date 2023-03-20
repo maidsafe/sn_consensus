@@ -1,5 +1,3 @@
-use serde::Serialize;
-
 use super::{
     bundle::{self, Bundle, Outgoing},
     NodeId,
@@ -7,12 +5,12 @@ use super::{
 
 // Broadcaster holds information required to broadcast the messages.
 #[derive(Debug)]
-pub struct Broadcaster<P: Serialize> {
+pub struct Broadcaster<P> {
     self_id: NodeId,
     outgoings: Vec<Outgoing<P>>,
 }
 
-impl<P: Serialize + Eq> Broadcaster<P> {
+impl<P: Eq> Broadcaster<P> {
     pub fn new(self_id: NodeId) -> Self {
         Self {
             self_id,
@@ -49,16 +47,14 @@ impl<P: Serialize + Eq> Broadcaster<P> {
 
     #[allow(clippy::type_complexity)]
     #[cfg(test)]
-    pub fn take_bundles(&mut self) -> (Vec<Vec<u8>>, Vec<(NodeId, Vec<u8>)>) {
+    pub fn take_bundles(&mut self) -> (Vec<Bundle<P>>, Vec<(NodeId, Bundle<P>)>) {
         let mut gossips = Vec::with_capacity(self.outgoings.len());
         let mut directs = Vec::with_capacity(self.outgoings.len());
 
         for out in std::mem::take(&mut self.outgoings) {
             match out {
-                Outgoing::Gossip(bdl) => gossips.push(bincode::serialize(&bdl).unwrap()),
-                Outgoing::Direct(recipient, bdl) => {
-                    directs.push((recipient, bincode::serialize(&bdl).unwrap()))
-                }
+                Outgoing::Gossip(bdl) => gossips.push(bdl),
+                Outgoing::Direct(recipient, bdl) => directs.push((recipient, bdl)),
             }
         }
         (gossips, directs)

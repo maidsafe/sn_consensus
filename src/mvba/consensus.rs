@@ -223,13 +223,13 @@ mod tests {
     use quickcheck_macros::quickcheck;
     use rand::{thread_rng, Rng, SeedableRng};
 
-    fn valid_proposal(_id: NodeId, _: &Vec<u8>) -> bool {
+    fn valid_proposal(_id: NodeId, _: &char) -> bool {
         true
     }
 
     struct TestNet {
-        cons: Vec<Consensus<Vec<u8>>>,
-        buffer: Vec<Outgoing<Vec<u8>>>,
+        cons: Vec<Consensus<char>>,
+        buffer: Vec<Outgoing<char>>,
         sks: SecretKeySet,
     }
 
@@ -278,7 +278,7 @@ mod tests {
         let mut net = TestNet::new();
 
         for c in &mut net.cons {
-            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let proposal = rng.gen();
             let mut msgs = c.propose(proposal).unwrap();
             net.buffer.append(&mut msgs);
         }
@@ -345,7 +345,7 @@ mod tests {
         let mut net = TestNet::new();
 
         for c in &mut net.cons {
-            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let proposal = rng.gen();
             let mut msgs = c.propose(proposal).unwrap();
             net.buffer.append(&mut msgs);
         }
@@ -403,7 +403,7 @@ mod tests {
         let mut net = TestNet::new();
 
         for c in &mut net.cons {
-            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let proposal = rng.gen();
             let mut msgs = c.propose(proposal).unwrap();
             net.buffer.append(&mut msgs);
         }
@@ -431,7 +431,9 @@ mod tests {
 
         for c in &mut net.cons {
             if let Some(decision) = c.decided_proposal() {
-                assert!(decision.validate(&net.sks.public_keys().public_key()).unwrap());
+                assert!(decision
+                    .validate(&net.sks.public_keys().public_key())
+                    .unwrap());
             }
         }
     }
@@ -450,7 +452,7 @@ mod tests {
         let mut net = TestNet::new();
 
         for c in &mut net.cons {
-            let proposal = (0..4).map(|_| rng.gen_range(0..64)).collect();
+            let proposal = rng.gen();
             let mut msgs = c.propose(proposal).unwrap();
             net.buffer.append(&mut msgs);
         }

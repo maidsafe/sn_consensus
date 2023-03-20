@@ -11,19 +11,19 @@ use blsttc::{SecretKeySet, Signature, SignatureShare};
 
 use rand::{thread_rng, Rng};
 
-fn valid_proposal(_: NodeId, _: &Vec<u8>) -> bool {
+fn valid_proposal(_: NodeId, _: &char) -> bool {
     true
 }
 
-fn invalid_proposal(_: NodeId, _: &Vec<u8>) -> bool {
+fn invalid_proposal(_: NodeId, _: &char) -> bool {
     false
 }
 
 struct TestNet {
     sec_key_set: SecretKeySet,
-    vcbc: Vcbc<Vec<u8>>,
-    m: Vec<u8>,
-    broadcaster: Broadcaster<Vec<u8>>,
+    vcbc: Vcbc<char>,
+    m: char,
+    broadcaster: Broadcaster<char>,
 }
 
 impl TestNet {
@@ -50,7 +50,7 @@ impl TestNet {
         );
 
         // Creating a random proposal
-        let m = (0..100).map(|_| rng.gen_range(0..64)).collect();
+        let m = rng.gen();
 
         Self {
             sec_key_set,
@@ -60,14 +60,14 @@ impl TestNet {
         }
     }
 
-    pub fn make_send_msg(&self, m: &[u8]) -> Message<Vec<u8>> {
+    pub fn make_send_msg(&self, m: char) -> Message<char> {
         Message {
             tag: self.vcbc.tag.clone(),
-            action: Action::Send(m.to_vec()),
+            action: Action::Send(m),
         }
     }
 
-    pub fn make_ready_msg(&self, d: &Hash32, peer_id: &NodeId) -> Message<Vec<u8>> {
+    pub fn make_ready_msg(&self, d: &Hash32, peer_id: &NodeId) -> Message<char> {
         let sig_share = self.sig_share(d, peer_id);
         Message {
             tag: self.vcbc.tag.clone(),
@@ -75,31 +75,31 @@ impl TestNet {
         }
     }
 
-    pub fn make_final_msg(&self, d: &Hash32) -> Message<Vec<u8>> {
+    pub fn make_final_msg(&self, d: &Hash32) -> Message<char> {
         Message {
             tag: self.vcbc.tag.clone(),
             action: Action::Final(*d, self.u()),
         }
     }
 
-    pub fn is_broadcasted(&self, msg: &Message<Vec<u8>>) -> bool {
+    pub fn is_broadcasted(&self, msg: &Message<char>) -> bool {
         self.broadcaster
             .has_gossip_message(&bundle::Message::Vcbc(msg.clone()))
     }
 
-    pub fn is_send_to(&self, to: &NodeId, msg: &Message<Vec<u8>>) -> bool {
+    pub fn is_send_to(&self, to: &NodeId, msg: &Message<char>) -> bool {
         self.broadcaster
             .has_direct_message(to, &bundle::Message::Vcbc(msg.clone()))
     }
 
     // m is same as proposal
-    pub fn m(&self) -> Vec<u8> {
-        self.m.clone()
+    pub fn m(&self) -> char {
+        self.m
     }
 
     // d is same as proposal's digest
     pub fn d(&self) -> Hash32 {
-        Hash32::calculate(&self.m).unwrap()
+        Hash32::calculate(self.m).unwrap()
     }
 
     // u is same as final signature
@@ -144,7 +144,7 @@ fn test_invalid_message() {
     let mut t = TestNet::new(i, j);
     t.vcbc.message_validity = invalid_proposal;
 
-    let msg = t.make_send_msg(&t.m);
+    let msg = t.make_send_msg(t.m);
 
     let result = t
         .vcbc
@@ -159,9 +159,9 @@ fn test_should_c_send() {
     let j = TestNet::PARTY_S; // i and j are same
     let mut t = TestNet::new(i, j);
 
-    t.vcbc.c_broadcast(t.m.clone(), &mut t.broadcaster).unwrap();
+    t.vcbc.c_broadcast(t.m, &mut t.broadcaster).unwrap();
 
-    let send_msg = t.make_send_msg(&t.m());
+    let send_msg = t.make_send_msg(t.m());
     assert!(t.is_broadcasted(&send_msg));
 }
 
@@ -171,7 +171,7 @@ fn test_should_c_ready() {
     let j = TestNet::PARTY_S;
     let mut t = TestNet::new(i, j);
 
-    let send_msg = t.make_send_msg(&t.m());
+    let send_msg = t.make_send_msg(t.m());
     t.vcbc
         .receive_message(j, send_msg, &mut t.broadcaster)
         .unwrap();
@@ -186,7 +186,7 @@ fn test_normal_case_operation() {
     let j = TestNet::PARTY_S; // i and j are same
     let mut t = TestNet::new(i, j);
 
-    t.vcbc.c_broadcast(t.m.clone(), &mut t.broadcaster).unwrap();
+    t.vcbc.c_broadcast(t.m, &mut t.broadcaster).unwrap();
 
     let ready_msg_x = t.make_ready_msg(&t.d(), &TestNet::PARTY_X);
     let ready_msg_y = t.make_ready_msg(&t.d(), &TestNet::PARTY_Y);
@@ -207,7 +207,7 @@ fn test_final_message_first() {
     let j = TestNet::PARTY_S;
     let mut t = TestNet::new(i, j);
 
-    let send_msg = t.make_send_msg(&t.m());
+    let send_msg = t.make_send_msg(t.m());
     let final_msg = t.make_final_msg(&t.d());
 
     t.vcbc
@@ -244,7 +244,7 @@ fn test_invalid_digest() {
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
 
-    t.vcbc.c_broadcast(t.m.clone(), &mut t.broadcaster).unwrap();
+    t.vcbc.c_broadcast(t.m, &mut t.broadcaster).unwrap();
 
     let invalid_digest = Hash32::calculate("invalid-data").unwrap();
     let ready_msg_x = t.make_ready_msg(&invalid_digest, &i);
@@ -260,7 +260,7 @@ fn test_invalid_sig_share() {
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
 
-    t.vcbc.c_broadcast(t.m.clone(), &mut t.broadcaster).unwrap();
+    t.vcbc.c_broadcast(t.m, &mut t.broadcaster).unwrap();
 
     let sig_share = t
         .sec_key_set
@@ -284,10 +284,8 @@ fn test_c_request() {
     let j = TestNet::PARTY_X;
     let mut t = TestNet::new(i, j);
 
-    let sig = t.sec_key_set.secret_key().sign(t.m());
-
     t.vcbc.m_bar = Some(t.m());
-    t.vcbc.u_bar = Some(sig.clone());
+    t.vcbc.u_bar = Some(t.u());
 
     let request_msg = Message {
         tag: t.vcbc.tag.clone(),
@@ -295,7 +293,7 @@ fn test_c_request() {
     };
     let answer_msg = Message {
         tag: t.vcbc.tag.clone(),
-        action: Action::Answer(t.m(), sig),
+        action: Action::Answer(t.m(), t.u()),
     };
 
     t.vcbc

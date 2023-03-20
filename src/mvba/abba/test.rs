@@ -19,7 +19,7 @@ struct TestNet {
     abba: Abba,
     proposal_digest: Hash32,
     proposal_sig: Signature,
-    broadcaster: Broadcaster<Vec<u8>>,
+    broadcaster: Broadcaster<char>,
 }
 
 impl TestNet {

@@ -12,8 +12,8 @@ use crate::mvba::{broadcaster::Broadcaster, bundle::Bundle, NodeId};
 struct Net {
     tag: Tag,
     secret_key_set: SecretKeySet,
-    nodes: BTreeMap<NodeId, (Abba, Broadcaster<Vec<u8>>)>,
-    queue: BTreeMap<NodeId, Vec<Bundle<Vec<u8>>>>,
+    nodes: BTreeMap<NodeId, (Abba, Broadcaster<char>)>,
+    queue: BTreeMap<NodeId, Vec<Bundle<char>>>,
 }
 
 impl Net {
@@ -45,7 +45,7 @@ impl Net {
         }
     }
 
-    fn node_mut(&mut self, id: NodeId) -> &mut (Abba, Broadcaster<Vec<u8>>) {
+    fn node_mut(&mut self, id: NodeId) -> &mut (Abba, Broadcaster<char>) {
         self.nodes.get_mut(&id).unwrap()
     }
 
@@ -57,15 +57,13 @@ impl Net {
         };
 
         for (recipient, bundle) in send_bundles {
-            let bundle: Bundle<Vec<u8>> =
-                bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+            let bundle: Bundle<char> = bundle.clone();
             self.queue.entry(recipient).or_default().push(bundle);
         }
 
         for bundle in bcast_bundles {
             for recipient in self.nodes.keys() {
-                let bundle: Bundle<Vec<u8>> =
-                    bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+                let bundle: Bundle<char> = bundle.clone();
                 self.queue.entry(*recipient).or_default().push(bundle);
             }
         }

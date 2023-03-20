@@ -12,9 +12,9 @@ use std::collections::HashMap;
 
 struct TestNet {
     sec_key_set: SecretKeySet,
-    mvba: Mvba<Vec<u8>>,
-    broadcaster: Broadcaster<Vec<u8>>,
-    proposals: HashMap<NodeId, (Vec<u8>, Signature)>,
+    mvba: Mvba<char>,
+    broadcaster: Broadcaster<char>,
+    proposals: HashMap<NodeId, (char, Signature)>,
 }
 
 impl TestNet {
@@ -36,8 +36,8 @@ impl TestNet {
         let mut proposals = HashMap::new();
 
         for p in &parties {
-            let proposal = (0..100).map(|_| rng.gen_range(0..64)).collect();
-            let digest = Hash32::calculate(&proposal).unwrap();
+            let proposal = rng.gen();
+            let digest = Hash32::calculate(proposal).unwrap();
             let tag = Tag::new(domain.clone(), *p);
             let proposal_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &digest).unwrap();
             let sig = sec_key_set.secret_key().sign(proposal_sign_bytes);
