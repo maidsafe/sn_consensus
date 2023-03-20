@@ -73,7 +73,7 @@ impl Abba {
     }
 
     /// pre_vote_zero starts the abba by broadcasting a pre-vote message with value 0.
-    pub fn pre_vote_zero<P: Serialize + Eq + PartialEq>(
+    pub fn pre_vote_zero<P: Serialize + Eq>(
         &mut self,
         broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
