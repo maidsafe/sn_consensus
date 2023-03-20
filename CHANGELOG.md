@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.4.0](https://github.com/maidsafe/sn_consensus/compare/v3.3.3...v3.4.0) (2023-03-20)
+
+
+### Features
+
+* proposal set as generic parameter ([c3f97af](https://github.com/maidsafe/sn_consensus/commit/c3f97af0956a8ce8d7f9394f14f17b8a85a551e1))
+
+
+### Bug Fixes
+
+* removing PartialEq trait ([313feae](https://github.com/maidsafe/sn_consensus/commit/313feae1e4ac0d361d3c2dc3fa44379296ce9bd3))
+* speed up the test by using char proposals ([4810ab0](https://github.com/maidsafe/sn_consensus/commit/4810ab00aed5e329f78757cb60440b56274fd4ff))
+
 ### [3.3.3](https://github.com/maidsafe/sn_consensus/compare/v3.3.2...v3.3.3) (2023-03-16)
 
 
