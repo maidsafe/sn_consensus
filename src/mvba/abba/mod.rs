@@ -82,7 +82,7 @@ impl Abba {
     }
 
     /// pre_vote_one starts the abba by broadcasting a pre-vote message with value 1.
-    pub fn pre_vote_one<P: Serialize + Eq + PartialEq>(
+    pub fn pre_vote_one<P: Serialize + Eq>(
         &mut self,
         digest: Hash32,
         sig: Signature,
