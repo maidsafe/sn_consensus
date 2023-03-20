@@ -1,4 +1,5 @@
-use blsttc::{PublicKeySet, Signature};
+use blsttc::{PublicKey, Signature};
+use serde::{Deserialize, Serialize};
 
 use self::tag::{Domain, Tag};
 
@@ -17,11 +18,8 @@ mod vcbc;
 
 pub type NodeId = usize;
 
-/// A proposed data. It is the same as $w$ in the spec.
-pub type Proposal = Vec<u8>;
-
-/// A proof if decided proposed data. It is the same as $π$ in the spec.
-#[derive(Debug)]
+/// A proof for the decided proposed data.
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Proof {
     pub domain: Domain,
     pub proposer: NodeId,
@@ -31,19 +29,19 @@ pub struct Proof {
 }
 
 impl Proof {
-    pub fn verify(
+    fn validate<P: Serialize>(
         &self,
-        proposal: &Proposal,
-        pks: &PublicKeySet,
+        proposal: &P,
+        pk: &PublicKey,
     ) -> Result<bool, crate::mvba::error::Error> {
         let tag = Tag::new(self.domain.clone(), self.proposer);
 
-        if vcbc::verify_delivered_proposal(&tag, proposal, &self.vcbc_signature, pks)? {
+        if vcbc::verify_delivered_proposal(&tag, proposal, &self.vcbc_signature, pk)? {
             Ok(abba::verify_decided_proposal(
                 &tag,
                 &self.abba_signature,
                 self.abba_round,
-                pks,
+                pk,
             )?)
         } else {
             Ok(false)
@@ -54,4 +52,16 @@ impl Proof {
 /// MessageValidity is same as &Q_{ID}$ ins spec: a global polynomial-time computable
 /// predicate QID known to all parties, which is determined by an external application.
 /// Each party may propose a value v together with a proof π that should satisfy QID .
-pub type MessageValidity = fn(NodeId, &Proposal) -> bool;
+pub type MessageValidity<P> = fn(NodeId, &P) -> bool;
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub struct Decision<P> {
+    pub proposal: P,
+    pub proof: Proof,
+}
+
+impl<P: Serialize> Decision<P> {
+    pub fn validate(&self, pk: &PublicKey) -> Result<bool, crate::mvba::error::Error> {
+        self.proof.validate(&self.proposal, pk)
+    }
+}

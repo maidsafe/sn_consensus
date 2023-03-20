@@ -3,19 +3,21 @@ pub(crate) mod message;
 
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use blsttc::{PublicKey, PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use serde::Serialize;
 
 use self::error::{Error, Result};
 use self::message::{Action, Message};
 use super::hash::Hash32;
 use super::tag::Tag;
-use super::{bundle, MessageValidity, NodeId, Proposal};
+use super::{bundle, MessageValidity, NodeId};
 use crate::mvba::broadcaster::Broadcaster;
 
 // make_c_request_message creates the payload message to request a proposal
 // from the the proposer
-pub fn make_c_request_message(tag: Tag) -> bundle::Message {
+pub fn make_c_request_message<P>(tag: Tag) -> bundle::Message<P> {
     bundle::Message::Vcbc(Message {
         tag,
         action: Action::Request,
@@ -23,15 +25,15 @@ pub fn make_c_request_message(tag: Tag) -> bundle::Message {
 }
 
 // checks if the delivered proposal comes with a valid signature
-pub fn verify_delivered_proposal(
+pub fn verify_delivered_proposal<P: Serialize>(
     tag: &Tag,
-    proposal: &Proposal,
+    proposal: &P,
     sig: &Signature,
-    pks: &PublicKeySet,
+    pk: &PublicKey,
 ) -> Result<bool> {
-    let d = Hash32::calculate(proposal);
+    let d = Hash32::calculate(proposal)?;
     let sign_bytes = c_ready_bytes_to_sign(tag, &d)?;
-    Ok(pks.public_key().verify(sig, sign_bytes))
+    Ok(pk.verify(sig, sign_bytes))
 }
 
 // c_ready_bytes_to_sign generates bytes that should be signed by each party
@@ -45,18 +47,18 @@ pub fn c_ready_bytes_to_sign(
 }
 
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
-pub(crate) struct Vcbc {
+pub(crate) struct Vcbc<P> {
     tag: Tag, // Tag is a combination of Domain and proposer ID. It is unique in each VCBC instances.
     i: NodeId, // represents our unique identifier
-    m_bar: Option<Proposal>, // represents the proposal data. If a proposal is not delivered yet, it is None.
+    m_bar: Option<P>, // represents the proposal data. If a proposal is not delivered yet, it is None.
     u_bar: Option<Signature>, // represents the signature of the delivered proposal. If the proposal is not delivered yet, it is None
     wd: HashMap<NodeId, SignatureShare>, // represents witness data. The witness data includes the signature shares of all the nodes that have participated in the protocol instance.
     rd: usize, // represents the number of signature shares received yet. Once this number reaches a threshold, the node can merge signatures.
     d: Option<Hash32>, // Memorizing the message digest
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
-    final_messages: HashMap<NodeId, Message>,
-    message_validity: MessageValidity,
+    final_messages: HashMap<NodeId, Message<P>>,
+    message_validity: MessageValidity<P>,
 }
 
 /// Tries to insert a key-value pair into the map.
@@ -64,7 +66,7 @@ pub(crate) struct Vcbc {
 /// If the map already had this key present, nothing is updated, and
 /// `DuplicatedMessage` error is returned.
 /// TODO: replace it with unstable try_insert function
-fn try_insert(map: &mut HashMap<NodeId, Message>, k: NodeId, v: Message) -> Result<()> {
+fn try_insert<P>(map: &mut HashMap<NodeId, Message<P>>, k: NodeId, v: Message<P>) -> Result<()> {
     if let std::collections::hash_map::Entry::Vacant(e) = map.entry(k) {
         e.insert(v);
         Ok(())
@@ -73,13 +75,13 @@ fn try_insert(map: &mut HashMap<NodeId, Message>, k: NodeId, v: Message) -> Resu
     }
 }
 
-impl Vcbc {
+impl<P: Debug + Clone + Serialize + Eq> Vcbc<P> {
     pub fn new(
         tag: Tag,
         self_id: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
-        message_validity: MessageValidity,
+        message_validity: MessageValidity<P>,
     ) -> Self {
         Self {
             tag,
@@ -98,7 +100,7 @@ impl Vcbc {
 
     /// c_broadcast sends the messages `m` to all other parties.
     /// It also adds the message to message_log and process it.
-    pub fn c_broadcast(&mut self, m: Proposal, broadcaster: &mut Broadcaster) -> Result<()> {
+    pub fn c_broadcast(&mut self, m: P, broadcaster: &mut Broadcaster<P>) -> Result<()> {
         debug_assert_eq!(self.i, self.tag.proposer);
 
         // Upon receiving message (ID.j.s, in, c-broadcast, m):
@@ -114,8 +116,8 @@ impl Vcbc {
     pub fn receive_message(
         &mut self,
         initiator: NodeId,
-        msg: Message,
-        broadcaster: &mut Broadcaster,
+        msg: Message<P>,
+        broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
         log::trace!(
             "party {} received {} message: {:?} from {}",
@@ -143,7 +145,7 @@ impl Vcbc {
                     // m̄ ← m
                     self.m_bar = Some(m.clone());
 
-                    let d = Hash32::calculate(&m);
+                    let d = Hash32::calculate(&m)?;
                     self.d = Some(d);
 
                     // compute an S1-signature share ν on (ID.j.s, c-ready, H(m))
@@ -269,7 +271,7 @@ impl Vcbc {
                 // Upon receiving message (ID.j.s, c-answer, m, µ) from Pl :
                 if self.u_bar.is_none() {
                     // if µ̄ = ⊥ and ...
-                    let d = Hash32::calculate(&m);
+                    let d = Hash32::calculate(&m)?;
                     let sign_bytes = c_ready_bytes_to_sign(&self.tag, &d)?;
                     if self.pub_key_set.public_key().verify(&u, sign_bytes) {
                         // ... µ is a valid S1 -signature on (ID.j.s, c-ready, H(m)) then
@@ -289,7 +291,7 @@ impl Vcbc {
         Ok(())
     }
 
-    pub fn read_delivered(&self) -> Option<(Proposal, Signature)> {
+    pub fn read_delivered(&self) -> Option<(P, Signature)> {
         if let (Some(proposal), Some(sig)) = (self.m_bar.clone(), self.u_bar.clone()) {
             Some((proposal, sig))
         } else {
@@ -301,9 +303,9 @@ impl Vcbc {
     // If the `to` is us, it adds the  message to our messages log.
     fn send_to(
         &mut self,
-        msg: self::Message,
+        msg: self::Message<P>,
         to: NodeId,
-        broadcaster: &mut Broadcaster,
+        broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
         log::debug!("party {} sends {msg:?} to {}", self.i, to);
 
@@ -317,7 +319,7 @@ impl Vcbc {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, msg: self::Message, broadcaster: &mut Broadcaster) -> Result<()> {
+    fn broadcast(&mut self, msg: self::Message<P>, broadcaster: &mut Broadcaster<P>) -> Result<()> {
         log::debug!("party {} broadcasts {msg:?}", self.i);
 
         broadcaster.broadcast(Some(self.i), bundle::Message::Vcbc(msg.clone()));

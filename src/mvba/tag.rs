@@ -1,8 +1,10 @@
 use std::fmt::{Debug, Display};
 
+use serde::{Deserialize, Serialize};
+
 use crate::mvba::NodeId;
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Domain {
     pub id: String, // the unique identifier of the domain, The domain used to differentiate the domains in the network.
     pub seq: usize, // represents the sequence number of the domain.
@@ -20,7 +22,7 @@ impl Display for Domain {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Tag {
     pub domain: Domain,   // The domain that is unique per consensus round
     pub proposer: NodeId, // the proposer unique identifier

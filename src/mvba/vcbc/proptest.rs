@@ -5,20 +5,20 @@ use crate::mvba::bundle::Message::Vcbc as VcbcMsg;
 use crate::mvba::hash::Hash32;
 use crate::mvba::tag::{Domain, Tag};
 use crate::mvba::vcbc::c_ready_bytes_to_sign;
-use crate::mvba::Proposal;
 use blsttc::SecretKeySet;
 use quickcheck_macros::quickcheck;
 use std::collections::BTreeMap;
 
-fn valid_proposal(_: NodeId, _: &Proposal) -> bool {
+fn valid_proposal(_: NodeId, _: &char) -> bool {
     true
 }
 
+#[allow(clippy::type_complexity)]
 struct Net {
     domain: Domain,
     secret_key_set: SecretKeySet,
-    nodes: BTreeMap<NodeId, (Vcbc, Broadcaster)>,
-    queue: BTreeMap<NodeId, Vec<Bundle>>,
+    nodes: BTreeMap<NodeId, (Vcbc<char>, Broadcaster<char>)>,
+    queue: BTreeMap<NodeId, Vec<Bundle<char>>>,
 }
 
 impl Net {
@@ -57,7 +57,7 @@ impl Net {
         }
     }
 
-    fn node_mut(&mut self, id: NodeId) -> &mut (Vcbc, Broadcaster) {
+    fn node_mut(&mut self, id: NodeId) -> &mut (Vcbc<char>, Broadcaster<char>) {
         self.nodes.get_mut(&id).unwrap()
     }
 
@@ -69,15 +69,13 @@ impl Net {
         };
 
         for (recipient, bundle) in send_bundles {
-            let bundle: Bundle =
-                bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+            let bundle: Bundle<char> = bundle.clone();
             self.queue.entry(recipient).or_default().push(bundle);
         }
 
         for bundle in bcast_bundles {
             for recipient in self.nodes.keys() {
-                let bundle: Bundle =
-                    bincode::deserialize(&bundle).expect("Failed to deserialize bundle");
+                let bundle: Bundle<char> = bundle.clone();
                 self.queue.entry(*recipient).or_default().push(bundle);
             }
         }
@@ -137,7 +135,7 @@ fn test_vcbc_happy_path() {
 
     let (node, broadcaster) = net.node_mut(proposer);
 
-    node.c_broadcast("HAPPY-PATH-VALUE".as_bytes().to_vec(), broadcaster)
+    node.c_broadcast('p', broadcaster)
         .expect("Failed to c-broadcast");
 
     net.enqueue_bundles_from(proposer);
@@ -147,18 +145,13 @@ fn test_vcbc_happy_path() {
     net.drain_queue();
 
     // And check that all nodes have delivered the expected value and signature
-
-    let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&tag, &Hash32::calculate("HAPPY-PATH-VALUE"))
-            .expect("Failed to serialize");
+    let expected_bytes_to_sign =
+        c_ready_bytes_to_sign(&tag, &Hash32::calculate('p').unwrap()).expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
     for (_, (node, _)) in net.nodes {
-        assert_eq!(
-            node.read_delivered(),
-            Some(("HAPPY-PATH-VALUE".as_bytes().to_vec(), expected_sig.clone()))
-        )
+        assert_eq!(node.read_delivered(), Some(('p', expected_sig.clone())))
     }
 }
 
@@ -166,7 +159,7 @@ fn test_vcbc_happy_path() {
 fn prop_vcbc_terminates_under_randomized_msg_delivery(
     n: usize,
     proposer: usize,
-    proposal: Vec<u8>,
+    proposal: char,
     msg_order: Vec<(NodeId, usize)>,
 ) {
     let n = n % 10 + 1; // Large n is wasteful, and n must be > 0
@@ -176,7 +169,7 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
     // First the proposer will initiate VCBC by broadcasting the proposal:
     let (proposer_node, proposer_broadcaster) = net.node_mut(proposer);
     proposer_node
-        .c_broadcast(proposal.clone(), proposer_broadcaster)
+        .c_broadcast(proposal, proposer_broadcaster)
         .expect("Failed to c-broadcast");
 
     net.enqueue_bundles_from(proposer);
@@ -192,15 +185,15 @@ fn prop_vcbc_terminates_under_randomized_msg_delivery(
     // And finally, check that all nodes have delivered the expected value and signature
 
     let tag = Tag::new(net.domain.clone(), proposer);
-    let expected_bytes_to_sign: Vec<u8> =
-        c_ready_bytes_to_sign(&tag, &Hash32::calculate(&proposal)).expect("Failed to serialize");
+    let expected_bytes_to_sign = c_ready_bytes_to_sign(&tag, &Hash32::calculate(proposal).unwrap())
+        .expect("Failed to serialize");
 
     let expected_sig = net.secret_key_set.secret_key().sign(expected_bytes_to_sign);
 
     for (_, (node, _)) in net.nodes {
         assert_eq!(
             node.read_delivered(),
-            Some((proposal.clone(), expected_sig.clone()))
+            Some((proposal, expected_sig.clone()))
         )
     }
 }

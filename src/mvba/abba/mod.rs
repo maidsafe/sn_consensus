@@ -4,7 +4,8 @@ pub(crate) mod message;
 
 use std::collections::HashMap;
 
-use blsttc::{PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use blsttc::{PublicKey, PublicKeySet, SecretKeyShare, Signature, SignatureShare};
+use serde::Serialize;
 
 use self::error::{Error, Result};
 use self::message::{
@@ -26,10 +27,10 @@ pub fn verify_decided_proposal(
     tag: &Tag,
     sig: &Signature,
     round: usize,
-    pks: &PublicKeySet,
+    pk: &PublicKey,
 ) -> Result<bool> {
     let sign_bytes = main_vote_bytes_to_sign(tag, round, &MainVoteValue::Value(true))?;
-    if !pks.public_key().verify(sig, sign_bytes) {
+    if !pk.verify(sig, sign_bytes) {
         return Err(Error::InvalidMessage("invalid signature".to_string()));
     }
 
@@ -72,27 +73,30 @@ impl Abba {
     }
 
     /// pre_vote_zero starts the abba by broadcasting a pre-vote message with value 0.
-    pub fn pre_vote_zero(&mut self, broadcaster: &mut Broadcaster) -> Result<()> {
+    pub fn pre_vote_zero<P: Serialize + Eq>(
+        &mut self,
+        broadcaster: &mut Broadcaster<P>,
+    ) -> Result<()> {
         let justification = PreVoteJustification::FirstRoundZero;
         self.pre_vote(false, justification, broadcaster)
     }
 
     /// pre_vote_one starts the abba by broadcasting a pre-vote message with value 1.
-    pub fn pre_vote_one(
+    pub fn pre_vote_one<P: Serialize + Eq>(
         &mut self,
         digest: Hash32,
         sig: Signature,
-        broadcaster: &mut Broadcaster,
+        broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
         let justification = PreVoteJustification::WithValidity(digest, sig);
         self.pre_vote(true, justification, broadcaster)
     }
 
-    fn pre_vote(
+    fn pre_vote<P: Serialize + Eq>(
         &mut self,
         value: bool,
         justification: PreVoteJustification,
-        broadcaster: &mut Broadcaster,
+        broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
         if self.voted {
             log::trace!("party {} voted before", self.i);
@@ -115,11 +119,11 @@ impl Abba {
     }
 
     // receive_message process the received message 'msg` from `initiator`
-    pub fn receive_message(
+    pub fn receive_message<P: Serialize + Eq>(
         &mut self,
         initiator: NodeId,
         msg: Message,
-        broadcaster: &mut Broadcaster,
+        broadcaster: &mut Broadcaster<P>,
     ) -> Result<()> {
         if self.decided_value.is_some() {
             // ignore the incoming messages if we have decided
@@ -610,7 +614,11 @@ impl Abba {
 
     // broadcast sends the message `msg` to all other peers in the network.
     // It adds the message to our messages log.
-    fn broadcast(&mut self, action: Action, broadcaster: &mut Broadcaster) -> Result<()> {
+    fn broadcast<P: Serialize + Eq>(
+        &mut self,
+        action: Action,
+        broadcaster: &mut Broadcaster<P>,
+    ) -> Result<()> {
         log::debug!("party {} broadcasts {action:?}", self.i);
 
         let msg = Message {
