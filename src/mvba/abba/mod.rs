@@ -19,7 +19,7 @@ use crate::mvba::abba::message::MainVoteJustification;
 use crate::mvba::broadcaster::Broadcaster;
 use crate::mvba::bundle;
 
-fn main_vote_bytes_to_sign(tag: &Tag, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
+pub fn main_vote_bytes_to_sign(tag: &Tag, round: usize, v: &MainVoteValue) -> Result<Vec<u8>> {
     Ok(bincode::serialize(&(&tag, "main-vote", round, v))?)
 }
 

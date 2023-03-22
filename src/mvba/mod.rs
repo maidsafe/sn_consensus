@@ -65,3 +65,51 @@ impl<P: Serialize> Decision<P> {
         self.proof.validate(&self.proposal, pk)
     }
 }
+
+use blsttc::SecretKey;
+
+pub fn mock_decision<P: Clone + Serialize>(
+    domain: Domain,
+    proposal: P,
+    proposer: NodeId,
+    sk: &SecretKey,
+) -> Result<Decision<P>, error::Error> {
+    use self::hash::Hash32;
+    use crate::mvba::abba::message::MainVoteValue;
+
+    let abba_round = 0;
+    let tag = Tag::new(domain.clone(), proposer);
+    let d = Hash32::calculate(proposal.clone())?;
+    let vcbc_sign_bytes = vcbc::c_ready_bytes_to_sign(&tag, &d)?;
+    let abba_sign_bytes =
+        abba::main_vote_bytes_to_sign(&tag, abba_round, &MainVoteValue::Value(true))?;
+
+    let vcbc_signature = sk.sign(vcbc_sign_bytes);
+    let abba_signature = sk.sign(abba_sign_bytes);
+
+    Ok(Decision {
+        proposal,
+        proof: Proof {
+            domain,
+            proposer,
+            abba_signature,
+            abba_round,
+            vcbc_signature,
+        },
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use blsttc::SecretKey;
+
+    use super::{mock_decision, tag::Domain};
+
+    #[test]
+    fn test_mocked_decision() {
+        let sk = SecretKey::random();
+        let domain = Domain::new("test-domain", 0);
+        let mocked_decision = mock_decision(domain, "test", 0, &sk).unwrap();
+        assert!(mocked_decision.validate(&sk.public_key()).unwrap());
+    }
+}
