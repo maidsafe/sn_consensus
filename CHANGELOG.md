@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [3.5.0](https://github.com/maidsafe/sn_consensus/compare/v3.4.0...v3.5.0) (2023-03-22)
+
 ## [3.4.0](https://github.com/maidsafe/sn_consensus/compare/v3.3.3...v3.4.0) (2023-03-20)
 
 
