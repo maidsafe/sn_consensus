@@ -20,7 +20,7 @@ pub enum Message<P> {
 }
 
 /// Ongoing messages definition
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Outgoing<P> {
     Gossip(Bundle<P>),
     Direct(NodeId, Bundle<P>),
