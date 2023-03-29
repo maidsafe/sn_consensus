@@ -1,4 +1,4 @@
-use super::{abba, mvba, vcbc, NodeId};
+use super::{abba, mvba, tag::Domain, vcbc, NodeId};
 use serde::{Deserialize, Serialize};
 
 /// Bundle is a wrapper around the actual message
@@ -10,6 +10,16 @@ pub struct Bundle<P> {
     pub target: Option<NodeId>,
     /// This is the actual message
     pub(crate) message: Message<P>,
+}
+
+impl<P> Bundle<P> {
+    pub fn domain(&self) -> &Domain {
+        match &self.message {
+            Message::Vcbc(msg) => &msg.tag.domain,
+            Message::Mvba(msg) => &msg.vote.tag.domain,
+            Message::Abba(msg) => &msg.tag.domain,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
