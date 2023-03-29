@@ -67,6 +67,10 @@ impl<P: Debug + Clone + Serialize + Eq> Consensus<P> {
         }
     }
 
+    pub fn domain(&self) -> &Domain {
+        &self.domain
+    }
+
     pub fn pub_key_set(&self) -> PublicKeySet {
         self.mvba.pub_key_set()
     }
