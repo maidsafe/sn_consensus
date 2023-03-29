@@ -199,13 +199,16 @@ impl<P: Debug + Clone + Serialize + Eq> Consensus<P> {
         let (value, abba_sig, round) = abba.decided_value()?;
         if value {
             let proof = Proof {
-                domain: self.domain.clone(),
                 proposer: *proposer,
                 abba_round: round,
                 abba_signature: abba_sig.clone(),
                 vcbc_signature: vcbc_sig,
             };
-            Some(Decision { proposal, proof })
+            Some(Decision {
+                domain: self.domain.clone(),
+                proposal,
+                proof,
+            })
         } else {
             None
         }

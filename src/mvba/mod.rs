@@ -21,7 +21,6 @@ pub type NodeId = usize;
 /// A proof for the decided proposed data.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Proof {
-    pub domain: Domain,
     pub proposer: NodeId,
     pub abba_signature: Signature,
     pub abba_round: usize,
@@ -31,10 +30,11 @@ pub struct Proof {
 impl Proof {
     fn validate<P: Serialize>(
         &self,
+        domain: Domain,
         proposal: &P,
         pk: &PublicKey,
     ) -> Result<bool, crate::mvba::error::Error> {
-        let tag = Tag::new(self.domain.clone(), self.proposer);
+        let tag = Tag::new(domain, self.proposer);
 
         if vcbc::verify_delivered_proposal(&tag, proposal, &self.vcbc_signature, pk)? {
             Ok(abba::verify_decided_proposal(
@@ -56,13 +56,14 @@ pub type MessageValidity<P> = fn(NodeId, &P) -> bool;
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Decision<P> {
+    pub domain: Domain,
     pub proposal: P,
     pub proof: Proof,
 }
 
 impl<P: Serialize> Decision<P> {
     pub fn validate(&self, pk: &PublicKey) -> Result<bool, crate::mvba::error::Error> {
-        self.proof.validate(&self.proposal, pk)
+        self.proof.validate(self.domain.clone(), &self.proposal, pk)
     }
 }
 
@@ -88,9 +89,9 @@ pub fn mock_decision<P: Clone + Serialize>(
     let abba_signature = sk.sign(abba_sign_bytes);
 
     Ok(Decision {
+        domain,
         proposal,
         proof: Proof {
-            domain,
             proposer,
             abba_signature,
             abba_round,
