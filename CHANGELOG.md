@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [3.5.2](https://github.com/maidsafe/sn_consensus/compare/v3.5.1...v3.5.2) (2023-03-29)
+
+
+### Bug Fixes
+
+* **mvba:** exporting domain in consensus ([88e9401](https://github.com/maidsafe/sn_consensus/commit/88e9401dff24179b1894ac466f5457427e5c828a))
+* **mvba:** moving domain to decision ([a1640b8](https://github.com/maidsafe/sn_consensus/commit/a1640b8020f6ec251b25de8860fdd2bf7c4e7dd9))
+
 ### [3.5.1](https://github.com/maidsafe/sn_consensus/compare/v3.5.0...v3.5.1) (2023-03-23)
 
 
