@@ -14,25 +14,26 @@ use blsttc::{PublicKeySet, SecretKeyShare};
 use serde::Serialize;
 use std::{collections::HashMap, fmt::Debug};
 
-pub struct Consensus<P: Debug + Clone + Serialize + Eq> {
+pub struct Consensus<C, P: Debug + Clone + Serialize + Eq> {
     domain: Domain,
     self_id: NodeId,
     abba_map: HashMap<NodeId, Abba>,
-    vcbc_map: HashMap<NodeId, Vcbc<P>>,
+    vcbc_map: HashMap<NodeId, Vcbc<C, P>>,
     mvba: Mvba<P>,
     decided_proposer: Option<NodeId>,
     decided_proposal: Option<P>,
     broadcaster: Broadcaster<P>,
 }
 
-impl<P: Debug + Clone + Serialize + Eq> Consensus<P> {
+impl<C: Clone, P: Debug + Clone + Serialize + Eq> Consensus<C, P> {
     pub fn init(
         domain: Domain,
         self_id: NodeId,
         sec_key_share: SecretKeyShare,
         pub_key_set: PublicKeySet,
         parties: Vec<NodeId>,
-        message_validity: MessageValidity<P>,
+        message_validity: MessageValidity<C, P>,
+        validity_context: C,
     ) -> Self {
         let broadcaster = Broadcaster::new(self_id);
         let mut abba_map = HashMap::new();
@@ -46,6 +47,7 @@ impl<P: Debug + Clone + Serialize + Eq> Consensus<P> {
                 pub_key_set.clone(),
                 sec_key_share.clone(),
                 message_validity,
+                validity_context.clone(),
             );
             vcbc_map.insert(*party, vcbc);
 
@@ -224,18 +226,18 @@ mod tests {
     use std::collections::HashMap;
 
     use super::Consensus;
-    use crate::mvba::{bundle::Outgoing, tag::Domain, *};
+    use crate::mvba::{bundle::Outgoing, *};
 
     use blsttc::SecretKeySet;
     use quickcheck_macros::quickcheck;
     use rand::{thread_rng, Rng, SeedableRng};
 
-    fn valid_proposal(_id: NodeId, _: &char) -> bool {
+    fn validate_proposal(_c: &i32, _: &Domain, _id: NodeId, _: &char) -> bool {
         true
     }
 
     struct TestNet {
-        cons: Vec<Consensus<char>>,
+        cons: Vec<Consensus<i32, char>>,
         buffer: Vec<Outgoing<char>>,
         sks: SecretKeySet,
     }
@@ -261,7 +263,8 @@ mod tests {
                     sks.secret_key_share(p),
                     sks.public_keys(),
                     parties.clone(),
-                    valid_proposal,
+                    validate_proposal,
+                    0,
                 );
 
                 cons.push(consensus);

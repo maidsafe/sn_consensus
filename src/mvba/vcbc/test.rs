@@ -11,17 +11,13 @@ use blsttc::{SecretKeySet, Signature, SignatureShare};
 
 use rand::{thread_rng, Rng};
 
-fn valid_proposal(_: NodeId, _: &char) -> bool {
-    true
-}
-
-fn invalid_proposal(_: NodeId, _: &char) -> bool {
-    false
+fn validate_proposal(c: &i32, _: &Domain, _: NodeId, _: &char) -> bool {
+    c == &0
 }
 
 struct TestNet {
     sec_key_set: SecretKeySet,
-    vcbc: Vcbc<char>,
+    vcbc: Vcbc<i32, char>,
     m: char,
     broadcaster: Broadcaster<char>,
 }
@@ -46,7 +42,8 @@ impl TestNet {
             i,
             sec_key_set.public_keys(),
             sec_key_share,
-            valid_proposal,
+            validate_proposal,
+            0,
         );
 
         // Creating a random proposal
@@ -142,7 +139,7 @@ fn test_invalid_message() {
     let i = TestNet::PARTY_X;
     let j = TestNet::PARTY_B;
     let mut t = TestNet::new(i, j);
-    t.vcbc.message_validity = invalid_proposal;
+    t.vcbc.validity_context = 1;
 
     let msg = t.make_send_msg(t.m);
 

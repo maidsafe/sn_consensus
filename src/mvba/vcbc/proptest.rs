@@ -9,7 +9,7 @@ use blsttc::SecretKeySet;
 use quickcheck_macros::quickcheck;
 use std::collections::BTreeMap;
 
-fn valid_proposal(_: NodeId, _: &char) -> bool {
+fn validate_proposal(_: &i32, _: &Domain, _: NodeId, _: &char) -> bool {
     true
 }
 
@@ -17,7 +17,7 @@ fn valid_proposal(_: NodeId, _: &char) -> bool {
 struct Net {
     domain: Domain,
     secret_key_set: SecretKeySet,
-    nodes: BTreeMap<NodeId, (Vcbc<char>, Broadcaster<char>)>,
+    nodes: BTreeMap<NodeId, (Vcbc<i32, char>, Broadcaster<char>)>,
     queue: BTreeMap<NodeId, Vec<Bundle<char>>>,
 }
 
@@ -44,7 +44,8 @@ impl Net {
                 self_id,
                 public_key_set.clone(),
                 key_share,
-                valid_proposal,
+                validate_proposal,
+                0,
             );
             (self_id, (vcbc, broadcaster))
         }));
@@ -57,7 +58,7 @@ impl Net {
         }
     }
 
-    fn node_mut(&mut self, id: NodeId) -> &mut (Vcbc<char>, Broadcaster<char>) {
+    fn node_mut(&mut self, id: NodeId) -> &mut (Vcbc<i32, char>, Broadcaster<char>) {
         self.nodes.get_mut(&id).unwrap()
     }
 

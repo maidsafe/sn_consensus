@@ -47,7 +47,7 @@ pub fn c_ready_bytes_to_sign(
 }
 
 // Protocol VCBC for verifiable and authenticated consistent broadcast.
-pub(crate) struct Vcbc<P> {
+pub(crate) struct Vcbc<C, P> {
     tag: Tag, // Tag is a combination of Domain and proposer ID. It is unique in each VCBC instances.
     i: NodeId, // represents our unique identifier
     m_bar: Option<P>, // represents the proposal data. If a proposal is not delivered yet, it is None.
@@ -58,7 +58,8 @@ pub(crate) struct Vcbc<P> {
     pub_key_set: PublicKeySet,
     sec_key_share: SecretKeyShare,
     final_messages: HashMap<NodeId, Message<P>>,
-    message_validity: MessageValidity<P>,
+    message_validity: MessageValidity<C, P>,
+    validity_context: C,
 }
 
 /// Tries to insert a key-value pair into the map.
@@ -75,13 +76,14 @@ fn try_insert<P>(map: &mut HashMap<NodeId, Message<P>>, k: NodeId, v: Message<P>
     }
 }
 
-impl<P: Debug + Clone + Serialize + Eq> Vcbc<P> {
+impl<C: Clone, P: Debug + Clone + Serialize + Eq> Vcbc<C, P> {
     pub fn new(
         tag: Tag,
         self_id: NodeId,
         pub_key_set: PublicKeySet,
         sec_key_share: SecretKeyShare,
-        message_validity: MessageValidity<P>,
+        message_validity: MessageValidity<C, P>,
+        validity_context: C,
     ) -> Self {
         Self {
             tag,
@@ -95,6 +97,7 @@ impl<P: Debug + Clone + Serialize + Eq> Vcbc<P> {
             pub_key_set,
             sec_key_share,
             message_validity,
+            validity_context,
         }
     }
 
@@ -139,7 +142,12 @@ impl<P: Debug + Clone + Serialize + Eq> Vcbc<P> {
                 // Upon receiving message (ID.j.s, c-send, m) from Pl:
                 // if j = l and m̄ = ⊥ then
                 if initiator == self.tag.proposer && self.m_bar.is_none() {
-                    if !(self.message_validity)(initiator, &m) {
+                    if !(self.message_validity)(
+                        &self.validity_context,
+                        &msg.tag.domain,
+                        initiator,
+                        &m,
+                    ) {
                         return Err(Error::InvalidMessage("invalid proposal".to_string()));
                     }
                     // m̄ ← m
