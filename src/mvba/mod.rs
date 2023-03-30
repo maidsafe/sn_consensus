@@ -52,7 +52,7 @@ impl Proof {
 /// MessageValidity is same as &Q_{ID}$ ins spec: a global polynomial-time computable
 /// predicate QID known to all parties, which is determined by an external application.
 /// Each party may propose a value v together with a proof π that should satisfy QID .
-pub type MessageValidity<P> = fn(NodeId, &P) -> bool;
+pub type MessageValidity<C, P> = fn(&C, &Domain, NodeId, &P) -> bool;
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Decision<P> {
